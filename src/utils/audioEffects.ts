@@ -1,22 +1,56 @@
-// Web Audio API Synthesizer for subtle tactile sound feedback (no external files required)
+// Web Audio API Synthesizer for subtle tactile sound feedback (Zero external audio files)
+// Calibrated for Bushido Stoic Discipline: resonant, warm, restrained, low-latency.
 
 class SoundFX {
   private ctx: AudioContext | null = null;
+  private isUnlocked: boolean = false;
 
-  private init() {
+  constructor() {
+    this.setupAutoUnlock();
+  }
+
+  // Automatic AudioContext unlock on first user interaction
+  private setupAutoUnlock() {
+    if (typeof window === 'undefined') return;
+
+    const unlock = () => {
+      this.init();
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume().then(() => {
+          this.isUnlocked = true;
+        }).catch(() => {});
+      } else if (this.ctx) {
+        this.isUnlocked = true;
+      }
+      // Remove listeners once activated
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('touchstart', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+
+    window.addEventListener('click', unlock, { once: true, passive: true });
+    window.addEventListener('touchstart', unlock, { once: true, passive: true });
+    window.addEventListener('keydown', unlock, { once: true, passive: true });
+  }
+
+  private init(): boolean {
     if (!this.ctx && typeof window !== 'undefined') {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioCtx) {
-        this.ctx = new AudioCtx();
+        try {
+          this.ctx = new AudioCtx();
+        } catch {
+          return false;
+        }
       }
     }
+    return !!this.ctx;
   }
 
-  // Crisp checkmark sound
+  // 1. Crisp, tactile wooden clack / checkmark sound (subtle 80ms duration)
   playCheck() {
     try {
-      this.init();
-      if (!this.ctx) return;
+      if (!this.init() || !this.ctx) return;
       if (this.ctx.state === 'suspended') this.ctx.resume();
 
       const osc = this.ctx.createOscillator();
@@ -24,86 +58,55 @@ class SoundFX {
 
       osc.type = 'sine';
       osc.frequency.setValueAtTime(587.33, this.ctx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.1); // A5
+      osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.08); // A5
 
-      gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.09, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.09);
 
       osc.connect(gain);
       gain.connect(this.ctx.destination);
 
       osc.start();
-      osc.stop(this.ctx.currentTime + 0.15);
+      osc.stop(this.ctx.currentTime + 0.1);
     } catch {
-      // ignore audio errors
+      // ignore audio context restrictions
     }
   }
 
-  // Triumphant Standard Day Gong / Chime
+  // 2. Triumphant Standard Day Gong / Chime (5/5 foundation habits)
   playStandardDay() {
     try {
-      this.init();
-      if (!this.ctx) return;
+      if (!this.init() || !this.ctx) return;
       if (this.ctx.state === 'suspended') this.ctx.resume();
 
-      const freqs = [440, 554.37, 659.25, 880]; // A Major chord
+      const freqs = [440, 554.37, 659.25, 880]; // A Major harmonic chord
       freqs.forEach((f, i) => {
         const osc = this.ctx!.createOscillator();
         const gain = this.ctx!.createGain();
 
         osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, this.ctx!.currentTime + i * 0.04);
+        osc.frequency.setValueAtTime(f, this.ctx!.currentTime + i * 0.035);
 
-        gain.gain.setValueAtTime(0.08, this.ctx!.currentTime + i * 0.04);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + 0.6);
+        gain.gain.setValueAtTime(0.06 / (i * 0.5 + 1), this.ctx!.currentTime + i * 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx!.currentTime + 0.5);
 
         osc.connect(gain);
         gain.connect(this.ctx!.destination);
 
-        osc.start(this.ctx!.currentTime + i * 0.04);
-        osc.stop(this.ctx!.currentTime + 0.7);
+        osc.start(this.ctx!.currentTime + i * 0.035);
+        osc.stop(this.ctx!.currentTime + 0.55);
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // Sharp samurai katana slash tone
-  playSlash() {
-    try {
-      this.init();
-      if (!this.ctx) return;
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(800, this.ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.18);
-
-      gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
-
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      osc.start();
-      osc.stop(this.ctx.currentTime + 0.2);
-    } catch {
-      // ignore
-    }
-  }
-
-  // Mastery (10/10 Score: 5 Habits + Special Mission) deep honorable martial chime
+  // 3. Mastery (10/10 Score: 5 Habits + Special Mission) deep honorable martial chime
   playMastery() {
     try {
-      this.init();
-      if (!this.ctx) return;
+      if (!this.init() || !this.ctx) return;
       if (this.ctx.state === 'suspended') this.ctx.resume();
 
-      // Deep resonant bronze bell / gong fundamental frequencies
-      const freqs = [196, 293.66, 392, 587.33]; // G major resonant harmonics
+      // Deep resonant bronze temple bell fundamental harmonics (G major chord)
+      const freqs = [196, 293.66, 392, 587.33];
       freqs.forEach((f, i) => {
         const osc = this.ctx!.createOscillator();
         const gain = this.ctx!.createGain();
@@ -111,25 +114,22 @@ class SoundFX {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(f, this.ctx!.currentTime);
 
-        gain.gain.setValueAtTime(0.12 / (i + 1), this.ctx!.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx!.currentTime + 1.2);
+        gain.gain.setValueAtTime(0.09 / (i + 1), this.ctx!.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx!.currentTime + 0.9);
 
         osc.connect(gain);
         gain.connect(this.ctx!.destination);
 
         osc.start(this.ctx!.currentTime);
-        osc.stop(this.ctx!.currentTime + 1.25);
+        osc.stop(this.ctx!.currentTime + 0.95);
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  // Warning tone
+  // 4. Subtle warning tone for debt or locked day
   playWarning() {
     try {
-      this.init();
-      if (!this.ctx) return;
+      if (!this.init() || !this.ctx) return;
       if (this.ctx.state === 'suspended') this.ctx.resume();
 
       const osc = this.ctx.createOscillator();
@@ -137,19 +137,41 @@ class SoundFX {
 
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(220, this.ctx.currentTime);
-      osc.frequency.linearRampToValueAtTime(160, this.ctx.currentTime + 0.25);
+      osc.frequency.linearRampToValueAtTime(160, this.ctx.currentTime + 0.18);
 
-      gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.07, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
 
       osc.connect(gain);
       gain.connect(this.ctx.destination);
 
       osc.start();
-      osc.stop(this.ctx.currentTime + 0.3);
-    } catch {
-      // ignore
-    }
+      osc.stop(this.ctx.currentTime + 0.22);
+    } catch {}
+  }
+
+  // 5. Debt Settled / Autopsy Resolved tone (Calm release tone)
+  playAutopsySave() {
+    try {
+      if (!this.init() || !this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(659.25, this.ctx.currentTime + 0.15);
+
+      gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.25);
+    } catch {}
   }
 }
 
