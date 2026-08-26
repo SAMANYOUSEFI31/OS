@@ -717,7 +717,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                       <span>روز استاندارد (۸ از ۱۰)</span>
                     </div>
                   ) : (
-                    <div className="text-[11px] text-zinc-500 font-medium bg-zinc-900/60 px-3 py-1 rounded-xl border border-zinc-800/80">
+                    <div className="text-[11px] text-zinc-400 font-medium bg-zinc-900/60 px-3 py-1 rounded-xl border border-zinc-800/80">
                       در انتظار ۵ پایه
                     </div>
                   )}

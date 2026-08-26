@@ -251,8 +251,9 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               {isActive && (
                 <motion.div
                   layoutId="activeSettingsSectionIndicator"
-                  className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10"
-                  transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+                  layout="position"
+                  className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10 pointer-events-none"
+                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
                 />
               )}
               <Icon className={`w-4 h-4 shrink-0 transition-colors duration-200 ${isActive ? 'text-amber-400' : 'text-zinc-400'}`} />

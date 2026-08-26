@@ -106,7 +106,7 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     setAppToastMessage(msg);
     setTimeout(() => {
       setAppToastMessage(prev => (prev === msg ? null : prev));
-    }, 4000);
+    }, 2500);
   }, []);
 
   const closeAppToast = useCallback(() => setAppToastMessage(null), []);

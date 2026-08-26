@@ -409,7 +409,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         value={identifier}
                         onChange={e => setIdentifier(e.target.value)}
                         placeholder="مثال: 09121234567 یا user@example.com"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition"
                         dir="ltr"
                         autoFocus
                       />
@@ -425,7 +425,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       value={name}
                       onChange={e => setName(e.target.value)}
                       placeholder="مثال: رستم، سهراب، یا نام شما"
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition"
                     />
                   </div>
 

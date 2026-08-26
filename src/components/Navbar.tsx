@@ -170,7 +170,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
 
             {/* Desktop Navigation Tabs (Exactly 4 Tabs with Spring layoutId indicator) */}
-            <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2 h-10">
               {mainTabs.map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -179,8 +179,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 return (
                   <button
                     key={tab.id}
+                    type="button"
                     onClick={() => onSelectTab(tab.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer relative z-10 ${
+                    className={`h-9 px-3.5 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer relative z-10 select-none ${
                       isActive
                         ? 'text-white font-bold'
                         : 'text-zinc-400 hover:text-zinc-200'
@@ -189,20 +190,21 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {isActive && (
                       <motion.div
                         layoutId="desktopActiveTabIndicator"
-                        className="absolute inset-0 rounded-xl -z-10 shadow-md border"
+                        layout="position"
+                        className="absolute inset-0 rounded-xl -z-10 shadow-md border pointer-events-none"
                         style={{
                           backgroundColor: themeConfig.bgSubtle,
                           borderColor: `${themeConfig.colorHex}50`,
                           boxShadow: `0 0 20px ${themeConfig.glowColor}`
                         }}
-                        transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                       />
                     )}
                     <Icon 
-                      className="w-4 h-4 transition-colors"
+                      className="w-4 h-4 transition-colors shrink-0"
                       style={{ color: isActive ? themeConfig.colorHex : undefined }}
                     />
-                    <span>{tab.label}</span>
+                    <span className="whitespace-nowrap leading-none">{tab.label}</span>
 
                     {hasDebtAlert && !isActive && (
                       <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute top-1.5 left-1.5" />
@@ -302,10 +304,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Bottom Navigation Bar (4 clean tabs with spring layoutId active indicator) */}
       <nav 
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 backdrop-blur-xl px-2 py-1.5 pb-safe"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 backdrop-blur-xl px-2 py-1 pb-safe select-none"
         dir="rtl"
       >
-        <div className="grid grid-cols-4 max-w-md mx-auto relative">
+        <div className="grid grid-cols-4 max-w-md mx-auto relative h-14 items-center">
           {mainTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -315,45 +317,48 @@ export const Navbar: React.FC<NavbarProps> = ({
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => onSelectTab(tab.id)}
-                className={`flex flex-col items-center justify-center py-1 px-1 relative cursor-pointer z-10 transition-colors ${
+                className={`h-full flex flex-col items-center justify-center relative cursor-pointer z-10 transition-colors ${
                   isActive
                     ? 'font-bold text-white'
                     : 'text-zinc-400 hover:text-zinc-200'
                 }`}
               >
-                <div className="relative px-3 py-1 flex items-center justify-center">
+                <div className="relative w-12 h-7 flex items-center justify-center">
                   {isActive && (
                     <motion.div
                       layoutId="activeTabIndicator"
-                      className="absolute inset-0 rounded-xl border"
+                      layout="position"
+                      className="absolute inset-0 rounded-xl border pointer-events-none"
                       style={{
                         backgroundColor: themeConfig.bgSubtle,
                         borderColor: `${themeConfig.colorHex}50`,
                         boxShadow: `0 0 16px ${themeConfig.glowColor}`
                       }}
-                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
                     />
                   )}
                   <Icon 
                     className="w-5 h-5 relative z-10 transition-colors duration-200" 
                     style={{ color: isActive ? themeConfig.colorHex : undefined }}
                   />
+
+                  {hasDebtAlert && !isActive && (
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute top-0.5 right-1 z-20" />
+                  )}
+
+                  {hasMilestoneAlert && !isActive && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse absolute top-0.5 right-1 z-20 shadow-xs" />
+                  )}
                 </div>
+
                 <span 
-                  className="text-[10px] tracking-tight mt-0.5 leading-none whitespace-nowrap transition-colors duration-200"
+                  className="h-3.5 text-[10px] tracking-tight mt-0.5 leading-none whitespace-nowrap transition-colors duration-200 flex items-center justify-center"
                   style={{ color: isActive ? themeConfig.colorHex : undefined }}
                 >
                   {tab.label}
                 </span>
-
-                {hasDebtAlert && !isActive && (
-                  <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute top-1 right-3" />
-                )}
-
-                {hasMilestoneAlert && !isActive && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse absolute top-1 right-3 shadow-xs" />
-                )}
               </button>
             );
           })}

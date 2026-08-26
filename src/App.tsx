@@ -18,6 +18,7 @@ import { AutopsyModal } from './components/AutopsyModal';
 import { PaymentModal } from './components/PaymentModal';
 import { AuthModal } from './components/AuthModal';
 import { ViewLoadingSkeleton } from './components/ViewLoadingSkeleton';
+import { Toast, ToastItem, ToastType } from './components/Toast';
 import { RotateCcw, CheckCircle2, AlertTriangle, X, Eye, ShieldCheck } from 'lucide-react';
 
 // 2026 High Performance Code-Splitting / Lazy Loading for heavy views
@@ -55,14 +56,19 @@ export default function App() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
-  const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const showAppToast = (msg: string) => {
-    setAppToastMessage(msg);
+  const showAppToast = useCallback((msg: string, type: ToastType = 'success', duration = 2500) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    setToasts(prev => [...prev.slice(-2), { id, message: msg, type, duration }]);
     setTimeout(() => {
-      setAppToastMessage(null);
-    }, 4000);
-  };
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
 
   const handleSelectDate = useCallback((newDate: string) => {
     setSelectedDate(newDate);
@@ -780,19 +786,8 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Global App Toast Notification */}
-      {appToastMessage && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#121215]/95 border border-amber-500/40 text-zinc-100 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs sm:text-sm font-bold backdrop-blur-xl animate-in slide-in-from-top-4">
-          <CheckCircle2 className="w-5 h-5 text-amber-400 shrink-0" />
-          <span>{appToastMessage}</span>
-          <button 
-            onClick={() => setAppToastMessage(null)}
-            className="text-zinc-400 hover:text-zinc-200 p-1 cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      {/* Global Micro-Toast Notification Layer */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
 
       {/* Reset Confirmation Modal */}
       {isResetConfirmOpen && (
