@@ -123,7 +123,8 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('textarea, input, select, button, a, [data-no-swipe], [role="tab"], [role="button"], [contenteditable="true"]')) {
+    // Only exclude active form inputs; allow smooth swiping starting on cards and matrix squares
+    if (target.closest('textarea, input, select, [data-no-swipe], [contenteditable="true"]')) {
       touchStartRef.current = null;
       return;
     }

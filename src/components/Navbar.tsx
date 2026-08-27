@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <>
       {/* Top Hub Bar Header with PWA Notch Safe-Area */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 backdrop-blur-xl transition-all pt-[max(0rem,env(safe-area-inset-top,0px))]" 
+        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 backdrop-blur-xl transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
         dir="rtl"
       >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">

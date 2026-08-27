@@ -29,7 +29,25 @@
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   </head>
   <body class="bg-[#09090b] text-zinc-100 selection:bg-[#E11D48] selection:text-white font-sans antialiased overflow-x-hidden">
-    <div id="root"></div>
+    <div id="root">
+      <style>
+        @keyframes bushidoPulse {
+          0%, 100% { transform: scale(1); opacity: 1; filter: drop-shadow(0 0 16px rgba(225, 29, 72, 0.45)); }
+          50% { transform: scale(0.96); opacity: 0.85; filter: drop-shadow(0 0 8px rgba(225, 29, 72, 0.25)); }
+        }
+        @keyframes bushidoFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      </style>
+      <div style="min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #09090b; color: #f4f4f5; text-align: center; padding: 1.5rem; user-select: none; animation: bushidoFadeIn 0.3s ease-out;">
+        <div style="width: 58px; height: 58px; border-radius: 18px; background-color: #E11D48; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; color: #ffffff; margin-bottom: 1.25rem; animation: bushidoPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;">
+          武
+        </div>
+        <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.35rem; color: #f4f4f5;">بوشیدو</div>
+        <div style="font-size: 10px; color: #71717a; font-family: monospace; letter-spacing: 0.12em;">BUSHIDO DISCIPLINE OS</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

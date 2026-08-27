@@ -106,7 +106,7 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
       </div>
 
       {/* Unified 90-Cell Tactical Grid */}
-      <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5">
+      <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 touch-pan-y">
         <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-15 lg:grid-cols-18 gap-2">
           {allDays.map(cell => {
             let bgClass = 'bg-zinc-900/60 text-zinc-500 border-zinc-800/90 hover:border-zinc-700 hover:text-zinc-300';
@@ -162,7 +162,7 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
                 type="button"
                 onClick={() => onSelectDate(cell.dateStr)}
                 title={title}
-                className={`h-10 rounded-xl border text-xs font-mono flex flex-col items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer ${bgClass}`}
+                className={`h-10 rounded-xl border text-xs font-mono flex flex-col items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer touch-manipulation select-none ${bgClass}`}
               >
                 <span>{toPersianDigits(cell.dayNumber)}</span>
               </button>

@@ -5,8 +5,8 @@ import { computeDailyProperties } from '../engine/bushidoCalculations';
 import { formatPersianDate, getLogicalTodayDate, addDaysToDate, daysBetween } from '../utils/dateUtils';
 import { toPersianDigits, toEnglishDigits, normalizeSearchText } from '../utils/numberUtils';
 import { soundFX } from '../utils/audioEffects';
+import { haptics } from '../utils/haptics';
 import { getDeterministicCourtVerdict } from '../engine/deterministicSensei';
-import confetti from 'canvas-confetti';
 import { 
   Archive, 
   Search, 
@@ -196,13 +196,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
       }).catch(() => {});
 
       soundFX.playStandardDay();
-      try {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-      } catch {}
+      haptics.masterySuccess();
     } catch (e) {
       console.error('Court verdict generation error:', e);
     } finally {

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Cycle, CycleMetrics, DailyLog, CycleVerdict } from '../types';
 import { soundFX } from '../utils/audioEffects';
+import { haptics } from '../utils/haptics';
 import { toPersianDigits } from '../utils/numberUtils';
 import { getDeterministicCourtVerdict } from '../engine/deterministicSensei';
-import confetti from 'canvas-confetti';
 import { 
   Gavel, 
   Award, 
@@ -80,13 +80,7 @@ export const BushidoCourtView: React.FC<BushidoCourtViewProps> = ({
       }).catch(() => {});
 
       soundFX.playStandardDay();
-      try {
-        confetti({
-          particleCount: 120,
-          spread: 80,
-          origin: { y: 0.5 }
-        });
-      } catch {}
+      haptics.masterySuccess();
     } catch (err) {
       console.error('Error generating verdict:', err);
     } finally {
