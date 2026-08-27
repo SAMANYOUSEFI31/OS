@@ -292,12 +292,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onClick={() => onSelectTab('profile')}
                 className={`hidden lg:inline-flex h-8 w-8 sm:h-9 sm:w-9 rounded-xl border items-center justify-center transition cursor-pointer shrink-0 relative ${
                   activeTab === 'profile'
-                    ? 'bg-zinc-800 border-amber-500 text-amber-400'
+                    ? 'bg-zinc-800 border-rose-500 text-rose-400'
                     : 'bg-[#121215] hover:bg-zinc-800 border-zinc-800 text-zinc-300 hover:text-white'
                 }`}
                 title={userProfile?.id ? `حساب و تنظیمات (${userProfile.name})` : 'حساب کاربری و تنظیمات'}
               >
-                <Settings className={`w-4 h-4 ${activeTab === 'profile' ? 'text-amber-400' : 'text-zinc-300'}`} />
+                <Settings className={`w-4 h-4 ${activeTab === 'profile' ? 'text-rose-400' : 'text-zinc-300'}`} />
                 {!userProfile.isVip && (metrics.elapsedDays >= 30 || metrics.pureStreak >= 7) && (
                   <span className="w-2 h-2 rounded-full bg-amber-400 absolute top-1 right-1 animate-pulse" />
                 )}

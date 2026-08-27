@@ -416,10 +416,10 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
             <button
               type="button"
               onClick={() => navigateDate(logicalToday, 0)}
-              className="h-8 bg-amber-500/15 hover:bg-amber-500/25 active:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs px-3 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1.5 font-bold whitespace-nowrap shrink-0 shadow-xs active:scale-95"
+              className="h-8 bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs px-3 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1.5 font-bold whitespace-nowrap shrink-0 shadow-xs active:scale-95"
               title="پرش مستقیم به روز جاری نبرد"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <Zap className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span className="leading-none">پرش به امروز</span>
             </button>
           )}
@@ -981,7 +981,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
               className={`w-full rounded-xl p-3 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none transition-all leading-relaxed font-sans resize-none overflow-hidden ${
                 isFuture || isCycleArchived
                   ? 'bg-[#09090b]/40 border border-zinc-800 opacity-60 cursor-not-allowed'
-                  : 'bg-[#09090b]/90 border border-zinc-800 hover:border-zinc-700 focus:border-amber-500/60 focus:ring-1 focus:ring-amber-500/30'
+                  : 'bg-[#09090b]/90 border border-zinc-800 hover:border-zinc-700 focus:border-rose-500/60 focus:ring-1 focus:ring-rose-500/30'
               }`}
             />
           </div>

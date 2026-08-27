@@ -400,24 +400,11 @@ app.delete('/api/cycles/:id', optionalAuthMiddleware, async (req: AuthenticatedR
 });
 
 /* =========================================================================
- * DAILY LOGS ENDPOINTS (User-Scoped)
+ * DAILY LOGS ENDPOINTS (User-Scoped - Unified /api/logs)
  * ========================================================================= */
 
-// Get daily logs
-app.get('/api/logs', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
-  try {
-    const userId = req.user?.userId || 'guest-warrior-1';
-    const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId : undefined;
-    const logs = await getUserDailyLogs(userId, cycleId);
-    res.json({ logs });
-  } catch (error) {
-    console.error('Get logs error:', error);
-    res.status(500).json({ error: 'خطا در دریافت لاگ‌های روزانه.' });
-  }
-});
-
-// Upsert daily log
-app.post('/api/logs/upsert', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+// Handler for upserting daily logs
+const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
     const userId = req.user?.userId || 'guest-warrior-1';
     const { cycleId, date } = req.body;
@@ -427,12 +414,34 @@ app.post('/api/logs/upsert', optionalAuthMiddleware, async (req: AuthenticatedRe
     }
 
     const log = await upsertDailyLog(userId, req.body);
-    res.json({ log });
+    res.json({ log, success: true });
   } catch (error) {
     console.error('Upsert log error:', error);
     res.status(500).json({ error: 'خطا در ثبت لاگ روزانه.' });
   }
-});
+};
+
+// Handler for getting daily logs
+const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Response) => {
+  try {
+    const userId = req.user?.userId || 'guest-warrior-1';
+    const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId : undefined;
+    const logs = await getUserDailyLogs(userId, cycleId);
+    res.json({ logs, success: true });
+  } catch (error) {
+    console.error('Get logs error:', error);
+    res.status(500).json({ error: 'خطا در دریافت لاگ‌های روزانه.' });
+  }
+};
+
+// Unified /api/logs endpoints (both GET and POST)
+app.get('/api/logs', optionalAuthMiddleware, handleGetDailyLogs);
+app.post('/api/logs', optionalAuthMiddleware, handleUpsertDailyLog);
+
+// Backward-compatibility aliases
+app.post('/api/logs/upsert', optionalAuthMiddleware, handleUpsertDailyLog);
+app.get('/api/daily-logs', optionalAuthMiddleware, handleGetDailyLogs);
+app.post('/api/daily-logs', optionalAuthMiddleware, handleUpsertDailyLog);
 
 /* =========================================================================
  * DETERMINISTIC REASONING ENGINE (NO AI REQUIRED - OFFLINE / INSTANT)

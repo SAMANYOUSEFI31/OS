@@ -164,22 +164,24 @@ export default function App() {
         const cyclesRes = await fetch('/api/cycles', { headers });
         if (cyclesRes.ok) {
           const cyclesData = await cyclesRes.json();
-          if (Array.isArray(cyclesData) && cyclesData.length > 0) {
+          const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
+          if (Array.isArray(cyclesList) && cyclesList.length > 0) {
             setSystemState(prev => ({
               ...prev,
-              cycles: cyclesData
+              cycles: cyclesList
             }));
           }
         }
 
         // Fetch Daily Logs
-        const logsRes = await fetch('/api/daily-logs', { headers });
+        const logsRes = await fetch('/api/logs', { headers });
         if (logsRes.ok) {
           const logsData = await logsRes.json();
-          if (Array.isArray(logsData) && logsData.length > 0) {
+          const logsList = Array.isArray(logsData) ? logsData : (logsData?.logs || []);
+          if (Array.isArray(logsList) && logsList.length > 0) {
             setSystemState(prev => ({
               ...prev,
-              logs: logsData
+              logs: logsList
             }));
           }
         }
@@ -226,7 +228,7 @@ export default function App() {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      await fetch('/api/daily-logs', {
+      await fetch('/api/logs', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -791,8 +793,8 @@ export default function App() {
 
       {/* Reset Confirmation Modal */}
       {isResetConfirmOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#121215] border border-red-500/40 rounded-3xl w-full max-w-md p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-start sm:items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] overscroll-contain overflow-y-auto max-h-[100dvh]">
+          <div className="bg-[#121215] border border-red-500/40 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
                 <RotateCcw className="w-6 h-6" />

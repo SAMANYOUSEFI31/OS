@@ -229,21 +229,23 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         const cyclesRes = await fetch('/api/cycles', { headers });
         if (cyclesRes.ok) {
           const cyclesData = await cyclesRes.json();
-          if (Array.isArray(cyclesData) && cyclesData.length > 0) {
+          const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
+          if (Array.isArray(cyclesList) && cyclesList.length > 0) {
             setSystemState(prev => ({
               ...prev,
-              cycles: cyclesData
+              cycles: cyclesList
             }));
           }
         }
 
-        const logsRes = await fetch('/api/daily-logs', { headers });
+        const logsRes = await fetch('/api/logs', { headers });
         if (logsRes.ok) {
           const logsData = await logsRes.json();
-          if (Array.isArray(logsData) && logsData.length > 0) {
+          const logsList = Array.isArray(logsData) ? logsData : (logsData?.logs || []);
+          if (Array.isArray(logsList) && logsList.length > 0) {
             setSystemState(prev => ({
               ...prev,
-              logs: logsData
+              logs: logsList
             }));
           }
         }
@@ -288,7 +290,7 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      await fetch('/api/daily-logs', {
+      await fetch('/api/logs', {
         method: 'POST',
         headers,
         body: JSON.stringify({
