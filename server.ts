@@ -41,6 +41,14 @@ const PORT = 3000;
 // Trust proxy required for Cloud Run / reverse proxies and express-rate-limit
 app.set('trust proxy', 1);
 
+// Standard HTTP Security Headers (Safe for AI Studio iframe environment)
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(express.json());
 
 /* =========================================================================

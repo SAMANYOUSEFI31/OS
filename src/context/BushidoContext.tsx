@@ -4,6 +4,7 @@ import { createInitialSystemState, GUEST_USER_PROFILE } from '../data/initialDat
 import { computeCycleMetrics } from '../engine/bushidoCalculations';
 import { getLogicalTodayDate, addDaysToDate } from '../utils/dateUtils';
 import { applyAccentTheme } from '../utils/themeUtils';
+import { toPersianDigits } from '../utils/numberUtils';
 import { 
   loadStoredSystemState, 
   saveSystemStateDebounced, 
@@ -44,6 +45,7 @@ interface BushidoContextType {
   createNewCycle: (title: string, startDate: string, targetTheme: string) => Promise<void>;
   updateUserProfile: (profile: UserProfile) => Promise<void>;
   updateSettings: (settings: SystemSettings) => Promise<void>;
+  syncOfflineDataToServer: () => Promise<void>;
   exportData: () => void;
   confirmResetData: () => void;
   importData: (jsonStr: string) => void;
@@ -269,14 +271,16 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [currentCycle, systemState.logs, systemState.cycles, logicalToday]);
 
   const updateLog = useCallback(async (updatedLog: DailyLog) => {
+    // 1. Optimistic Local Update with initial offline tag
+    const optimisticLog: DailyLog = { ...updatedLog, isSynced: false };
     setSystemState(prev => {
       const existingIdx = prev.logs.findIndex(l => l.date === updatedLog.date);
       let newLogs: DailyLog[];
       if (existingIdx >= 0) {
         newLogs = [...prev.logs];
-        newLogs[existingIdx] = updatedLog;
+        newLogs[existingIdx] = optimisticLog;
       } else {
-        newLogs = [...prev.logs, updatedLog];
+        newLogs = [...prev.logs, optimisticLog];
       }
       return {
         ...prev,
@@ -284,13 +288,14 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       };
     });
 
+    // 2. Attempt Network Cloud Sync
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (authToken) {
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      await fetch('/api/logs', {
+      const res = await fetch('/api/logs', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -298,15 +303,24 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
           cycleId: updatedLog.cycleId || activeCycleId
         })
       });
+
+      if (res.ok) {
+        // Tag as successfully synced to cloud
+        setSystemState(prev => ({
+          ...prev,
+          logs: prev.logs.map(l => l.date === updatedLog.date ? { ...l, isSynced: true } : l)
+        }));
+      }
     } catch (e) {
-      console.warn('Failed to sync log to server backend (saved locally):', e);
+      console.warn('Failed to sync log to server backend (saved locally as isSynced: false):', e);
     }
   }, [authToken, activeCycleId]);
 
   const updateCycle = useCallback(async (updatedCycle: Cycle) => {
+    const optimisticCycle: Cycle = { ...updatedCycle, isSynced: false };
     setSystemState(prev => ({
       ...prev,
-      cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? updatedCycle : c))
+      cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? optimisticCycle : c))
     }));
 
     try {
@@ -315,13 +329,20 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      await fetch(`/api/cycles/${updatedCycle.id}`, {
+      const res = await fetch(`/api/cycles/${updatedCycle.id}`, {
         method: 'PUT',
         headers,
         body: JSON.stringify(updatedCycle)
       });
+
+      if (res.ok) {
+        setSystemState(prev => ({
+          ...prev,
+          cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? { ...c, isSynced: true } : c))
+        }));
+      }
     } catch (e) {
-      console.warn('Failed to sync cycle update to server:', e);
+      console.warn('Failed to sync cycle update to server (saved locally as isSynced: false):', e);
     }
   }, [authToken]);
 
@@ -363,7 +384,8 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       targetTheme,
       inheritedStreak: cycleMetrics?.pureStreak || 0,
       isArchived: false,
-      reportRead: false
+      reportRead: false,
+      isSynced: false
     };
 
     setSystemState(prev => ({
@@ -380,15 +402,103 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         headers['Authorization'] = `Bearer ${authToken}`;
       }
 
-      await fetch('/api/cycles', {
+      const res = await fetch('/api/cycles', {
         method: 'POST',
         headers,
         body: JSON.stringify(newCycle)
       });
+
+      if (res.ok) {
+        setSystemState(prev => ({
+          ...prev,
+          cycles: prev.cycles.map(c => (c.id === newCycle.id ? { ...c, isSynced: true } : c))
+        }));
+      }
     } catch (e) {
-      console.warn('Failed to save cycle to server:', e);
+      console.warn('Failed to save cycle to server (saved locally as isSynced: false):', e);
     }
   }, [authToken, cycleMetrics?.pureStreak]);
+
+  // Offline-to-Online Sync Queue Handler
+  const syncOfflineDataToServer = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return;
+    }
+
+    const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    let syncedItemsCount = 0;
+
+    // 1. Process unsynced logs queue
+    const unsyncedLogs = systemState.logs.filter(l => l.isSynced === false);
+    if (unsyncedLogs.length > 0) {
+      for (const log of unsyncedLogs) {
+        try {
+          const res = await fetch('/api/logs', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...log,
+              cycleId: log.cycleId || activeCycleId
+            })
+          });
+          if (res.ok) {
+            syncedItemsCount++;
+            setSystemState(prev => ({
+              ...prev,
+              logs: prev.logs.map(l => l.date === log.date ? { ...l, isSynced: true } : l)
+            }));
+          }
+        } catch (err) {
+          console.warn('[Sync Queue] Failed to push offline log:', log.date, err);
+        }
+      }
+    }
+
+    // 2. Process unsynced cycles queue
+    const unsyncedCycles = systemState.cycles.filter(c => c.isSynced === false);
+    if (unsyncedCycles.length > 0) {
+      for (const cycle of unsyncedCycles) {
+        try {
+          const res = await fetch(`/api/cycles/${cycle.id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(cycle)
+          });
+          if (res.ok) {
+            syncedItemsCount++;
+            setSystemState(prev => ({
+              ...prev,
+              cycles: prev.cycles.map(c => c.id === cycle.id ? { ...c, isSynced: true } : c)
+            }));
+          }
+        } catch (err) {
+          console.warn('[Sync Queue] Failed to push offline cycle:', cycle.id, err);
+        }
+      }
+    }
+
+    if (syncedItemsCount > 0) {
+      showAppToast(`همگام‌سازی ابری با موفقیت انجام شد (${toPersianDigits(syncedItemsCount)} تغییر ذخیره شد).`);
+    }
+  }, [authToken, systemState.logs, systemState.cycles, activeCycleId, showAppToast]);
+
+  // Listen to browser 'online' event to immediately flush offline changes
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[Bushido Sync] Device is back online. Syncing pending offline queues...');
+      syncOfflineDataToServer();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [syncOfflineDataToServer]);
 
   const updateUserProfile = useCallback(async (updatedProfile: UserProfile) => {
     setSystemState(prev => ({
@@ -673,6 +783,7 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     createNewCycle,
     updateUserProfile,
     updateSettings,
+    syncOfflineDataToServer,
     exportData,
     confirmResetData,
     importData,

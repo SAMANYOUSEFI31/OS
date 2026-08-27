@@ -105,10 +105,16 @@ export function loadStoredSystemState(): SystemState {
       if (Array.isArray(parsed.cycles)) {
         parsed.cycles = parsed.cycles.map((c: any) => {
           if (c.id === 'cycle-1' && c.isArchived) {
-            return { ...c, isArchived: false };
+            return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : true };
           }
-          return c;
+          return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : true };
         });
+      }
+      if (Array.isArray(parsed.logs)) {
+        parsed.logs = parsed.logs.map((l: any) => ({
+          ...l,
+          isSynced: l.isSynced !== undefined ? l.isSynced : true
+        }));
       }
       return parsed;
     }

@@ -48,6 +48,7 @@ export interface DailyLog {
   cycleId: string;
   date: string; // YYYY-MM-DD
   createdAt: string;
+  isSynced?: boolean; // نشانگر همگام‌سازی ابری آفلاین به آنلاین
   
   // Foundation 5 Core Habits
   wakeUp: boolean;     // سحرخیزی
@@ -91,6 +92,7 @@ export interface Cycle {
   isArchived?: boolean;
   reportRead?: boolean;   // چک‌پوینت تأیید گزارش
   verdict?: CycleVerdict;
+  isSynced?: boolean;     // نشانگر همگام‌سازی ابری آفلاین به آنلاین
 }
 
 export interface SystemSettings {
