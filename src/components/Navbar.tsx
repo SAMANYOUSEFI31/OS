@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
 import { THEME_PALETTES } from '../utils/themeUtils';
+import { haptics } from '../utils/haptics';
 import { 
   Swords, 
   LayoutDashboard, 
@@ -54,10 +55,12 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleBrandClick = () => {
     clickCountRef.current += 1;
+    haptics.lightTap();
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
 
     if (clickCountRef.current >= 5) {
       clickCountRef.current = 0;
+      haptics.masterySuccess();
       try {
         const currentSecret = localStorage.getItem('bushido_secret_dev_mode') === 'true';
         localStorage.setItem('bushido_secret_dev_mode', (!currentSecret).toString());
@@ -85,10 +88,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   const currentTheme = userProfile.accentTheme || settings.accentTheme || 'amber';
   const themeConfig = THEME_PALETTES[currentTheme] || THEME_PALETTES.amber;
 
+  const handleTabClick = (tabId: string) => {
+    if (tabId !== activeTab) {
+      haptics.lightTap();
+      onSelectTab(tabId);
+    }
+  };
+
   return (
     <>
-      {/* Top Hub Bar Header */}
-      <header className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 backdrop-blur-xl transition-all" dir="rtl">
+      {/* Top Hub Bar Header with PWA Notch Safe-Area */}
+      <header 
+        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 backdrop-blur-xl transition-all pt-[max(0rem,env(safe-area-inset-top,0px))]" 
+        dir="rtl"
+      >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4">
             
@@ -180,7 +193,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => onSelectTab(tab.id)}
+                    onClick={() => handleTabClick(tab.id)}
                     className={`h-9 px-3.5 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer relative z-10 select-none ${
                       isActive
                         ? 'text-white font-bold'
@@ -318,7 +331,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => onSelectTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className={`h-full flex flex-col items-center justify-center relative cursor-pointer z-10 transition-colors ${
                   isActive
                     ? 'font-bold text-white'

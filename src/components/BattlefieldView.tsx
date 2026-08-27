@@ -5,7 +5,7 @@ import { FOUNDATION_HABITS, computeDailyProperties } from '../engine/bushidoCalc
 import { formatPersianDate, getLogicalTodayDate, addDaysToDate, getRelativeDateLabel } from '../utils/dateUtils';
 import { toPersianDigits } from '../utils/numberUtils';
 import { soundFX } from '../utils/audioEffects';
-import confetti from 'canvas-confetti';
+import { haptics } from '../utils/haptics';
 import { 
   Sun, 
   Dumbbell, 
@@ -159,11 +159,13 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
     if (isFuture) {
       soundFX.playWarning();
+      haptics.warningAlert();
       return;
     }
 
     if (isLocked) {
       soundFX.playWarning();
+      haptics.warningAlert();
       return;
     }
 
@@ -177,19 +179,14 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     const wasStandard = habitKeys.every(k => activeLog![k]);
     const willBeStandard = habitKeys.every(k => (k === key ? nextVal : updated[k]));
 
-    if (!wasStandard && willBeStandard) {
+    if (!nextVal) {
+      // Unchecking habit
+      haptics.uncheckTap();
+    } else if (!wasStandard && willBeStandard) {
       if (updated.specialMission) {
-        // 10/10 Mastery - Golden Samurai Sparks
+        // 10/10 Mastery - Noble Bronze Harmonized Resonance
         soundFX.playMastery();
-        confetti({
-          particleCount: 38,
-          spread: 55,
-          origin: { y: 0.65 },
-          colors: ['#f59e0b', '#fbbf24', '#d97706', '#fef3c7'],
-          shapes: ['square'],
-          scalar: 0.9,
-          ticks: 150
-        });
+        haptics.masterySuccess();
         setMartialHonorToast({
           type: 'mastery',
           title: 'کمال تعهد روز محقق شد (۱۰ از ۱۰)',
@@ -197,17 +194,9 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
           score: 10
         });
       } else {
-        // 8/10 Standard Day - Emerald Vitality Sparks
+        // 8/10 Standard Day - Emerald Vitality
         soundFX.playStandardDay();
-        confetti({
-          particleCount: 26,
-          spread: 45,
-          origin: { y: 0.65 },
-          colors: ['#10b981', '#34d399', '#059669', '#6ee7b7'],
-          shapes: ['square'],
-          scalar: 0.85,
-          ticks: 130
-        });
+        haptics.standardDaySuccess();
         setMartialHonorToast({
           type: 'standard',
           title: 'روز استاندارد محقق شد',
@@ -222,13 +211,18 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       }, 5000);
     } else {
       soundFX.playCheck();
+      haptics.lightTap();
     }
 
     onUpdateLog(updated);
   };
 
   const toggleSpecialMission = () => {
-    if (isCycleArchived || isLocked || isFuture) return;
+    if (isCycleArchived || isLocked || isFuture) {
+      soundFX.playWarning();
+      haptics.warningAlert();
+      return;
+    }
     const nextVal = !activeLog!.specialMission;
     const updated: DailyLog = {
       ...activeLog!,
@@ -238,18 +232,12 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     const habitKeys: HabitKey[] = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'];
     const isStandard = habitKeys.every(k => updated[k]);
 
-    if (nextVal && isStandard) {
-      // Reached 10/10 Mastery - Golden Samurai Sparks
+    if (!nextVal) {
+      haptics.uncheckTap();
+    } else if (nextVal && isStandard) {
+      // Reached 10/10 Mastery
       soundFX.playMastery();
-      confetti({
-        particleCount: 40,
-        spread: 60,
-        origin: { y: 0.65 },
-        colors: ['#f59e0b', '#fbbf24', '#d97706', '#fef3c7'],
-        shapes: ['square'],
-        scalar: 0.95,
-        ticks: 160
-      });
+      haptics.masterySuccess();
       setMartialHonorToast({
         type: 'mastery',
         title: 'کمال تعهد روز محقق شد (۱۰ از ۱۰)',
@@ -262,6 +250,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       }, 5000);
     } else {
       soundFX.playCheck();
+      haptics.lightTap();
     }
 
     onUpdateLog(updated);

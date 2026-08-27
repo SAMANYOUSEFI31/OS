@@ -116,13 +116,19 @@ app.use('/api', generalApiLimiter);
 app.use('/api/auth', authLimiter);
 app.use('/api/admin', adminLimiter);
 
-// 1. Health check endpoint
+// 1. Health check endpoint (Container & PaaS Liveness/Readiness Probe)
 app.get('/api/health', (req, res) => {
+  const memory = process.memoryUsage();
   res.json({
     status: 'ok',
     engine: 'Bushido Discipline OS (PostgreSQL + Prisma ORM + JWT Auth + RateLimit)',
     mode: 'self-hosted-fullstack',
-    version: '3.0.0'
+    version: '3.0.0',
+    uptimeSeconds: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    nodeVersion: process.version,
+    memoryRssMb: Math.round(memory.rss / 1024 / 1024),
+    memoryHeapMb: Math.round(memory.heapUsed / 1024 / 1024)
   });
 });
 
@@ -828,9 +834,35 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  // Global Error Handler Middleware
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error('Unhandled server error:', err);
+    res.status(500).json({
+      error: 'خطای غیرمنتظره در پردازش درخواست سرور.',
+      message: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+  });
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Bushido Discipline OS (PostgreSQL + Prisma) running on port ${PORT}`);
   });
+
+  // Graceful Shutdown for PaaS / Docker (Liara, Kubernetes, VPS)
+  const shutdown = (signal: string) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    server.close(() => {
+      console.log('HTTP server closed.');
+      process.exit(0);
+    });
+
+    setTimeout(() => {
+      console.error('Forceful shutdown after timeout.');
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer();

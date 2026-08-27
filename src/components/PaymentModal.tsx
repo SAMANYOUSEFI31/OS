@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, SubscriptionPlan } from '../types';
 import { soundFX } from '../utils/audioEffects';
-import confetti from 'canvas-confetti';
+import { haptics } from '../utils/haptics';
 import { 
   ShieldCheck, 
   Crown, 
@@ -201,73 +201,61 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         setStep('success');
         onUpgradeSuccess(updated);
-        soundFX.playStandardDay();
-
-        try {
-          confetti({
-            particleCount: 150,
-            spread: 90,
-            origin: { y: 0.5 }
-          });
-        } catch {}
+        soundFX.playMastery();
+        haptics.masterySuccess();
       } else {
         setPaymentError(data.message || 'پرداخت از طرف بانک تایید نشد.');
+        haptics.warningAlert();
       }
     } catch (err) {
       console.error('Verify error:', err);
       setPaymentError('خطا در تایید تراکنش.');
+      haptics.warningAlert();
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto" dir="rtl">
+    <div 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] overscroll-contain overflow-y-auto" 
+      dir="rtl"
+    >
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.3 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.y > 90 || info.velocity.y > 400) {
-            onClose();
-          }
-        }}
-        className="bg-zinc-900 border border-amber-500/40 rounded-2xl sm:rounded-3xl w-full max-w-2xl text-zinc-100 shadow-2xl overflow-hidden touch-pan-y"
+        className="bg-zinc-900 border border-amber-500/40 rounded-2xl sm:rounded-3xl w-full max-w-2xl text-zinc-100 shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem))]"
       >
-        {/* Mobile Drag Pill Indicator */}
-        <div className="w-12 h-1.5 bg-zinc-700/80 rounded-full mx-auto my-2 sm:hidden cursor-grab active:cursor-grabbing shrink-0" />
-        
         {/* STEP 1: PLANS SELECTION */}
         {step === 'plans' && (
-          <div>
+          <div className="flex flex-col flex-1 overflow-hidden min-h-0">
             {/* Header */}
-            <div className="p-6 bg-gradient-to-r from-amber-950/60 via-zinc-900 to-zinc-950 border-b border-zinc-800 flex items-center justify-between">
+            <div className="p-5 sm:p-6 bg-gradient-to-r from-amber-950/60 via-zinc-900 to-zinc-950 border-b border-zinc-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-lg">
-                  <Crown className="w-6 h-6" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-lg shrink-0">
+                  <Crown className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h2 className="text-lg sm:text-xl font-black text-zinc-100 flex items-center gap-2">
+                  <h2 className="text-base sm:text-lg md:text-xl font-black text-zinc-100 flex items-center gap-2">
                     ارتقا به اشتراک «سامورایی ویژه VIP»
                   </h2>
-                  <p className="text-xs text-zinc-400 mt-0.5">
+                  <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
                     فعال‌سازی تمامی ابزارهای مهندسی دیسیپلین، آنالیز و صدور گواهینامه
                   </p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-zinc-800 transition"
+                className="text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-zinc-800 transition cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-5 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
               {/* Plan Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {PLANS.map(plan => {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
 import { toPersianDigits, formatPersianNumber } from '../utils/numberUtils';
+import { haptics } from '../utils/haptics';
 import { 
   ShieldCheck, 
   Smartphone, 
@@ -138,6 +139,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     if (!otpCode.trim()) {
       setErrorMessage('لطفاً کد تایید ۵ رقمی را وارد نمایید.');
+      haptics.warningAlert();
       return;
     }
 
@@ -177,6 +179,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           activeCycleLimit: data.user.isVip ? 999 : 1
         };
 
+        haptics.standardDaySuccess();
         onAuthSuccess(data.token, userProfile);
         onClose();
         return;
@@ -200,9 +203,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       };
       const fallbackToken = `mock-token-${Date.now()}`;
 
+      haptics.standardDaySuccess();
       onAuthSuccess(fallbackToken, fallbackUser);
       onClose();
     } catch (err: any) {
+      haptics.warningAlert();
       setErrorMessage(err.message || 'خطا در تایید کد');
     } finally {
       setIsLoading(false);
@@ -287,56 +292,49 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 overflow-y-auto" dir="rtl">
+    <div 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] overscroll-contain overflow-y-auto" 
+      dir="rtl"
+    >
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.3 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.y > 90 || info.velocity.y > 400) {
-            onClose();
-          }
-        }}
-        className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden touch-pan-y"
+        className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem))]"
       >
-        {/* Mobile Drag Pill Indicator */}
-        <div className="w-12 h-1.5 bg-zinc-700/80 rounded-full mx-auto my-2 sm:hidden cursor-grab active:cursor-grabbing shrink-0" />
-
         {/* Header */}
-        <div className="px-6 py-4 sm:py-5 border-b border-zinc-800 flex items-center justify-between bg-[#09090b]/60">
+        <div className="px-5 sm:px-6 py-4 border-b border-zinc-800 flex items-center justify-between bg-[#09090b]/80 shrink-0">
           <div className="flex items-center gap-3">
             {/* 5-click easter egg on KeyRound icon for developer bypass */}
             <button
               type="button"
               onClick={handleSecretIconClick}
-              className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-black font-black shadow-lg shadow-amber-500/20 active:scale-90 transition-transform cursor-pointer focus:outline-none"
+              className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-black font-black shadow-lg shadow-amber-500/20 active:scale-90 transition-transform cursor-pointer focus:outline-none shrink-0"
               title="ورود سامورایی"
             >
               <KeyRound className="w-5 h-5 text-black" />
             </button>
-            <div>
-              <h2 className="text-base font-black text-white">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-black text-white truncate">
                 {currentUser?.id ? 'پروفایل و حساب کاربری' : 'ورود / عضویت سامورایی'}
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
                 سیستم احراز هویت مستقل و ذخیره‌سازی ابری
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-zinc-800/80 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-zinc-800/80 hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6">
+        {/* Scrollable Content Body */}
+        <div className="p-5 sm:p-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
           {currentUser?.id ? (
             /* Logged in state */
             <div className="space-y-5">

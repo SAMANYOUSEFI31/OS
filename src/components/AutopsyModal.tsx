@@ -6,6 +6,7 @@ import { FOUNDATION_HABITS } from '../engine/bushidoCalculations';
 import { getDeterministicAutopsy } from '../engine/deterministicSensei';
 import { toPersianDigits } from '../utils/numberUtils';
 import { soundFX } from '../utils/audioEffects';
+import { haptics } from '../utils/haptics';
 import { 
   X, 
   Sparkles, 
@@ -133,7 +134,8 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
       countermeasure,
       aiFeedback
     };
-    soundFX.playCheck();
+    soundFX.playAutopsySave();
+    haptics.debtResolved();
     onSave(updated);
 
     // If there are other unresolved debts, smoothly transition to next
@@ -151,26 +153,17 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
   const isPersonalFrozen = reason === 'دلایل شخصی';
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-2 sm:p-4 overflow-y-auto">
+    <div 
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(0.75rem,env(safe-area-inset-top,0px))] pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] overscroll-contain overflow-y-auto"
+    >
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        drag="y"
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0, bottom: 0.3 }}
-        onDragEnd={(_, info) => {
-          if (info.offset.y > 90 || info.velocity.y > 400) {
-            onClose();
-          }
-        }}
-        className="my-auto sm:my-6 max-h-[94dvh] w-full max-w-2xl bg-zinc-900 border border-zinc-700/80 rounded-2xl sm:rounded-3xl text-zinc-100 shadow-2xl flex flex-col overflow-hidden touch-pan-y"
+        className="my-auto max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-2rem))] w-full max-w-2xl bg-zinc-900 border border-zinc-700/80 rounded-2xl sm:rounded-3xl text-zinc-100 shadow-2xl flex flex-col overflow-hidden"
         dir="rtl"
       >
-        {/* Mobile Drag Pill Indicator */}
-        <div className="w-12 h-1.5 bg-zinc-700/80 rounded-full mx-auto my-2 sm:hidden cursor-grab active:cursor-grabbing shrink-0" />
-
         {/* Sticky Modal Header */}
         <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#09090b]/95 border-b border-zinc-800 flex items-center justify-between shrink-0 sticky top-0 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
