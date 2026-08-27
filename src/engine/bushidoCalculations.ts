@@ -103,45 +103,39 @@ export function computeDailyProperties(
 
   // Rich coach status label (Disciplined, Stoic & Professional)
   let coachStatusLabel = '';
-  const smTag = log.specialMission ? ' │ ماموریت ویژه انجام شد' : '';
+  const smTag = log.specialMission ? ' + ماموریت ویژه' : '';
 
   if (log.date > logicalToday) {
     const diff = daysBetween(logicalToday, log.date);
     if (diff === 1) {
-      coachStatusLabel = 'فردا هنوز فرا نرسیده است. تمرکز کامل بر اجرای امروز باشد.';
+      coachStatusLabel = 'فردا هنوز فرا نرسیده است. تمرکز بر فتح روز جاری است.';
     } else {
-      coachStatusLabel = `این تاریخ (${toPersianDigits(diff)} روز آینده) هنوز فرا نرسیده است. تمرکز بر امروز باشد.`;
+      coachStatusLabel = `${toPersianDigits(diff)} روز تا این تاریخ باقی است. تمرکز بر روز جاری است.`;
     }
   } else if (log.date < logicalToday) {
     if (statusType === 'personal_frozen') {
-      coachStatusLabel = habitsCount > 0 
-        ? 'توقف اضطراری │ حفظ دیسیپلین در شرایط ویژه' 
-        : 'توقف اضطراری │ معافیت ثبت شد و زنجیره بدون آسیب فریز گردید';
+      coachStatusLabel = 'توقف اضطراری؛ زنجیره بدون آسیب حفظ شد.';
     } else if (isStandard) {
-      coachStatusLabel = 'تعهد کامل │ روز استاندارد تثبیت شد' + smTag;
+      coachStatusLabel = 'روز استاندارد تثبیت شد' + smTag;
     } else if (statusType === 'burned_unresolved') {
-      coachStatusLabel = 'نیازمند کالبدشکافی │ علت و زمان شکست ثبت نشده است (بدهی باز)';
+      coachStatusLabel = 'نیازمند کالبدشکافی؛ ثبت علت افت الزامی است.';
     } else {
-      coachStatusLabel = 'پرونده شکست بسته شد │ کالبدشکافی و آسیب‌شناسی انجام شد';
+      coachStatusLabel = 'پرونده شکست با ثبت کالبدشکافی بسته شد.';
     }
   } else {
     // Is today
     if (isStandard) {
       coachStatusLabel = log.specialMission
-        ? 'تعهد حداکثری │ ۵ پایه استاندارد و ماموریت ویژه با موفقیت کامل ثبت شد'
-        : 'روز استاندارد محقق شد │ ۵ پایه فونداسیون با موفقیت کامل ثبت شدند';
+        ? 'کمال تعهد با ۵ پایه و ماموریت ویژه ثبت شد.'
+        : 'روز استاندارد با ۵ پایه فونداسیون تثبیت شد.';
     } else if (statusType === 'personal_frozen') {
-      coachStatusLabel = habitsCount > 0
-        ? 'توقف اضطراری │ با وجود شرایط سخت، روتین را حفظ کردید'
-        : 'توقف اضطراری │ زنجیره بدون افت امتیاز فریز شد';
+      coachStatusLabel = 'توقف اضطراری؛ زنجیره در امان است.';
     } else if (habitsCount === 4) {
-      coachStatusLabel = 'فقط ۱ گام تا تکمیل روز استاندارد فاصله دارید' + smTag;
+      coachStatusLabel = 'فقط ۱ پایه تا استانداردسازی روز فاصله دارید.' + smTag;
     } else if (habitsCount >= 1 && habitsCount <= 3) {
-      coachStatusLabel = 'ریتم دیسیپلین شکل گرفت │ پایه‌های باقی‌مانده را کامل کنید' + smTag;
-    } else if (habitsCount === 0) {
-      coachStatusLabel = 'روز در جریان است │ نخستین گام فونداسیون را بردارید';
+      coachStatusLabel = `${toPersianDigits(5 - habitsCount)} پایه تا استانداردسازی روز باقی مانده است.` + smTag;
     } else {
-      coachStatusLabel = 'در جریان اجرا │ برای تثبیت پایه‌ها تلاش کنید';
+      coachStatusLabel = 'روز در جریان است؛ ثبت پایه‌های فونداسیون را آغاز کنید.';
     }
   }
 

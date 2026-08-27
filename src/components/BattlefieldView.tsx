@@ -698,12 +698,12 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                   {computed.score === 10 ? (
                     <div className="inline-flex items-center gap-1.5 text-[11px] font-black text-amber-300 bg-amber-500/20 py-1 px-3 rounded-xl border border-amber-500/40 shadow-xs">
                       <Swords className="w-3.5 h-3.5" />
-                      <span>کمال تعهد (۱۰ از ۱۰)</span>
+                      <span>کمال تعهد</span>
                     </div>
                   ) : computed.isStandard ? (
                     <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-300 bg-emerald-500/20 py-1 px-3 rounded-xl border border-emerald-500/40 shadow-xs">
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>روز استاندارد (۸ از ۱۰)</span>
+                      <span>روز استاندارد</span>
                     </div>
                   ) : (
                     <div className="text-[11px] text-zinc-400 font-medium bg-zinc-900/60 px-3 py-1 rounded-xl border border-zinc-800/80">
@@ -780,9 +780,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="font-bold text-xs sm:text-sm text-zinc-100 flex items-center gap-1.5 leading-snug">
                           <span className="truncate">{h.titleFa}</span>
-                          <span className="text-[10px] font-normal text-zinc-400 font-en shrink-0">
-                            ({h.title})
-                          </span>
                         </div>
                         <p className="text-[11px] text-zinc-400 leading-relaxed text-right line-clamp-2 sm:line-clamp-none">
                           {h.subtitleFa}
@@ -811,7 +808,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                 <span>ماموریت شتاب‌دهنده روز</span>
               </h4>
               <span className="text-[11px] sm:text-xs text-amber-400/90 font-mono whitespace-nowrap bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                رسیدن به کمال (۱۰ از ۱۰)
+                کمال تعهد (۱۰ از ۱۰)
               </span>
             </div>
 
@@ -845,7 +842,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                     </span>
                   </div>
                   <p className="text-[11px] text-zinc-400 leading-relaxed text-right line-clamp-2 sm:line-clamp-none">
-                    تکمیل این ماموریت در کنار ۵ رکن فونداسیون، امتیاز روز را به ۱۰ از ۱۰ (کمال تعهد) می‌رساند.
+                    ثبت ماموریت کلیدی امروز در کنار ۵ رکن فونداسیون برای کسب امتیاز کامل ۱۰ از ۱۰.
                   </p>
                 </div>
               </div>

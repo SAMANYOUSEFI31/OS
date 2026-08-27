@@ -99,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     <>
       {/* Top Hub Bar Header with PWA Notch Safe-Area */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 backdrop-blur-xl transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
+        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 crisp-blur transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
         dir="rtl"
       >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
@@ -285,23 +285,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="sm:hidden">مدیر</span>
                 </button>
               )}
-
-              {/* User Account / Settings Button (Visible on Desktop; Mobile users have the bottom profile tab) */}
-              <button
-                type="button"
-                onClick={() => onSelectTab('profile')}
-                className={`hidden lg:inline-flex h-8 w-8 sm:h-9 sm:w-9 rounded-xl border items-center justify-center transition cursor-pointer shrink-0 relative ${
-                  activeTab === 'profile'
-                    ? 'bg-zinc-800 border-rose-500 text-rose-400'
-                    : 'bg-[#121215] hover:bg-zinc-800 border-zinc-800 text-zinc-300 hover:text-white'
-                }`}
-                title={userProfile?.id ? `حساب و تنظیمات (${userProfile.name})` : 'حساب کاربری و تنظیمات'}
-              >
-                <Settings className={`w-4 h-4 ${activeTab === 'profile' ? 'text-rose-400' : 'text-zinc-300'}`} />
-                {!userProfile.isVip && (metrics.elapsedDays >= 30 || metrics.pureStreak >= 7) && (
-                  <span className="w-2 h-2 rounded-full bg-amber-400 absolute top-1 right-1 animate-pulse" />
-                )}
-              </button>
             </div>
           </div>
         </div>
@@ -317,7 +300,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Mobile Bottom Navigation Bar (4 clean tabs with spring layoutId active indicator) */}
       <nav 
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 backdrop-blur-xl px-2 py-1 pb-safe select-none"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none"
         dir="rtl"
       >
         <div className="grid grid-cols-4 max-w-md mx-auto relative h-14 items-center">
