@@ -64,6 +64,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
 }) => {
   // Active Section for Progressive Disclosure (reduces cognitive load & mobile viewport scrolling)
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
+  const [navDirection, setNavDirection] = useState<number>(0);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [isConfirmResetOpen, setIsConfirmResetOpen] = useState(false);
 
@@ -77,6 +78,61 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
 
   const themeConfig = BUSHIDO_CRIMSON_THEME;
   const currentCutoff = userProfile.nightOwlCutoffHour ?? settings.nightOwlCutoffHour ?? 4;
+
+  const SECTIONS_LIST: SettingsSection[] = ['account', 'discipline', 'vault'];
+
+  const switchSection = (newSec: SettingsSection) => {
+    const currIdx = SECTIONS_LIST.indexOf(activeSection);
+    const nextIdx = SECTIONS_LIST.indexOf(newSec);
+    if (currIdx !== nextIdx) {
+      setNavDirection(nextIdx > currIdx ? 1 : -1);
+      setActiveSection(newSec);
+    }
+  };
+
+  // Touch swipe gesture handlers for switching sections effortlessly
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('textarea, input, select, button, [data-no-swipe], [contenteditable="true"]')) {
+      touchStartRef.current = null;
+      return;
+    }
+    const touch = e.touches[0];
+    if (touch) {
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    const isQuickFlick = elapsed < 280 && Math.abs(deltaX) >= 45;
+    const isStandardSwipe = Math.abs(deltaX) >= 65;
+
+    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.8) {
+      const currIdx = SECTIONS_LIST.indexOf(activeSection);
+      if (deltaX < 0) {
+        // Swipe Left in RTL -> Next section
+        if (currIdx < SECTIONS_LIST.length - 1) {
+          switchSection(SECTIONS_LIST[currIdx + 1]);
+        }
+      } else {
+        // Swipe Right in RTL -> Prev section
+        if (currIdx > 0) {
+          switchSection(SECTIONS_LIST[currIdx - 1]);
+        }
+      }
+    }
+  };
 
   const handleSelectCutoffHour = (hour: number) => {
     soundFX.playCheck();
@@ -167,7 +223,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   const cutoffHoursList = [
     { hour: 2, label: 'تا ۲:۰۰ بامداد' },
     { hour: 3, label: 'تا ۳:۰۰ بامداد' },
-    { hour: 4, label: 'تا ۴:۰۰ بامداد (پیش‌فرض بوشیدو)' },
+    { hour: 4, label: 'تا ۴:۰۰ بامداد (پیش‌فرض)' },
     { hour: 5, label: 'تا ۵:۰۰ بامداد' },
     { hour: 6, label: 'تا ۶:۰۰ صبح' }
   ];
@@ -183,7 +239,12 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   ];
 
   return (
-    <div className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6" dir="rtl">
+    <div 
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6" 
+      dir="rtl"
+    >
       {/* Toast Notice */}
       {saveSuccessMsg && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-zinc-900 border border-emerald-500/50 text-emerald-300 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-bold animate-in slide-in-from-top-4">
@@ -205,7 +266,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-black text-zinc-100 truncate">
-                حساب کاربری و پیکربندی سامانه
+                حساب کاربری و تنظیمات
               </h1>
               <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 truncate">
                 مدیریت اشتراک سامورایی، مهلت شبانه و امنیت داده‌ها
@@ -227,7 +288,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Progressive Disclosure: Segmented Categorization Bar (Eliminates mobile scroll clutter) */}
+      {/* Progressive Disclosure: Segmented Categorization Bar */}
       <div 
         data-no-swipe="true"
         className="w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl grid grid-cols-3 gap-1 sm:gap-1.5 shadow-lg select-none relative"
@@ -240,7 +301,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               key={sec.id}
               type="button"
               onClick={() => {
-                setActiveSection(sec.id);
+                switchSection(sec.id);
               }}
               className={`w-full py-2.5 sm:py-3 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-200 cursor-pointer inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 ${
                 isActive
@@ -251,7 +312,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               {isActive && (
                 <motion.div
                   layoutId="activeSettingsSectionIndicator"
-                  layout="position"
                   className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10 pointer-events-none"
                   transition={{ type: 'spring', stiffness: 450, damping: 35 }}
                 />
@@ -263,304 +323,294 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         })}
       </div>
 
-      {/* Section 1: Account & VIP Identity */}
-      {activeSection === 'account' && (
+      {/* Animated Swipeable Sections Container */}
+      <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key="account-section"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.18 }}
+          key={activeSection}
+          initial={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? -20 : 20) : 0 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? 20 : -20) : 0 }}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
           className="space-y-4"
         >
-          <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl space-y-5">
-            {/* Subtle Background Glow */}
-            <div 
-              className="absolute -top-12 -left-12 w-48 h-48 rounded-full blur-3xl opacity-15 pointer-events-none"
-              style={{ backgroundColor: themeConfig.colorHex }}
-            />
+          {/* Section 1: Account & VIP Identity */}
+          {activeSection === 'account' && (
+            <div className="space-y-4">
+              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl space-y-5">
+                {/* Subtle Background Glow */}
+                <div 
+                  className="absolute -top-12 -left-12 w-48 h-48 rounded-full blur-3xl opacity-15 pointer-events-none"
+                  style={{ backgroundColor: themeConfig.colorHex }}
+                />
 
-            {/* User Identity Row */}
-            <div className="flex items-start justify-between gap-3 relative z-10">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-zinc-200 text-lg font-black shadow-inner shrink-0">
-                  {userProfile.name ? userProfile.name.charAt(0) : '武'}
+                {/* User Identity Row */}
+                <div className="flex items-start justify-between gap-3 relative z-10">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-zinc-200 text-lg font-black shadow-inner shrink-0">
+                      {userProfile.name ? userProfile.name.charAt(0) : '武'}
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-base sm:text-lg font-black text-zinc-100 flex items-center gap-2 truncate">
+                        <span className="truncate">{userProfile.name || 'جنگجوی بوشیدو'}</span>
+                        {userProfile.isAdmin && (
+                          <span className="bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap shrink-0">
+                            مدیر
+                          </span>
+                        )}
+                      </h2>
+                      <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">
+                        {userProfile.phoneNumber 
+                          ? toPersianDigits(userProfile.phoneNumber) 
+                          : userProfile.email || 'حساب کاربری محلی (مهمان)'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h2 className="text-base sm:text-lg font-black text-zinc-100 flex items-center gap-2 truncate">
-                    <span className="truncate">{userProfile.name || 'جنگجوی بوشیدو'}</span>
-                    {userProfile.isAdmin && (
-                      <span className="bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap shrink-0">
-                        مدیر
-                      </span>
-                    )}
-                  </h2>
-                  <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">
-                    {userProfile.phoneNumber 
-                      ? toPersianDigits(userProfile.phoneNumber) 
-                      : userProfile.email || 'حساب کاربری محلی (مهمان)'}
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            {/* VIP & Access Status Details */}
-            <div className="bg-[#09090b]/70 border border-zinc-800/80 rounded-2xl p-4 space-y-3 relative z-10">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-400">سطح دسترسی:</span>
-                <span className="font-bold text-zinc-200">
-                  {userProfile.isVip ? 'سامورایی ویژه VIP (دسترسی کامل)' : 'رونین (طرح رایگان/استاندارد)'}
-                </span>
-              </div>
-
-              {userProfile.isVip && userProfile.vipExpiresAt && (
-                <>
+                {/* VIP & Access Status Details */}
+                <div className="bg-[#09090b]/70 border border-zinc-800/80 rounded-2xl p-4 space-y-3 relative z-10">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-400">تاریخ پایان اشتراک:</span>
-                    <span className="font-bold text-amber-300">
-                      {formatPersianDate(userProfile.vipExpiresAt.split('T')[0])}
+                    <span className="text-zinc-400">سطح دسترسی:</span>
+                    <span className="font-bold text-zinc-200">
+                      {userProfile.isVip ? 'سامورایی ویژه VIP (دسترسی کامل)' : 'رونین (طرح استاندارد)'}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
-                    <span className="text-zinc-400">اعتبار باقی‌مانده:</span>
-                    <span className="font-black text-emerald-400">
-                      {toPersianDigits(vipDaysRemaining)} روز
-                    </span>
-                  </div>
-                </>
-              )}
 
-              {!userProfile.isVip && (
-                <p className="text-[11px] text-zinc-400 leading-relaxed bg-[#121215]/50 p-3 rounded-xl border border-zinc-800/50 text-right">
-                  با فعال‌سازی اشتراک ویژه VIP، قابلیت ثبت چرخه‌های نامحدود، گزارش‌های تحلیلی سنتسی و همگام‌سازی بین دستگاه‌ها در اختیارتان قرار می‌گیرد.
-                </p>
-              )}
-            </div>
+                  {userProfile.isVip && userProfile.vipExpiresAt && (
+                    <>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-400">پایان اشتراک:</span>
+                        <span className="font-bold text-amber-300">
+                          {formatPersianDate(userProfile.vipExpiresAt.split('T')[0])}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
+                        <span className="text-zinc-400">اعتبار باقی‌مانده:</span>
+                        <span className="font-black text-emerald-400">
+                          {toPersianDigits(vipDaysRemaining)} روز
+                        </span>
+                      </div>
+                    </>
+                  )}
 
-            {/* Account Actions & Subscriptions */}
-            <div className="pt-4 border-t border-zinc-800/80 space-y-2.5 relative z-10">
-              {/* VIP CTA */}
-              {userProfile.isVip ? (
-                <button
-                  type="button"
-                  onClick={onOpenPaymentModal}
-                  className="w-full bg-zinc-800 hover:bg-zinc-700 hover:border-amber-500/50 border border-amber-500/30 text-amber-300 font-bold text-xs py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] shadow-md whitespace-nowrap"
-                >
-                  <Crown className="w-4 h-4 text-amber-400" />
-                  <span>تمدید اشتراک سامورایی ویژه (VIP)</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={onOpenPaymentModal}
-                  className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-[0.98] whitespace-nowrap"
-                >
-                  <Crown className="w-4 h-4" />
-                  <span>ارتقا به حساب سامورایی ویژه (VIP)</span>
-                </button>
-              )}
+                  {!userProfile.isVip && (
+                    <p className="text-[11px] text-zinc-400 leading-relaxed bg-[#121215]/50 p-3 rounded-xl border border-zinc-800/50 text-right">
+                      با فعال‌سازی اشتراک VIP، امکان ایجاد چرخه‌های نامحدود و دسترسی به تحلیل‌های سنتسی فعال می‌شود.
+                    </p>
+                  )}
+                </div>
 
-              {/* Auth Action (Login or Logout) inside Account Card */}
-              {userProfile.id ? (
-                <div className="space-y-2 pt-1">
-                  {/* Admin Navigation Button: Strictly Hidden unless userProfile.isAdmin === true */}
-                  {userProfile.isAdmin === true && (
+                {/* Account Actions & Subscriptions */}
+                <div className="pt-4 border-t border-zinc-800/80 space-y-2.5 relative z-10">
+                  {/* VIP CTA */}
+                  {userProfile.isVip ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        soundFX.playCheck();
-                        onNavigateToAdmin();
-                      }}
-                      className="w-full bg-red-950/50 hover:bg-red-900/70 border border-red-500/50 hover:border-red-500/80 text-red-200 text-xs font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-sm"
+                      onClick={onOpenPaymentModal}
+                      className="w-full bg-zinc-800 hover:bg-zinc-700 hover:border-amber-500/50 border border-amber-500/30 text-amber-300 font-bold text-xs py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] shadow-md whitespace-nowrap"
                     >
-                      <ShieldCheck className="w-4 h-4 text-red-400" />
-                      <span>ورود به پنل مدیریت سیستم (/admin)</span>
+                      <Crown className="w-4 h-4 text-amber-400" />
+                      <span>تمدید اشتراک سامورایی ویژه (VIP)</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={onOpenPaymentModal}
+                      className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-zinc-950 font-black text-xs py-3 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-[0.98] whitespace-nowrap"
+                    >
+                      <Crown className="w-4 h-4" />
+                      <span>ارتقا به حساب سامورایی ویژه (VIP)</span>
                     </button>
                   )}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFX.playSlash();
-                      onLogout();
-                    }}
-                    className="w-full bg-red-950/20 hover:bg-red-900/40 hover:text-red-300 hover:border-red-500/40 border border-zinc-800 text-zinc-400 text-xs font-bold py-2.5 rounded-2xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>خروج از حساب کاربری</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={onOpenAuthModal}
-                    className="w-full bg-amber-500 hover:bg-amber-400 text-black text-xs font-black py-3 rounded-2xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-md shadow-amber-500/20"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    <span>ورود / عضویت با شماره موبایل یا ایمیل</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.div>
-      )}
+                  {/* Auth Action */}
+                  {userProfile.id ? (
+                    <div className="space-y-2 pt-1">
+                      {userProfile.isAdmin === true && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            soundFX.playCheck();
+                            onNavigateToAdmin();
+                          }}
+                          className="w-full bg-red-950/50 hover:bg-red-900/70 border border-red-500/50 hover:border-red-500/80 text-red-200 text-xs font-bold py-3 rounded-2xl flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-sm"
+                        >
+                          <ShieldCheck className="w-4 h-4 text-red-400" />
+                          <span>پنل مدیریت سامانه (/admin)</span>
+                        </button>
+                      )}
 
-      {/* Section 2: Discipline & Nightly Cutoff Hour */}
-      {activeSection === 'discipline' && (
-        <motion.div
-          key="discipline-section"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.18 }}
-          className="space-y-4"
-        >
-          <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                <Moon className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm sm:text-base font-bold text-zinc-100">
-                  مهلت پایانی شبانه (مرز جابجایی روز)
-                </h3>
-                <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
-                  حداکثر زمان بیداری در نیمه‌شب که ثبت عادات در آن برای روز قبل محاسبه می‌شود
-                </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundFX.playSlash();
+                          onLogout();
+                        }}
+                        className="w-full bg-red-950/20 hover:bg-red-900/40 hover:text-red-300 hover:border-red-500/40 border border-zinc-800 text-zinc-400 text-xs font-bold py-2.5 rounded-2xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>خروج از حساب کاربری</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={onOpenAuthModal}
+                        className="w-full bg-amber-500 hover:bg-amber-400 text-black text-xs font-black py-3 rounded-2xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-md shadow-amber-500/20"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        <span>ورود یا عضویت</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+          )}
 
-            <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/60 p-3.5 rounded-2xl border border-zinc-800/80 text-right">
-              اگر شب‌ها تا دیروقت بیدار هستید، ثبت عادات تا قبل از این ساعت کماکان برای روز گذشته لحاظ می‌شود تا روز تقویمی شما قبل از خوابیدن از دست نرود.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
-              {cutoffHoursList.map(item => {
-                const isSelected = currentCutoff === item.hour;
-                return (
-                  <button
-                    key={item.hour}
-                    type="button"
-                    onClick={() => handleSelectCutoffHour(item.hour)}
-                    className={`px-3.5 py-3 rounded-xl text-xs font-bold flex items-center justify-between border transition cursor-pointer active:scale-[0.98] ${
-                      isSelected
-                        ? 'bg-zinc-800 border-emerald-500/50 text-white shadow-md'
-                        : 'bg-[#09090b]/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                    }`}
-                  >
-                    <span className="whitespace-nowrap">{item.label}</span>
-                    {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Section 3: Data Vault & Safe Backup */}
-      {activeSection === 'vault' && (
-        <motion.div
-          key="vault-section"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.18 }}
-          className="space-y-4"
-        >
-          <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                <Database className="w-5 h-5 text-amber-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm sm:text-base font-bold text-zinc-100">
-                  مدیریت پایگاه داده و نسخه پشتیبان (Data Vault)
-                </h3>
-                <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
-                  خروجی گرفتن، بازیابی فایل پشتیبان یا بازنشانی داده‌های سیستم
-                </p>
-              </div>
-            </div>
-
-            {/* Standard Safe Operations: Export & Import */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {/* Export JSON Card */}
-              <button
-                type="button"
-                onClick={() => {
-                  soundFX.playCheck();
-                  onExportData();
-                  showNotice('فایل پشتیبان داده‌های بوشیدو با موفقیت ذخیره شد.');
-                }}
-                className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm"
-              >
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
-                  <Download className="w-5 h-5" />
-                </div>
-                <div className="space-y-1 min-w-0 flex-1">
-                  <span className="font-bold text-xs sm:text-sm text-zinc-100 block">خروجی پشتیبان (فایل JSON)</span>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
-                    دریافت فایل پشتیبان کامل از تمامی چرخه‌ها، عادات و لاگ‌های دادگاه
-                  </p>
-                </div>
-              </button>
-
-              {/* Import JSON Card */}
-              <label className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm">
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
-                  <Upload className="w-5 h-5" />
-                </div>
-                <div className="space-y-1 min-w-0 flex-1">
-                  <span className="font-bold text-xs sm:text-sm text-zinc-100 block">بازیابی نسخه پشتیبان (JSON)</span>
-                  <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
-                    بارگذاری فایل پشتیبان و بازنشانی داده‌ها به ساختار سامانه
-                  </p>
-                </div>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".json"
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            {/* Collapsible Danger Zone: Reset Data */}
-            <div className="pt-2">
-              <div className="bg-red-950/15 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start sm:items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
-                    <AlertTriangle className="w-5 h-5" />
+          {/* Section 2: Discipline & Nightly Cutoff Hour */}
+          {activeSection === 'discipline' && (
+            <div className="space-y-4">
+              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                    <Moon className="w-5 h-5 text-amber-400" />
                   </div>
-                  <div className="space-y-0.5 text-right">
-                    <h4 className="font-bold text-xs sm:text-sm text-red-200">
-                      منطقه حساس: بازنشانی کل داده‌های سامانه
-                    </h4>
-                    <p className="text-[11px] text-zinc-400 leading-relaxed">
-                      تمامی لاگ‌ها، چرخه‌ها و سوابق پاک شده و سامانه به وضعیت اولیه بازمی‌گردد.
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
+                      مهلت پایانی شبانه (مرز کات‌آف)
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                      ثبت عادات تا پیش از این ساعت، برای روز قبل لحاظ می‌شود
                     </p>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsConfirmResetOpen(true);
-                  }}
-                  className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition whitespace-nowrap shrink-0 shadow-sm"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>بازنشانی به وضعیت کارخانه</span>
-                </button>
+                <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/60 p-3.5 rounded-2xl border border-zinc-800/80 text-right">
+                  اگر شب‌ها تا دیروقت بیدار هستید، ثبت عادات تا قبل از این ساعت کماکان برای روز گذشته محاسبه می‌شود تا روز تقویمی شما قبل از خواب از دست نرود.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
+                  {cutoffHoursList.map(item => {
+                    const isSelected = currentCutoff === item.hour;
+                    return (
+                      <button
+                        key={item.hour}
+                        type="button"
+                        onClick={() => handleSelectCutoffHour(item.hour)}
+                        className={`px-3.5 py-3 rounded-xl text-xs font-bold flex items-center justify-between border transition cursor-pointer active:scale-[0.98] ${
+                          isSelected
+                            ? 'bg-zinc-800 border-emerald-500/50 text-white shadow-md'
+                            : 'bg-[#09090b]/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span className="whitespace-nowrap">{item.label}</span>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Section 3: Data Vault & Safe Backup */}
+          {activeSection === 'vault' && (
+            <div className="space-y-4">
+              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                    <Database className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
+                      پشتیبان‌گیری و پایگاه داده
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                      خروجی گرفتن، بازیابی فایل یا بازنشانی داده‌های سامانه
+                    </p>
+                  </div>
+                </div>
+
+                {/* Standard Safe Operations: Export & Import */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Export JSON Card */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundFX.playCheck();
+                      onExportData();
+                      showNotice('فایل پشتیبان داده‌های بوشیدو ذخیره شد.');
+                    }}
+                    className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
+                      <Download className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <span className="font-bold text-xs sm:text-sm text-zinc-100 block">خروجی پشتیبان (JSON)</span>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
+                        دریافت نسخه پشتیبان از تمام چرخه‌ها و لاگ‌ها
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Import JSON Card */}
+                  <label className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm">
+                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
+                      <Upload className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <span className="font-bold text-xs sm:text-sm text-zinc-100 block">بازیابی نسخه پشتیبان</span>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
+                        بارگذاری فایل JSON و بازنشانی داده‌ها
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      accept=".json"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {/* Collapsible Danger Zone: Reset Data */}
+                <div className="pt-2">
+                  <div className="bg-red-950/15 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start sm:items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                        <AlertTriangle className="w-5 h-5" />
+                      </div>
+                      <div className="space-y-0.5 text-right">
+                        <h4 className="font-bold text-xs sm:text-sm text-red-200">
+                          بازنشانی کل داده‌های سامانه
+                        </h4>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed">
+                          تمام لاگ‌ها و سوابق پاک شده و سامانه به وضعیت اولیه بازمی‌گردد.
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsConfirmResetOpen(true);
+                      }}
+                      className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition whitespace-nowrap shrink-0 shadow-sm"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>بازنشانی به وضعیت اولیه</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
-      )}
+      </AnimatePresence>
 
       {/* Confirmation Modal for Reset Factory Data */}
       <AnimatePresence>

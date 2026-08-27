@@ -36,7 +36,7 @@ import {
 
 interface BattlefieldViewProps {
   currentCycle: Cycle | null;
-  metrics: CycleMetrics;
+  metrics?: CycleMetrics | null;
   logs: DailyLog[];
   selectedDate: string;
   nightOwlCutoffHour?: number;
@@ -69,7 +69,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
   const isToday = selectedDate === logicalToday;
 
   // 1. Guard against No Active Cycle / Empty State
-  if (!currentCycle) {
+  if (!currentCycle || !metrics) {
     return (
       <div className="max-w-2xl mx-auto py-16 px-4 text-center space-y-6" dir="rtl">
         <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-xl">

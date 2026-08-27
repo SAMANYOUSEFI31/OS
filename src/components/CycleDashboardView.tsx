@@ -20,13 +20,15 @@ import {
   Trophy, 
   TrendingUp,
   LayoutDashboard,
+  Gauge,
   Grid3X3,
-  Layers
+  BarChart3,
+  Plus
 } from 'lucide-react';
 
 interface CycleDashboardViewProps {
-  currentCycle: Cycle;
-  metrics: CycleMetrics;
+  currentCycle?: Cycle | null;
+  metrics?: CycleMetrics | null;
   logs: DailyLog[];
   cycles?: Cycle[];
   allTimeSettings?: {
@@ -52,6 +54,31 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
   const [activeSubTab, setActiveSubTab] = useState<DashboardSubTab>('overview');
   const [navDirection, setNavDirection] = useState<number>(0);
   const logicalToday = getLogicalTodayDate();
+
+  if (!currentCycle || !metrics) {
+    return (
+      <div className="space-y-6 max-w-lg mx-auto py-12 px-4 animate-in fade-in duration-200" dir="rtl">
+        <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-8 text-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+            <LayoutDashboard className="w-8 h-8" />
+          </div>
+          <h3 className="text-base sm:text-lg font-black text-zinc-100">
+            اتاق فرماندهی در انتظار چرخه فعال
+          </h3>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            جهت مشاهده نقشه‌های تاکتیکی، ماتریس فونداسیون و رکوردهای دیسیپلین، ابتدا یک چرخه نبرد تعریف کنید.
+          </p>
+          <button
+            onClick={() => onNavigateTab('archives')}
+            className="bg-amber-500 hover:bg-amber-400 text-black font-black text-xs px-5 py-2.5 rounded-xl transition cursor-pointer active:scale-95 shadow-md shadow-amber-500/20 inline-flex items-center gap-1.5"
+          >
+            <Plus className="w-4 h-4" />
+            <span>تعریف چرخه نبرد در بایگانی</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // All-time highest streak and score records calculation
   const allTimeMaxStreak = Math.max(
@@ -86,9 +113,9 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
   }> = [
     { 
       id: 'overview', 
-      label: 'خلاصه اجرایی و رکوردها', 
-      shortLabel: 'دید کلی و رکوردها', 
-      icon: LayoutDashboard, 
+      label: 'دید کلی و رکوردها', 
+      shortLabel: 'دید کلی', 
+      icon: Gauge, 
       activeColor: 'text-amber-400' 
     },
     { 
@@ -101,9 +128,9 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
     },
     { 
       id: 'analytics', 
-      label: 'ماتریس ارکان و آسیب‌پذیری', 
-      shortLabel: 'ارکان و تحلیل', 
-      icon: Layers, 
+      label: 'ارکان و آسیب‌پذیری', 
+      shortLabel: 'تحلیل ارکان', 
+      icon: BarChart3, 
       hasAlert: hasVulnerabilities || hasUnresolvedDebt, 
       activeColor: 'text-emerald-400' 
     },

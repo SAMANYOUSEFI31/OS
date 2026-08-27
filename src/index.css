@@ -22,17 +22,11 @@ body {
 /* iOS Retina SVG & Icon crisp rendering fixes */
 svg {
   shape-rendering: geometricPrecision;
-  transform: translateZ(0);
-  backface-visibility: hidden;
 }
 
 .crisp-blur {
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
 }
 
 .font-mono {

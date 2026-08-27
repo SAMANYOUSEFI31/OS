@@ -36,9 +36,9 @@ import {
 
 interface ArchivesViewProps {
   cycles: Cycle[];
-  currentCycle: Cycle;
+  currentCycle?: Cycle | null;
   logs: DailyLog[];
-  metrics: CycleMetrics;
+  metrics?: CycleMetrics | null;
   onSelectCycle?: (cycle: Cycle) => void;
   onUpdateCycle: (updated: Cycle) => void;
   onDeleteCycle?: (cycleId: string) => void;
@@ -75,6 +75,139 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
   const [newTheme, setNewTheme] = useState('');
   const [modalOverlapError, setModalOverlapError] = useState<string | null>(null);
   const [archiveNotice, setArchiveNotice] = useState<string | null>(null);
+
+  const handleOpenNewCycleModal = () => {
+    soundFX.playCheck();
+    setNewTitle(`چرخه نبرد ۹۰ روزه (دوره ${toPersianDigits(cycles.length + 1)})`);
+    setNewStartDate(logicalToday);
+    setNewTheme('');
+    setModalOverlapError(null);
+    setShowNewCycleModal(true);
+  };
+
+  const handleCreateCycleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newStartDate) return;
+
+    const proposedStart = newStartDate;
+    const proposedEnd = addDaysToDate(proposedStart, 89);
+
+    const overlappingCycle = cycles.find(c => {
+      const cStart = c.startDate;
+      const cEnd = c.endDate || addDaysToDate(c.startDate, 89);
+      return proposedStart <= cEnd && proposedEnd >= cStart;
+    });
+
+    if (overlappingCycle) {
+      soundFX.playWarning();
+      setModalOverlapError(
+        `تداخل تقویمی: بازه زمانی این چرخه (${formatPersianDate(proposedStart)} تا ${formatPersianDate(proposedEnd)}) با چرخه «${overlappingCycle.title}» (${formatPersianDate(overlappingCycle.startDate)} تا ${formatPersianDate(overlappingCycle.endDate || addDaysToDate(overlappingCycle.startDate, 89))}) تداخل دارد.`
+      );
+      return;
+    }
+
+    onCreateNewCycle(newTitle.trim(), proposedStart, newTheme.trim());
+    setShowNewCycleModal(false);
+    setModalOverlapError(null);
+  };
+
+  // Guard against No Active Cycle / Empty State
+  if (!currentCycle || !metrics) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-200" dir="rtl">
+        <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-8 sm:p-12 text-center space-y-5 max-w-xl mx-auto shadow-2xl">
+          <div className="w-16 h-16 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400 shadow-inner">
+            <Archive className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg sm:text-xl font-black text-zinc-100">
+              هیچ چرخه نبردی در سیستم تعریف نشده است
+            </h2>
+            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
+              جهت ورود به کارزار، ردیابی ۹۰ روزه ارکان دیسیپلین و صدور احکام دادگاه بوشیدو، نخستین چرخه نبرد خود را آغاز کنید.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleOpenNewCycleModal}
+            className="bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black font-black text-sm px-6 py-3 rounded-2xl inline-flex items-center justify-center gap-2 mx-auto shadow-lg shadow-amber-500/25 transition cursor-pointer active:scale-95 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>تعریف چرخه نبرد ۹۰ روزه</span>
+          </button>
+        </div>
+
+        {/* New Cycle Modal when empty */}
+        {showNewCycleModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-zinc-900 border border-zinc-700 rounded-3xl w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+              <h3 className="font-bold text-base sm:text-lg text-zinc-100 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-zinc-300" />
+                <span>تعریف چرخه ۹۰ روزه جدید</span>
+              </h3>
+
+              {modalOverlapError && (
+                <div className="bg-red-500/10 border border-red-500/30 text-red-300 rounded-xl p-3 text-xs font-medium flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{modalOverlapError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleCreateCycleSubmit} className="space-y-3.5">
+                <div>
+                  <label className="text-xs text-zinc-300 block mb-1">عنوان چرخه:</label>
+                  <input
+                    type="text"
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    required
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-300 block mb-1">تاریخ شروع (YYYY-MM-DD):</label>
+                  <input
+                    type="date"
+                    value={newStartDate}
+                    onChange={e => setNewStartDate(e.target.value)}
+                    required
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-600 transition"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs text-zinc-300 block mb-1">میثاق و تم اصلی چرخه:</label>
+                  <textarea
+                    value={newTheme}
+                    onChange={e => setNewTheme(e.target.value)}
+                    rows={2}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition resize-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCycleModal(false)}
+                    className="bg-zinc-800 hover:bg-zinc-700 hover:border-zinc-600 border border-zinc-700 text-zinc-300 px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer active:scale-[0.98]"
+                  >
+                    انصراف
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black px-5 py-2 rounded-xl text-xs font-black shadow-md shadow-amber-500/20 transition cursor-pointer active:scale-[0.98]"
+                  >
+                    آغاز چرخه نبرد
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const verdict = currentCycle.verdict;
 
@@ -135,12 +268,6 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
 
   const handleDeleteCurrentCycle = () => {
     if (!onDeleteCycle) return;
-    if (cycles.length <= 1) {
-      soundFX.playWarning();
-      setArchiveNotice('امکان حذف تنها چرخه فعال در سیستم وجود ندارد.');
-      setTimeout(() => setArchiveNotice(null), 5000);
-      return;
-    }
     setShowDeleteConfirmModal(true);
   };
 
@@ -341,40 +468,6 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  const handleOpenNewCycleModal = () => {
-    setNewTitle(`چرخه ${toPersianDigits(cycles.length + 1)} — ارتقای تمرکز عمیق و کارایی`);
-    setNewStartDate(logicalToday);
-    setNewTheme('۱۵۰ ساعت کار عمیق و دیسیپلین پایدار');
-    setModalOverlapError(null);
-    setShowNewCycleModal(true);
-  };
-
-  const handleCreateCycleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newTitle.trim() || !newStartDate.trim()) return;
-
-    // Proactive Overlap Validation Check
-    const proposedStart = newStartDate.trim();
-    const proposedEnd = addDaysToDate(proposedStart, 89);
-
-    const overlappingCycle = cycles.find(c => {
-      const existingEnd = c.endDate || addDaysToDate(c.startDate, 89);
-      return !(proposedEnd < c.startDate || proposedStart > existingEnd);
-    });
-
-    if (overlappingCycle) {
-      soundFX.playWarning();
-      setModalOverlapError(
-        `تداخل تقویمی: بازه زمانی این چرخه (${formatPersianDate(proposedStart)} تا ${formatPersianDate(proposedEnd)}) با چرخه «${overlappingCycle.title}» (${formatPersianDate(overlappingCycle.startDate)} تا ${formatPersianDate(overlappingCycle.endDate || addDaysToDate(overlappingCycle.startDate, 89))}) تداخل دارد.`
-      );
-      return;
-    }
-
-    onCreateNewCycle(newTitle.trim(), proposedStart, newTheme.trim());
-    setShowNewCycleModal(false);
-    setModalOverlapError(null);
-  };
-
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200" dir="rtl">
       
@@ -426,11 +519,11 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
             <button
               type="button"
               onClick={handleOpenNewCycleModal}
-              className="bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-800 text-zinc-100 text-xs font-bold px-3 py-2 rounded-xl border border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap"
+              className="bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-800 text-zinc-100 text-xs font-bold px-3 py-2 rounded-xl border border-zinc-700 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-xs"
+              title="تعریف چرخه ۹۰ روزه جدید"
             >
-              <Plus className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-              <span className="hidden xs:inline">تعریف چرخه</span>
-              <span className="xs:hidden">جدید</span>
+              <Plus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>تعریف چرخه جدید</span>
             </button>
           </div>
         </div>

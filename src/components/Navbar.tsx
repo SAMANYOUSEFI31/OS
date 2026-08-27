@@ -95,11 +95,15 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const cycleTitleDisplay = currentCycle 
+    ? (currentCycle.title.split('—')[0] || currentCycle.title)
+    : 'تعریف چرخه نبرد';
+
   return (
     <>
-      {/* Top Hub Bar Header with PWA Notch Safe-Area */}
+      {/* Top Hub Bar Header with PWA Safe-Area */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b]/95 border-b border-zinc-800/90 crisp-blur transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
+        className="sticky top-0 z-40 bg-[#09090b]/98 border-b border-zinc-800 crisp-blur transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
         dir="rtl"
       >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
@@ -135,9 +139,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => setIsCycleDropdownOpen(!isCycleDropdownOpen)}
                   className="h-8 sm:h-9 bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1.5 transition cursor-pointer max-w-[120px] xs:max-w-[150px] sm:max-w-[210px] shrink-0"
                 >
-                  <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                  <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${currentCycle ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                   <span className="font-bold truncate text-[11px] sm:text-xs">
-                    {currentCycle.title.split('—')[0] || currentCycle.title}
+                    {cycleTitleDisplay}
                   </span>
                   <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />
                 </button>
@@ -154,27 +158,46 @@ export const Navbar: React.FC<NavbarProps> = ({
                         <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>
                       </div>
                       <div className="max-h-60 overflow-y-auto py-1">
-                        {cycles.map(c => (
-                          <button
-                            key={c.id}
-                            onClick={() => {
-                              onSelectCycle(c);
-                              setIsCycleDropdownOpen(false);
-                            }}
-                            className={`w-full text-right px-3 py-2.5 text-xs hover:bg-zinc-800 transition flex items-center justify-between cursor-pointer ${
-                              c.id === currentCycle.id ? 'text-emerald-400 font-bold bg-zinc-800/80' : 'text-zinc-300'
-                            }`}
-                          >
-                            <span className="truncate pl-2">{c.title}</span>
-                            {c.isArchived ? (
-                              <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
-                                بایگانی
-                              </span>
-                            ) : c.id === currentCycle.id ? (
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-                            ) : null}
-                          </button>
-                        ))}
+                        {cycles.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-zinc-400">
+                            چرخه‌ای تعریف نشده است.
+                          </div>
+                        ) : (
+                          cycles.map(c => (
+                            <button
+                              key={c.id}
+                              onClick={() => {
+                                onSelectCycle(c);
+                                setIsCycleDropdownOpen(false);
+                              }}
+                              className={`w-full text-right px-3 py-2.5 text-xs hover:bg-zinc-800 transition flex items-center justify-between cursor-pointer ${
+                                currentCycle && c.id === currentCycle.id ? 'text-emerald-400 font-bold bg-zinc-800/80' : 'text-zinc-300'
+                              }`}
+                            >
+                              <span className="truncate pl-2">{c.title}</span>
+                              {c.isArchived ? (
+                                <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
+                                  بایگانی
+                                </span>
+                              ) : currentCycle && c.id === currentCycle.id ? (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                              ) : null}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                      
+                      <div className="p-2 border-t border-zinc-800">
+                        <button
+                          onClick={() => {
+                            setIsCycleDropdownOpen(false);
+                            onSelectTab('archives');
+                          }}
+                          className="w-full py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                          <span>مدیریت و بایگانی چرخه‌ها</span>
+                        </button>
                       </div>
                     </div>
                   </>
@@ -325,7 +348,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {isActive && (
                     <motion.div
                       layoutId="activeTabIndicator"
-                      layout="position"
                       className="absolute inset-0 rounded-xl border pointer-events-none"
                       style={{
                         backgroundColor: themeConfig.bgSubtle,
