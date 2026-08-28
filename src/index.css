@@ -1,11 +1,18 @@
 @import "tailwindcss";
 
-/* اجبار مرورگر سامسونگ و تمام مرورگرها به عدم دستکاری رنگ‌های دارک‌مود */
-:root, html, body, #root {
-  color-scheme: dark !important;
-  supported-color-schemes: dark !important;
-  background-color: #09090b !important;
-  color: #f4f4f5 !important;
+/* قفل کردن تغییر رنگ اجباری مرورگر سامسونگ */
+html {
+  forced-color-adjust: none;
+  background-color: #09090b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root, html, body, #root {
+    color-scheme: dark !important;
+    supported-color-schemes: dark !important;
+    background-color: #09090b !important;
+    color: #f4f4f5 !important;
+  }
 }
 
 :root {
@@ -18,7 +25,6 @@
 html {
   color-scheme: dark;
   scroll-behavior: smooth;
-  background-color: #09090b;
 }
 
 body {
@@ -35,7 +41,7 @@ body {
   min-height: -webkit-fill-available;
 }
 
-/* رندر دقیق آیکون‌های SVG */
+/* iOS Retina SVG & Icon crisp rendering fixes */
 svg {
   shape-rendering: geometricPrecision;
 }
@@ -54,7 +60,7 @@ svg {
   font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-/* Obsidian Design Tokens */
+/* Obsidian Design Tokens with AMOLED & APCA Luminance Calibration */
 .bg-card-obsidian {
   background-color: #121215;
 }
@@ -118,7 +124,7 @@ svg {
   background: #3f3f46;
 }
 
-/* کلاس‌های کمکی برای Safe Area دینامیک */
+/* Standalone PWA Safe-Area Support (iOS Notch & Android Navigation Bars) */
 .pt-safe {
   padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
 }
