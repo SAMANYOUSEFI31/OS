@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
@@ -13,10 +13,7 @@ import {
   AlertTriangle, 
   ChevronDown,
   Crown,
-  User,
-  LogIn,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -48,7 +45,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
 
-  // Exactly 4 primary user tabs as strictly required
   const mainTabs = [
     { id: 'battlefield', label: 'میدان نبرد', icon: Swords },
     { id: 'dashboard', label: 'اتاق فرماندهی', icon: LayoutDashboard },
@@ -72,18 +68,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Top Hub Bar Header with Dynamic Island & PWA Safe-Area Support */}
+      {/* Top Hub Bar Header with Dynamic Safe Area Protection */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b] border-b border-zinc-800 transition-all pt-[max(0.5rem,env(safe-area-inset-top,0px))]" 
+        className="sticky top-0 z-40 bg-[#09090b] border-b border-zinc-800/80 transition-all select-none" 
         dir="rtl"
       >
+        {/* Safe Area Spacer: این بخش منطقه نوار وضعیت هر گوشی را کاملاً مشکی نگه می‌دارد */}
+        <div className="w-full bg-[#09090b] h-[env(safe-area-inset-top,0px)] shrink-0" />
+
+        {/* محتوای اصلی نوار بالا که دقیقاً زیر محدوده Safe Area شروع می‌شود */}
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4 py-1">
             
-            {/* Brand & Cycle Switcher */}
+            {/* لوگو و انتخاب‌گر چرخه */}
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 shrink">
               <div className="flex items-center gap-2 shrink-0">
-                {/* Brand Logo (Pure Static Mark) */}
                 <div
                   className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-black font-black shadow-lg text-sm sm:text-base shrink-0 select-none pointer-events-none"
                   style={{ backgroundColor: themeConfig.colorHex }}
@@ -100,7 +99,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
 
-              {/* Cycle Switcher Dropdown */}
+              {/* منوی کشویی انتخاب چرخه */}
               <div className="relative min-w-0">
                 <button 
                   type="button"
@@ -173,7 +172,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* Desktop Navigation Tabs (Exactly 4 Tabs with Spring layoutId indicator) */}
+            {/* تب‌های دسکتاپ */}
             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 h-10">
               {mainTabs.map(tab => {
                 const Icon = tab.icon;
@@ -218,9 +217,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               })}
             </nav>
 
-            {/* User Tier, Auth & Streak Controls */}
+            {/* نشان‌های اطلاعاتی و کادرهای رنگی */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* Debt Alert Badge */}
+              {/* نشان هشدار بدهی */}
               {metrics.unresolvedDebtCount > 0 && (
                 <button 
                   type="button"
@@ -240,7 +239,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              {/* Pure Streak Flame (Always visible and responsive with permanent Fiery Rose token) */}
+              {/* نشان روزهای زنجیره (آیکون شعله روزها) */}
               <div 
                 className="h-8 sm:h-9 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 sm:px-2.5 rounded-xl inline-flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shrink-0"
                 title="تعداد روزهای زنجیره خالص متوالی بدون شکست"
@@ -249,7 +248,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="whitespace-nowrap font-mono">{toPersianDigits(metrics.pureStreak)} روز</span>
               </div>
 
-              {/* VIP Status Badge (If active VIP) */}
+              {/* نشان حساب ویژه‌ VIP */}
               {userProfile.isVip && (
                 <div 
                   onClick={onOpenPaymentModal}
@@ -261,7 +260,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* Admin Panel Quick Access Button if Admin */}
+              {/* دکمه پنل مدیریت */}
               {userProfile.isAdmin && (
                 <button
                   type="button"
@@ -281,7 +280,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar (4 clean tabs with spring layoutId active indicator) */}
+      {/* نوار ناوبری پایین در موبایل */}
       <nav 
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none"
         dir="rtl"
