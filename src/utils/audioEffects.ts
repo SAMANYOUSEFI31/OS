@@ -173,6 +173,41 @@ class SoundFX {
       osc.stop(this.ctx.currentTime + 0.25);
     } catch {}
   }
+
+  // 6. Decisive Katana Slash / Sharp Cut (for reset, cycle deletion, or critical action)
+  playSlash() {
+    try {
+      if (!this.init() || !this.ctx) return;
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.12); // 120ms
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const output = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        output[i] = Math.random() * 2 - 1;
+      }
+
+      const whiteNoise = this.ctx.createBufferSource();
+      whiteNoise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1800, this.ctx.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(320, this.ctx.currentTime + 0.11);
+      filter.Q.setValueAtTime(3, this.ctx.currentTime);
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.09, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.12);
+
+      whiteNoise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      whiteNoise.start();
+      whiteNoise.stop(this.ctx.currentTime + 0.13);
+    } catch {}
+  }
 }
 
 export const soundFX = new SoundFX();

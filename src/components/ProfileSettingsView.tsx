@@ -254,12 +254,12 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
       )}
 
       {/* Level 1 Hero Section Header with Stealth Tap Listener on App Identity */}
-      <div className="bg-[#121215]/80 border border-zinc-800 rounded-3xl p-4 sm:p-5 backdrop-blur-xl shadow-xl">
+      <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-3xl p-4 sm:p-5 shadow-xl">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div 
               onClick={handleStealthSecretTap}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shadow-md shrink-0 cursor-pointer active:scale-95 transition"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shadow-md shrink-0 cursor-pointer active:scale-95 transition"
               title="سامانه تنظیمات بوشیدو"
             >
               <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-200" />
@@ -300,22 +300,16 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={activeSection}
-          initial={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? -20 : 20) : 0 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? 20 : -20) : 0 }}
-          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-          className="space-y-4"
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.15, ease: 'easeOut' }}
+          className="space-y-4 w-full max-w-full"
         >
           {/* Section 1: Account & VIP Identity */}
           {activeSection === 'account' && (
             <div className="space-y-4">
-              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl space-y-5">
-                {/* Subtle Background Glow */}
-                <div 
-                  className="absolute -top-12 -left-12 w-48 h-48 rounded-full blur-3xl opacity-15 pointer-events-none"
-                  style={{ backgroundColor: themeConfig.colorHex }}
-                />
-
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl space-y-5">
                 {/* User Identity Row */}
                 <div className="flex items-start justify-between gap-3 relative z-10">
                   <div className="flex items-center gap-3.5 min-w-0">
@@ -341,7 +335,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                 </div>
 
                 {/* VIP & Access Status Details */}
-                <div className="bg-[#09090b]/70 border border-zinc-800/80 rounded-2xl p-4 space-y-3 relative z-10">
+                <div className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 space-y-3 relative z-10">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-400">سطح دسترسی:</span>
                     <span className="font-bold text-zinc-200">
@@ -367,14 +361,14 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   )}
 
                   {!userProfile.isVip && (
-                    <p className="text-[11px] text-zinc-400 leading-relaxed bg-[#121215]/50 p-3 rounded-xl border border-zinc-800/50 text-right">
+                    <p className="text-[11px] text-zinc-400 leading-relaxed bg-[#121215] p-3 rounded-xl border border-zinc-800 text-right">
                       با فعال‌سازی اشتراک VIP، امکان ایجاد چرخه‌های نامحدود و دسترسی به تحلیل‌های سنتسی فعال می‌شود.
                     </p>
                   )}
                 </div>
 
                 {/* Account Actions & Subscriptions */}
-                <div className="pt-4 border-t border-zinc-800/80 space-y-2.5 relative z-10">
+                <div className="pt-4 border-t border-zinc-800 space-y-2.5 relative z-10">
                   {/* VIP CTA */}
                   {userProfile.isVip ? (
                     <button
@@ -445,9 +439,9 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           {/* Section 2: Discipline & Nightly Cutoff Hour */}
           {activeSection === 'discipline' && (
             <div className="space-y-4">
-              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
                     <Moon className="w-5 h-5 text-amber-400" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -460,7 +454,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   </div>
                 </div>
 
-                <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/60 p-3.5 rounded-2xl border border-zinc-800/80 text-right">
+                <p className="text-xs text-zinc-300 leading-relaxed bg-[#18181b] p-3.5 rounded-2xl border border-zinc-800 text-right">
                   اگر شب‌ها تا دیروقت بیدار هستید، ثبت عادات تا قبل از این ساعت کماکان برای روز گذشته محاسبه می‌شود تا روز تقویمی شما قبل از خواب از دست نرود.
                 </p>
 
@@ -475,7 +469,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                         className={`px-3.5 py-3 rounded-xl text-xs font-bold flex items-center justify-between border transition cursor-pointer active:scale-[0.98] ${
                           isSelected
                             ? 'bg-zinc-800 border-emerald-500/50 text-white shadow-md'
-                            : 'bg-[#09090b]/50 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                            : 'bg-[#18181b] border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
                         }`}
                       >
                         <span className="whitespace-nowrap">{item.label}</span>
@@ -491,9 +485,9 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           {/* Section 3: Data Vault & Safe Backup */}
           {activeSection === 'vault' && (
             <div className="space-y-4">
-              <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
                     <Database className="w-5 h-5 text-amber-400" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -516,7 +510,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                       onExportData();
                       showNotice('فایل پشتیبان داده‌های بوشیدو ذخیره شد.');
                     }}
-                    className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm"
+                    className="bg-[#18181b] hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm"
                   >
                     <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
                       <Download className="w-5 h-5" />
@@ -530,7 +524,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   </button>
 
                   {/* Import JSON Card */}
-                  <label className="bg-[#09090b]/70 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm">
+                  <label className="bg-[#18181b] hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm">
                     <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
                       <Upload className="w-5 h-5" />
                     </div>

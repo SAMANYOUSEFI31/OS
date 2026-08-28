@@ -7,6 +7,12 @@
   --accent-border: rgba(225, 29, 72, 0.4);
 }
 
+html, body, #root {
+  max-width: 100vw;
+  width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: "ss01" on, "tnum" on;
@@ -38,12 +44,17 @@ svg {
   font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
+/* Obsidian Design Tokens with AMOLED & APCA Luminance Calibration */
 .bg-card-obsidian {
-  background-color: #131215;
+  background-color: #121215;
 }
 
 .bg-inner-obsidian {
-  background-color: #0c0b0e;
+  background-color: #18181b;
+}
+
+.bg-elevated-obsidian {
+  background-color: #16161a;
 }
 
 .card-hover-ruby {

@@ -601,21 +601,21 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
           ) : null}
 
           {/* 3. Daily Status & Score Header Card (Ergonomic, Balanced & Harmonious Layout) */}
-          <div className="bg-[#121215]/90 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 relative overflow-hidden backdrop-blur-md shadow-lg">
+          <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 relative overflow-hidden shadow-lg">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
-              <div className="space-y-2.5 flex-1">
+              <div className="space-y-2.5 flex-1 min-w-0">
                 <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                   {/* Status Pill */}
                   <span className={`px-2.5 py-1 rounded-xl text-[11px] sm:text-xs font-bold border inline-flex items-center gap-1.5 shrink-0 ${
                     computed.statusType === 'standard'
-                      ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300'
+                      ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-300'
                       : computed.statusType === 'personal_frozen'
-                      ? 'bg-blue-950/70 border-blue-500/40 text-blue-300'
+                      ? 'bg-blue-950/90 border-blue-500/50 text-blue-300'
                       : computed.statusType === 'burned_resolved'
-                      ? 'bg-zinc-800/80 border-zinc-700 text-zinc-300'
+                      ? 'bg-zinc-800 border-zinc-700 text-zinc-300'
                       : (isToday 
-                          ? 'bg-zinc-800/80 border-zinc-700 text-zinc-300' 
-                          : 'bg-red-950/70 border-red-500/50 text-red-300')
+                          ? 'bg-zinc-800 border-zinc-700 text-zinc-300' 
+                          : 'bg-red-950/90 border-red-500/60 text-red-300')
                   }`}>
                     {computed.statusType === 'standard' && <CheckCircle2 className="w-3.5 h-3.5" />}
                     {computed.statusType === 'personal_frozen' && <Snowflake className="w-3.5 h-3.5" />}
@@ -632,19 +632,19 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                   </span>
 
                   {/* Habit Count Badge */}
-                  <span className="text-[11px] sm:text-xs text-zinc-300 bg-[#09090b]/80 px-2.5 py-1 rounded-xl border border-zinc-800 font-medium shrink-0">
+                  <span className="text-[11px] sm:text-xs text-zinc-300 bg-[#18181b] px-2.5 py-1 rounded-xl border border-zinc-800 font-medium shrink-0">
                     {toPersianDigits(computed.habitsCount)} از {toPersianDigits(5)} پایه
                   </span>
 
                   {/* Streak Impact Badge */}
                   <span className={`text-[11px] sm:text-xs px-2.5 py-1 rounded-xl border inline-flex items-center gap-1.5 font-medium shrink-0 ${
                     computed.isStandard
-                      ? 'bg-rose-500/10 border-rose-500/25 text-rose-300'
+                      ? 'bg-rose-500/15 border-rose-500/30 text-rose-300'
                       : computed.statusType === 'personal_frozen'
-                      ? 'bg-blue-500/10 border-blue-500/25 text-blue-300'
+                      ? 'bg-blue-500/15 border-blue-500/30 text-blue-300'
                       : isToday
-                      ? 'bg-[#09090b]/80 border-zinc-800 text-zinc-400'
-                      : 'bg-red-500/10 border-red-500/30 text-red-300'
+                      ? 'bg-[#18181b] border-zinc-800 text-zinc-400'
+                      : 'bg-red-500/15 border-red-500/30 text-red-300'
                   }`}>
                     <Flame className={`w-3.5 h-3.5 ${
                       computed.isStandard ? 'text-rose-400 fill-current' : 'text-zinc-500'
@@ -667,12 +667,12 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
               </div>
 
               {/* Score & Gauge Box (Centered, Symmetrical & Dignified Proportions with Golden Ratio micro-focusing) */}
-              <div className={`border rounded-2xl p-4 sm:p-5 text-center w-full max-w-[260px] mx-auto md:mx-0 md:w-[230px] md:max-w-none shrink-0 transition-all flex flex-col items-center justify-center gap-2.5 ${
+              <div className={`border rounded-2xl p-3.5 sm:p-5 text-center w-full max-w-[260px] mx-auto md:mx-0 md:w-[230px] md:max-w-none shrink-0 transition-all flex flex-col items-center justify-center gap-2.5 ${
                 computed.score === 10
-                  ? 'bg-amber-950/30 border-amber-500/60 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/40'
+                  ? 'bg-amber-950/40 border-amber-500/60 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/40'
                   : computed.isStandard
-                  ? 'bg-emerald-950/30 border-emerald-500/60 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-500/40'
-                  : 'bg-[#09090b]/80 border-zinc-800'
+                  ? 'bg-emerald-950/40 border-emerald-500/60 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-500/40'
+                  : 'bg-[#18181b] border-zinc-800'
               }`}>
                 {/* Score Header Label */}
                 <div className="text-[11px] sm:text-xs text-zinc-400 font-medium flex items-center justify-center gap-1.5">
@@ -687,7 +687,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                     ? 'text-amber-300' 
                     : computed.isStandard 
                     ? 'text-emerald-400' 
-                    : 'text-zinc-200'
+                    : 'text-zinc-100'
                 }`}>
                   <span className="leading-none">{toPersianDigits(computed.score)}</span>
                   <span className="text-xs font-semibold text-zinc-400">از {toPersianDigits(10)}</span>
@@ -706,14 +706,14 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                       <span>روز استاندارد</span>
                     </div>
                   ) : (
-                    <div className="text-[11px] text-zinc-400 font-medium bg-zinc-900/60 px-3 py-1 rounded-xl border border-zinc-800/80">
+                    <div className="text-[11px] text-zinc-300 font-medium bg-zinc-900 px-3 py-1 rounded-xl border border-zinc-800">
                       در انتظار ۵ پایه
                     </div>
                   )}
                 </div>
 
                 {/* Precision 10-Segment Discipline Gauge */}
-                <div className="w-full pt-2 border-t border-zinc-800/80">
+                <div className="w-full pt-2 border-t border-zinc-800">
                   <div className="flex items-center gap-1 w-full justify-center">
                     {Array.from({ length: 10 }).map((_, idx) => {
                       const segmentIndex = idx + 1;
@@ -730,7 +730,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                                 : computed.statusType === 'personal_frozen'
                                 ? 'bg-blue-400'
                                 : 'bg-zinc-300'
-                              : 'bg-zinc-800/90'
+                              : 'bg-zinc-800'
                           }`}
                           title={`قطعه ${toPersianDigits(segmentIndex)} از ۱۰`}
                         />
@@ -749,7 +749,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                 <Swords className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>۵ رکن تعهد فونداسیون</span>
               </h3>
-              <span className="text-[11px] sm:text-xs text-zinc-400 font-mono whitespace-nowrap bg-[#121215]/80 px-2 py-0.5 rounded-lg border border-zinc-800">
+              <span className="text-[11px] sm:text-xs text-zinc-300 font-mono whitespace-nowrap bg-[#18181b] px-2 py-0.5 rounded-lg border border-zinc-800">
                 شرط روز استاندارد (۸ از ۱۰)
               </span>
             </div>
@@ -766,7 +766,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                     className={`p-3 sm:p-3.5 rounded-2xl border text-right transition-all flex items-center justify-between gap-3 group cursor-pointer active:scale-[0.98] ${
                       isChecked
                         ? 'bg-[#121215] border-emerald-500/50 text-zinc-100 shadow-md shadow-emerald-950/20'
-                        : 'bg-[#121215]/60 border-zinc-800 text-zinc-300 hover:bg-[#121215] hover:border-zinc-700'
+                        : 'bg-[#121215] border-zinc-800 text-zinc-300 hover:border-zinc-700'
                     } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -790,7 +790,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                     <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
                       isChecked
                         ? 'bg-emerald-500 border-emerald-400 text-black shadow-md shadow-emerald-500/30 scale-105'
-                        : 'border-zinc-700 bg-[#09090b]/60 text-transparent group-hover:border-zinc-600'
+                        : 'border-zinc-700 bg-[#18181b] text-transparent group-hover:border-zinc-600'
                     }`}>
                       <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     </div>
@@ -807,7 +807,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                 <Rocket className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>ماموریت شتاب‌دهنده روز</span>
               </h4>
-              <span className="text-[11px] sm:text-xs text-amber-400/90 font-mono whitespace-nowrap bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+              <span className="text-[11px] sm:text-xs text-amber-400 font-mono whitespace-nowrap bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
                 کمال تعهد (۱۰ از ۱۰)
               </span>
             </div>
@@ -819,7 +819,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
               className={`w-full p-3 sm:p-3.5 rounded-2xl border text-right transition-all flex items-center justify-between gap-3 group cursor-pointer active:scale-[0.98] ${
                 activeLog?.specialMission
                   ? 'bg-gradient-to-r from-amber-950/40 via-[#121215] to-[#121215] border-amber-500/50 shadow-md shadow-amber-950/20'
-                  : 'bg-[#121215]/50 border-zinc-800 text-zinc-300 hover:bg-[#121215] hover:border-zinc-700'
+                  : 'bg-[#121215] border-zinc-800 text-zinc-300 hover:border-zinc-700'
               } ${isLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -850,7 +850,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
               <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-xl border flex items-center justify-center transition-all shrink-0 ${
                 activeLog?.specialMission
                   ? 'bg-amber-500 border-amber-400 text-black shadow-md shadow-amber-500/30 scale-105'
-                  : 'border-zinc-700 bg-[#09090b]/60 text-transparent group-hover:border-zinc-600'
+                  : 'border-zinc-700 bg-[#18181b] text-transparent group-hover:border-zinc-600'
               }`}>
                 <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>

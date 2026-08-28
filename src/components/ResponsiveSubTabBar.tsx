@@ -37,10 +37,10 @@ export function ResponsiveSubTabBar<T extends string = string>({
   return (
     <div
       data-no-swipe="true"
-      className={`w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl flex items-center shadow-lg select-none relative ${className}`}
+      className={`w-full max-w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl flex items-center shadow-lg select-none relative ${className}`}
     >
       <div 
-        className="w-full grid gap-1 sm:gap-1.5"
+        className="w-full grid gap-1 sm:gap-1.5 min-w-0"
         style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
       >
         {tabs.map(tab => {
@@ -52,7 +52,7 @@ export function ResponsiveSubTabBar<T extends string = string>({
               key={tab.id}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`w-full min-h-[44px] py-2 sm:py-2.5 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-200 cursor-pointer flex flex-row items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 select-none active:scale-[0.98] ${
+              className={`w-full min-h-[44px] h-11 sm:h-12 py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-150 cursor-pointer flex flex-row items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 select-none active:scale-[0.98] ${
                 isActive
                   ? 'text-white font-black'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -62,34 +62,34 @@ export function ResponsiveSubTabBar<T extends string = string>({
                 <motion.div
                   layoutId={layoutId}
                   layout="position"
-                  className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10 pointer-events-none"
-                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
+                  className="absolute inset-0 rounded-xl bg-zinc-800 border border-zinc-700 shadow-sm -z-10 pointer-events-none"
+                  transition={{ type: 'spring', stiffness: 500, damping: 38 }}
                 />
               )}
 
               {Icon && (
                 <Icon
-                  className={`w-4 h-4 shrink-0 transition-colors duration-200 ${
+                  className={`w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0 transition-colors duration-150 ${
                     isActive ? (tab.activeColor || 'text-amber-400') : 'text-zinc-400'
                   }`}
                 />
               )}
 
-              {/* Text label: Long on md+, Short on small screens if available */}
-              <span className="transition-colors duration-200 hidden sm:inline truncate">
+              {/* Text label: Long on sm+, Short on micro screens if available */}
+              <span className="transition-colors duration-150 hidden sm:inline whitespace-nowrap">
                 {tab.label}
               </span>
-              <span className="transition-colors duration-200 sm:hidden truncate">
+              <span className="transition-colors duration-150 sm:hidden whitespace-nowrap">
                 {tab.shortLabel || tab.label}
               </span>
 
               {/* Optional badge */}
               {tab.badge && (
                 <span
-                  className={`hidden md:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded-md border transition-colors duration-200 shrink-0 ${
+                  className={`hidden md:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded-md border transition-colors duration-150 shrink-0 ${
                     isActive
-                      ? 'bg-[#09090b] text-zinc-300 border-zinc-700'
-                      : 'bg-[#09090b]/60 text-zinc-500 border-zinc-800'
+                      ? 'bg-[#18181b] text-zinc-200 border-zinc-700'
+                      : 'bg-[#18181b] text-zinc-400 border-zinc-800'
                   }`}
                 >
                   {tab.badge}
