@@ -469,7 +469,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
     .sort((a, b) => b.date.localeCompare(a.date));
 
   return (
-    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 touch-pan-y" dir="rtl">
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" dir="rtl">
       
       {/* 1. Top Section: Bushido Court & Verdict with Progressive Disclosure */}
       <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-xl relative overflow-hidden space-y-3.5 sm:space-y-5">

@@ -365,7 +365,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
   return (
     <div 
-      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y" 
+      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
       dir="rtl"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}

@@ -69,12 +69,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [isConfirmResetOpen, setIsConfirmResetOpen] = useState(false);
 
-  // Secret passcode trigger for stealthy Admin activation without showing public buttons
-  const [stealthInput, setStealthInput] = useState('');
-  const [isStealthPromptOpen, setIsStealthPromptOpen] = useState(false);
-  const stealthClickCountRef = useRef(0);
-  const stealthTimerRef = useRef<NodeJS.Timeout | null>(null);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const themeConfig = BUSHIDO_CRIMSON_THEME;
@@ -91,12 +85,12 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     }
   };
 
-  // Touch swipe gesture handlers for switching sections effortlessly
+  // Touch swipe gesture handlers for switching sections effortlessly across entire view
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest('textarea, input, select, button, [data-no-swipe], [contenteditable="true"]')) {
+    if (target.closest('textarea, input, select, [data-no-swipe], [contenteditable="true"]')) {
       touchStartRef.current = null;
       return;
     }
@@ -169,51 +163,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     }
   };
 
-  // Stealth admin check: 5 rapid clicks on the security seal or entering dedicated passcode
-  const handleStealthSecretTap = () => {
-    stealthClickCountRef.current += 1;
-    if (stealthTimerRef.current) clearTimeout(stealthTimerRef.current);
-
-    if (stealthClickCountRef.current >= 5) {
-      stealthClickCountRef.current = 0;
-      setIsStealthPromptOpen(true);
-      return;
-    }
-
-    stealthTimerRef.current = setTimeout(() => {
-      stealthClickCountRef.current = 0;
-    }, 1800);
-  };
-
-  const handleStealthCodeSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = stealthInput.trim().toLowerCase();
-    
-    // Dedicated secret admin codes & bypass phone numbers
-    const validAdminCodes = ['admin', 'bushido_admin', '09120000000', '778899', 'sensei_root'];
-    
-    if (validAdminCodes.includes(cleanCode)) {
-      soundFX.playCheck();
-      setIsStealthPromptOpen(false);
-      setStealthInput('');
-      if (onQuickLogin) {
-        onQuickLogin('admin');
-      } else {
-        onUpdateUserProfile({
-          ...userProfile,
-          isAdmin: true,
-          isVip: true,
-          tier: 'vip_samurai'
-        });
-      }
-      onNavigateToAdmin();
-      showNotice('دسترسی مدیریت کل بوشیدو (Admin) فعال شد و به پنل هدایت شدید.');
-    } else {
-      soundFX.playSlash();
-      showNotice('شناسه یا کد امنیتی نامعتبر است.');
-    }
-  };
-
   const isLoggedIn = !!userProfile.id && userProfile.id !== 'guest' && !!(userProfile.phoneNumber || userProfile.email);
 
   // Calculate remaining VIP days
@@ -242,7 +191,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     <div 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6 touch-pan-y" 
+      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6 touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
       dir="rtl"
     >
       {/* Toast Notice */}
@@ -253,14 +202,12 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         </div>
       )}
 
-      {/* Level 1 Hero Section Header with Stealth Tap Listener on App Identity */}
+      {/* Level 1 Hero Section Header */}
       <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-3xl p-4 sm:p-5 shadow-xl">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div 
-              onClick={handleStealthSecretTap}
-              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shadow-md shrink-0 cursor-pointer active:scale-95 transition"
-              title="سامانه تنظیمات بوشیدو"
+              className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shadow-md shrink-0 select-none pointer-events-none"
             >
               <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-200" />
             </div>
@@ -624,61 +571,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   انصراف
                 </button>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Secret Stealth Authentication Modal (Unlocked via 5 Taps) */}
-      <AnimatePresence>
-        {isStealthPromptOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#121215] border border-zinc-700 rounded-3xl p-5 sm:p-6 max-w-sm w-full shadow-2xl space-y-4 text-right"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
-                  <KeyRound className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-black text-white">ورود امن و اختصاصی سامانه</h3>
-                  <p className="text-[11px] text-zinc-400 mt-0.5">شناسه امنیتی یا کد اختصاصی را وارد نمایید</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleStealthCodeSubmit} className="space-y-3">
-                <input
-                  type="text"
-                  value={stealthInput}
-                  onChange={e => setStealthInput(e.target.value)}
-                  placeholder="کد یا شناسه امنیتی..."
-                  autoFocus
-                  className="w-full bg-[#09090b] border border-zinc-700 focus:border-amber-400 text-white text-xs px-3.5 py-3 rounded-xl outline-none transition text-left font-mono"
-                  dir="ltr"
-                />
-
-                <div className="flex items-center gap-2 pt-1">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-black text-xs py-2.5 rounded-xl transition cursor-pointer active:scale-95"
-                  >
-                    تایید و ورود
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsStealthPromptOpen(false);
-                      setStealthInput('');
-                    }}
-                    className="px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer active:scale-95"
-                  >
-                    بستن
-                  </button>
-                </div>
-              </form>
             </motion.div>
           </div>
         )}

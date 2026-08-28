@@ -48,11 +48,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
 
-  const handleBrandClick = () => {
-    haptics.lightTap();
-    onSelectTab('battlefield');
-  };
-
   // Exactly 4 primary user tabs as strictly required
   const mainTabs = [
     { id: 'battlefield', label: 'میدان نبرد', icon: Swords },
@@ -88,17 +83,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Brand & Cycle Switcher */}
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 shrink">
               <div className="flex items-center gap-2 shrink-0">
-                {/* Brand Logo */}
-                <button
-                  type="button"
-                  onClick={handleBrandClick}
-                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-black font-black shadow-lg text-sm sm:text-base transition-transform active:scale-90 shrink-0 select-none cursor-pointer focus:outline-none"
+                {/* Brand Logo (Pure Static Mark) */}
+                <div
+                  className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-black font-black shadow-lg text-sm sm:text-base shrink-0 select-none pointer-events-none"
                   style={{ backgroundColor: themeConfig.colorHex }}
-                  title="سیستم دیسیپلین بوشیدو (بازگشت به میدان نبرد)"
                 >
                   武
-                </button>
-                <div className="hidden sm:block select-none">
+                </div>
+                <div className="hidden sm:block select-none pointer-events-none">
                   <span className="font-black text-xs sm:text-sm text-zinc-100 tracking-tight block truncate">
                     بوشیدو
                   </span>

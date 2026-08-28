@@ -187,26 +187,26 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
 
   return (
     <div 
-      className="space-y-6 sm:space-y-8 max-w-6xl mx-auto touch-pan-y" 
+      className="space-y-6 sm:space-y-8 max-w-6xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
       dir="rtl"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {/* 1. Cycle Hero Header (معماری مدرن هیرو وضعیت چرخه) */}
-      <div className="bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-5 sm:p-7 relative overflow-hidden backdrop-blur-xl shadow-2xl">
+      {/* 1. Cycle Hero Header (Obsidian Design System Alignment) */}
+      <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 relative overflow-hidden shadow-xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
           {/* Main Info Column */}
           <div className="lg:col-span-8 flex flex-col justify-between space-y-4">
             <div className="space-y-3">
               {/* Top Row: Temporal Timeline Cluster (روز چند از ۹۰ + بازه تاریخ) followed by Status */}
               <div className="flex items-center gap-2 flex-wrap">
-                <div className="bg-zinc-800/90 border border-zinc-700 rounded-xl px-3 py-1 text-xs font-mono inline-flex items-center gap-2 text-zinc-200 shadow-sm leading-none">
+                <div className="bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-1 text-xs font-mono inline-flex items-center gap-2 text-zinc-200 shadow-sm leading-none">
                   <span className="font-bold text-amber-400">روز {toPersianDigits(metrics.elapsedDays)} از ۹۰</span>
                   <span className="text-zinc-500 font-normal">|</span>
                   <span className="text-zinc-400">{formatPersianDate(currentCycle.startDate, { short: true })} تا {formatPersianDate(currentCycle.endDate, { short: true })}</span>
                 </div>
 
-                <span className="bg-[#09090b]/80 border border-rose-500/30 text-rose-200 px-3 py-1 rounded-xl text-xs font-bold font-mono inline-flex items-center leading-none">
+                <span className="bg-[#18181b] border border-rose-500/30 text-rose-200 px-3 py-1 rounded-xl text-xs font-bold font-mono inline-flex items-center leading-none">
                   <span>{metrics.statusLabelFa}</span>
                 </span>
               </div>
@@ -226,7 +226,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
                   <span>پیشروی تقویمی دوره</span>
                   <span>{toPersianDigits(elapsedPercentage)}٪ سپری شده</span>
                 </div>
-                <div className="w-full bg-zinc-950 h-2 rounded-full overflow-hidden border border-zinc-800">
+                <div className="w-full bg-[#18181b] h-2 rounded-full overflow-hidden border border-zinc-800">
                   <div 
                     className="bg-gradient-to-l from-rose-500 to-rose-700 h-full rounded-full transition-all duration-500" 
                     style={{ width: `${elapsedPercentage}%` }}
@@ -236,9 +236,9 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
             </div>
 
             {/* Coach Voice Banner */}
-            <div className="w-full bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4 flex items-start gap-3.5 mt-2 shadow-inner">
-              <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-300 shrink-0">
-                <Zap className="w-5 h-5 text-zinc-300" />
+            <div className="w-full bg-[#18181b] border border-zinc-800 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3.5 mt-2 shadow-sm">
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
+                <Zap className="w-5 h-5 text-amber-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] font-bold text-zinc-400 block">پیام رفتاری مربی دیسیپلین:</span>
@@ -249,8 +249,8 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
             </div>
           </div>
 
-          {/* Discipline Score Badge Column (Golden Ratio Balanced Proportion & Centering) */}
-          <div className="lg:col-span-4 bg-[#09090b]/90 border border-zinc-800 hover:border-zinc-700 rounded-3xl p-5 sm:p-6 text-center flex flex-col items-center justify-center space-y-2.5 shadow-inner transition-all w-full max-w-[320px] mx-auto lg:max-w-none lg:w-full">
+          {/* Discipline Score Badge Column (Harmonized with Battlefield Daily Score Box) */}
+          <div className="lg:col-span-4 bg-[#18181b] border border-zinc-800 rounded-2xl p-4 sm:p-5 text-center flex flex-col items-center justify-center space-y-2.5 shadow-sm transition-all w-full max-w-[280px] mx-auto lg:max-w-none lg:w-full">
             <span className="text-xs text-zinc-400 font-medium inline-flex items-center gap-1.5">
               <TrendingUp className="w-4 h-4 text-zinc-400" />
               <span>شاخص انضباط سیستم (Discipline Score)</span>

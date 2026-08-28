@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: dark;
   --accent-primary: #E11D48;
   --accent-glow: rgba(225, 29, 72, 0.3);
   --accent-subtle: rgba(225, 29, 72, 0.12);
@@ -8,10 +9,12 @@
 }
 
 html {
+  color-scheme: dark;
   scroll-behavior: smooth;
 }
 
 body {
+  color-scheme: dark;
   font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-feature-settings: "ss01" on, "tnum" on;
   background-color: #09090b;
