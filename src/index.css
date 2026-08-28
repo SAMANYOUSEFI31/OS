@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* اجبار مرورگر سامسونگ و تمام مرورگرها به عدم دستکاری رنگ‌های دارک‌مود */
 :root, html, body, #root {
   color-scheme: dark !important;
   supported-color-schemes: dark !important;
@@ -17,6 +18,7 @@
 html {
   color-scheme: dark;
   scroll-behavior: smooth;
+  background-color: #09090b;
 }
 
 body {
@@ -30,9 +32,10 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   min-height: 100vh;
+  min-height: -webkit-fill-available;
 }
 
-/* iOS Retina SVG & Icon crisp rendering fixes */
+/* رندر دقیق آیکون‌های SVG */
 svg {
   shape-rendering: geometricPrecision;
 }
@@ -51,7 +54,7 @@ svg {
   font-family: 'Plus Jakarta Sans', sans-serif;
 }
 
-/* Obsidian Design Tokens with AMOLED & APCA Luminance Calibration */
+/* Obsidian Design Tokens */
 .bg-card-obsidian {
   background-color: #121215;
 }
@@ -115,7 +118,7 @@ svg {
   background: #3f3f46;
 }
 
-/* Standalone PWA Safe-Area Support (iOS Notch & Android Navigation Bars) */
+/* کلاس‌های کمکی برای Safe Area دینامیک */
 .pt-safe {
   padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
 }
