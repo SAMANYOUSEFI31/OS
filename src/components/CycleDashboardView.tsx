@@ -5,6 +5,7 @@ import { addDaysToDate, getLogicalTodayDate, formatPersianDate } from '../utils/
 import { toPersianDigits } from '../utils/numberUtils';
 import { HabitFidelityMatrix } from './HabitFidelityMatrix';
 import { TacticalHeatmap90 } from './TacticalHeatmap90';
+import { ResponsiveSubTabBar, SubTabItem } from './ResponsiveSubTabBar';
 import { 
   ShieldCheck, 
   Flame, 
@@ -102,15 +103,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
   const hasVulnerabilities = metrics.vulnerableHabits.length > 0;
   const hasUnresolvedDebt = metrics.unresolvedDebtCount > 0;
 
-  const SUB_TABS: Array<{
-    id: DashboardSubTab;
-    label: string;
-    shortLabel: string;
-    icon: React.ComponentType<{ className?: string }>;
-    badge?: string;
-    hasAlert?: boolean;
-    activeColor: string;
-  }> = [
+  const SUB_TABS: SubTabItem<DashboardSubTab>[] = [
     { 
       id: 'overview', 
       label: 'دید کلی و رکوردها', 
@@ -283,52 +276,13 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
         </div>
       </div>
 
-      {/* 2. Progressive Disclosure Sub-Segmented Navigation Control with Spring layoutId Indicator (Non-scrolling 3-Column Responsive Segmented Bar) */}
-      <div 
-        data-no-swipe="true"
-        className="w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl grid grid-cols-3 gap-1 sm:gap-1.5 shadow-lg select-none relative"
-      >
-        {SUB_TABS.map(tab => {
-          const Icon = tab.icon;
-          const isActive = activeSubTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => switchSubTab(tab.id)}
-              className={`w-full py-2.5 sm:py-3 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-200 cursor-pointer inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 ${
-                isActive
-                  ? 'text-white font-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeCycleSubTabIndicator"
-                  layout="position"
-                  className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10 pointer-events-none"
-                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                />
-              )}
-              <Icon className={`w-4 h-4 shrink-0 transition-colors duration-200 ${isActive ? tab.activeColor : 'text-zinc-400'}`} />
-              <span className="transition-colors duration-200 hidden md:inline truncate">{tab.label}</span>
-              <span className="transition-colors duration-200 md:hidden truncate">{tab.shortLabel}</span>
-              {tab.badge && (
-                <span className={`hidden lg:inline-block text-[10px] font-mono px-1.5 py-0.5 rounded-md border transition-colors duration-200 shrink-0 ${
-                  isActive 
-                    ? 'bg-[#09090b] text-zinc-300 border-zinc-700' 
-                    : 'bg-[#09090b]/60 text-zinc-500 border-zinc-800'
-                }`}>
-                  {tab.badge}
-                </span>
-              )}
-              {tab.hasAlert && (
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-pulse shrink-0" />
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* 2. Progressive Disclosure Sub-Segmented Navigation Control with Spring layoutId Indicator */}
+      <ResponsiveSubTabBar<DashboardSubTab>
+        tabs={SUB_TABS}
+        activeTab={activeSubTab}
+        onSelectTab={switchSubTab}
+        layoutId="activeCycleSubTabIndicator"
+      />
 
       {/* 3. Dynamic Animated Content Area with Directional Slide Transitions */}
       <AnimatePresence mode="wait" initial={false}>

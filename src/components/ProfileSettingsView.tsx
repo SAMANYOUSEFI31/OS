@@ -5,6 +5,7 @@ import { toPersianDigits } from '../utils/numberUtils';
 import { formatPersianDate, daysBetween } from '../utils/dateUtils';
 import { BUSHIDO_CRIMSON_THEME } from '../utils/themeUtils';
 import { soundFX } from '../utils/audioEffects';
+import { ResponsiveSubTabBar, SubTabItem } from './ResponsiveSubTabBar';
 import { 
   User, 
   Crown, 
@@ -231,14 +232,10 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     { hour: 6, label: 'تا ۶:۰۰ صبح' }
   ];
 
-  const SECTIONS_CONFIG: Array<{
-    id: SettingsSection;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }> = [
-    { id: 'account', label: 'حساب و اشتراک', icon: User },
-    { id: 'discipline', label: 'ساعت کات‌آف', icon: Clock },
-    { id: 'vault', label: 'پایگاه داده و پشتیبان', icon: Database },
+  const SECTIONS_CONFIG: SubTabItem<SettingsSection>[] = [
+    { id: 'account', label: 'حساب و اشتراک', shortLabel: 'حساب و VIP', icon: User, activeColor: 'text-amber-400' },
+    { id: 'discipline', label: 'ساعت کات‌آف شبانه', shortLabel: 'کات‌آف شب', icon: Clock, activeColor: 'text-rose-400' },
+    { id: 'vault', label: 'پایگاه داده و پشتیبان', shortLabel: 'پشتیبان داده', icon: Database, activeColor: 'text-emerald-400' },
   ];
 
   return (
@@ -291,40 +288,13 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Progressive Disclosure: Segmented Categorization Bar */}
-      <div 
-        data-no-swipe="true"
-        className="w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl grid grid-cols-3 gap-1 sm:gap-1.5 shadow-lg select-none relative"
-      >
-        {SECTIONS_CONFIG.map(sec => {
-          const Icon = sec.icon;
-          const isActive = activeSection === sec.id;
-          return (
-            <button
-              key={sec.id}
-              type="button"
-              onClick={() => {
-                switchSection(sec.id);
-              }}
-              className={`w-full py-2.5 sm:py-3 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-200 cursor-pointer inline-flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 ${
-                isActive
-                  ? 'text-white font-black'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {isActive && (
-                <motion.div
-                  layoutId="activeSettingsSectionIndicator"
-                  className="absolute inset-0 rounded-xl bg-zinc-800/95 border border-zinc-700/80 shadow-sm -z-10 pointer-events-none"
-                  transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                />
-              )}
-              <Icon className={`w-4 h-4 shrink-0 transition-colors duration-200 ${isActive ? 'text-amber-400' : 'text-zinc-400'}`} />
-              <span className="transition-colors duration-200 truncate">{sec.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Progressive Disclosure: Segmented Categorization Bar (Standard Ergonomic Component) */}
+      <ResponsiveSubTabBar<SettingsSection>
+        tabs={SECTIONS_CONFIG}
+        activeTab={activeSection}
+        onSelectTab={switchSection}
+        layoutId="activeSettingsSectionIndicator"
+      />
 
       {/* Animated Swipeable Sections Container */}
       <AnimatePresence mode="wait" initial={false}>

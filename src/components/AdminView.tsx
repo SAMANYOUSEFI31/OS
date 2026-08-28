@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { toPersianDigits, formatPersianToman } from '../utils/numberUtils';
 import { soundFX } from '../utils/audioEffects';
+import { ResponsiveSubTabBar, SubTabItem } from './ResponsiveSubTabBar';
 import { 
   ShieldCheck, 
   Users, 
@@ -63,6 +64,31 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const [newUserTier, setNewUserTier] = useState<'free' | 'vip_samurai'>('free');
   const [newUserIsAdmin, setNewUserIsAdmin] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  type AdminSubTab = 'users' | 'subscriptions' | 'gateway';
+  const ADMIN_SUB_TABS: SubTabItem<AdminSubTab>[] = [
+    {
+      id: 'users',
+      label: `مدیریت کاربران (${toPersianDigits(users.length)})`,
+      shortLabel: `کاربران (${toPersianDigits(users.length)})`,
+      icon: Users,
+      activeColor: 'text-amber-400'
+    },
+    {
+      id: 'subscriptions',
+      label: `تراکنش‌ها (${toPersianDigits(subscriptions.length)})`,
+      shortLabel: `تراکنش (${toPersianDigits(subscriptions.length)})`,
+      icon: CreditCard,
+      activeColor: 'text-emerald-400'
+    },
+    {
+      id: 'gateway',
+      label: 'تنظیمات زرین‌پال و دیتابیس',
+      shortLabel: 'درگاه و سرور',
+      icon: Zap,
+      activeColor: 'text-rose-400'
+    }
+  ];
 
   const getHeaders = () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -322,44 +348,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-2 border-b border-zinc-800 pb-2">
-        <button
-          onClick={() => setActiveSubTab('users')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'users'
-              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>مدیریت کاربران ({toPersianDigits(users.length)})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('subscriptions')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'subscriptions'
-              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-          }`}
-        >
-          <CreditCard className="w-4 h-4" />
-          <span>تراکنش‌ها ({toPersianDigits(subscriptions.length)})</span>
-        </button>
-
-        <button
-          onClick={() => setActiveSubTab('gateway')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-            activeSubTab === 'gateway'
-              ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-          }`}
-        >
-          <Zap className="w-4 h-4" />
-          <span>تنظیمات زرین‌پال و دیتابیس</span>
-        </button>
-      </div>
+      {/* Navigation Sub-Tabs (Responsive Ergonomic Bar) */}
+      <ResponsiveSubTabBar<AdminSubTab>
+        tabs={ADMIN_SUB_TABS}
+        activeTab={activeSubTab}
+        onSelectTab={setActiveSubTab}
+        layoutId="activeAdminSubTabIndicator"
+      />
 
       {/* SUB-TAB 1: USERS MANAGEMENT */}
       {activeSubTab === 'users' && (
