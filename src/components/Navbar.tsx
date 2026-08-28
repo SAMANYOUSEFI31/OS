@@ -72,9 +72,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Top Hub Bar Header with PWA Safe-Area */}
+      {/* Top Hub Bar Header with Dynamic Island & PWA Safe-Area Support */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b]/98 border-b border-zinc-800 crisp-blur transition-all pt-[max(0.5rem,calc(env(safe-area-inset-top,0px)+0.25rem))]" 
+        className="sticky top-0 z-40 bg-[#09090b] border-b border-zinc-800 transition-all pt-[max(0.5rem,env(safe-area-inset-top,0px))]" 
         dir="rtl"
       >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
