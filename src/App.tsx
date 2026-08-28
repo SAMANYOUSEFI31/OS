@@ -595,7 +595,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 overflow-x-hidden min-w-0">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0">
         <AnimatePresence mode="wait">
             {activeTab === 'battlefield' && (
               <motion.div

@@ -242,7 +242,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     <div 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6" 
+      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6 touch-pan-y" 
       dir="rtl"
     >
       {/* Toast Notice */}
