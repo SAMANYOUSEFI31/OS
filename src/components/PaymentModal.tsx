@@ -418,10 +418,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     value={cardNumber}
                     onChange={e => setCardNumber(e.target.value)}
                     dir="ltr"
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2 sm:py-2.5 text-sm font-mono text-zinc-800 tracking-wider text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                    className="w-full min-h-[44px] bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-sm font-mono text-zinc-800 tracking-wider text-center focus:outline-none focus:border-amber-500 shadow-xs"
                     required
                   />
-                  <CreditCard className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5 sm:top-3" />
+                  <CreditCard className="w-4 h-4 text-zinc-400 absolute left-3 top-3.5" />
                 </div>
               </div>
 
@@ -437,7 +437,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onChange={e => setCvv2(e.target.value)}
                     maxLength={4}
                     dir="ltr"
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                    className="w-full min-h-[44px] bg-white border border-zinc-300 rounded-xl px-3 py-2.5 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
                     required
                   />
                 </div>
@@ -453,7 +453,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       onChange={e => setExpMonth(e.target.value)}
                       maxLength={2}
                       placeholder="ماه"
-                      className="w-1/2 bg-white border border-zinc-300 rounded-xl px-2 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                      className="w-1/2 min-h-[44px] bg-white border border-zinc-300 rounded-xl px-2 py-2.5 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
                       required
                     />
                     <span className="text-zinc-400 font-bold">/</span>
@@ -463,7 +463,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                       onChange={e => setExpYear(e.target.value)}
                       maxLength={2}
                       placeholder="سال"
-                      className="w-1/2 bg-white border border-zinc-300 rounded-xl px-2 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                      className="w-1/2 min-h-[44px] bg-white border border-zinc-300 rounded-xl px-2 py-2.5 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
                       required
                     />
                   </div>
@@ -482,14 +482,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     onChange={e => setOtpCode(e.target.value)}
                     placeholder="کد پیامک‌شده"
                     dir="ltr"
-                    className="flex-1 bg-white border border-zinc-300 rounded-xl px-3 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                    className="flex-1 min-h-[44px] bg-white border border-zinc-300 rounded-xl px-3 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500 shadow-xs"
                     required
                   />
                   <button
                     type="button"
                     onClick={handleSendOtp}
                     disabled={otpSent}
-                    className="bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-300 text-white disabled:text-zinc-500 text-xs font-bold px-3 sm:px-4 py-2 rounded-xl transition shrink-0 cursor-pointer"
+                    className="min-h-[44px] bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-300 text-white disabled:text-zinc-500 text-xs font-bold px-3 sm:px-4 py-2 rounded-xl transition shrink-0 cursor-pointer active:scale-[0.98] whitespace-nowrap inline-flex items-center justify-center"
                   >
                     {otpSent ? `ارسال مجدد (${otpTimer})` : 'دریافت رمز پویا'}
                   </button>
@@ -510,11 +510,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     value={captchaInput}
                     onChange={e => setCaptchaInput(e.target.value)}
                     dir="ltr"
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3 py-1.5 text-sm font-mono text-center focus:outline-none focus:border-amber-500"
+                    className="w-full min-h-[44px] bg-white border border-zinc-300 rounded-xl px-3 py-2 text-sm font-mono text-center focus:outline-none focus:border-amber-500"
                     required
                   />
                 </div>
-                <div className="w-24 h-10 bg-zinc-200 border border-zinc-300 rounded-xl flex items-center justify-center font-mono font-bold text-base text-zinc-700 tracking-widest select-none mt-5">
+                <div className="w-24 min-h-[44px] h-11 bg-zinc-200 border border-zinc-300 rounded-xl flex items-center justify-center font-mono font-bold text-base text-zinc-700 tracking-widest select-none mt-5">
                   {generatedCaptcha}
                 </div>
               </div>
@@ -531,7 +531,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('plans')}
-                  className="bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-xs px-4 sm:px-5 py-2.5 rounded-xl transition cursor-pointer"
+                  className="min-h-[44px] bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-xs px-4 sm:px-5 py-2.5 rounded-xl transition cursor-pointer active:scale-[0.98] whitespace-nowrap inline-flex items-center justify-center"
                 >
                   انصراف و بازگشت
                 </button>
@@ -539,17 +539,17 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-5 sm:px-7 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md shadow-emerald-600/30 cursor-pointer"
+                  className="min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-5 sm:px-7 py-2.5 rounded-xl flex items-center justify-center gap-2 transition shadow-md shadow-emerald-600/30 cursor-pointer active:scale-[0.98] whitespace-nowrap"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      در حال پردازش...
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      <span>در حال پردازش...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      تایید و پرداخت ({selectedPlan.formattedPrice} تومان)
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      <span>تایید و پرداخت ({selectedPlan.formattedPrice} تومان)</span>
                     </>
                   )}
                 </button>

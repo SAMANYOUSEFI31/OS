@@ -74,40 +74,40 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
 
         {/* Legend Badges */}
         <div className="flex items-center gap-2 text-[11px] text-zinc-400 flex-wrap">
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-amber-500/30 text-amber-300 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-xs"></span>
-            <span>کمال ۱۰/۱۰ (با ماموریت ویژه)</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-amber-500/30 text-amber-300 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-xs shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">کمال ۱۰/۱۰ (با ماموریت ویژه)</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-emerald-500/30 text-emerald-300 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs"></span>
-            <span>استاندارد ۸/۱۰ (۵ پایه)</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-emerald-500/30 text-emerald-300 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-xs shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">استاندارد ۸/۱۰ (۵ پایه)</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-700 text-zinc-200 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 ring-1 ring-amber-400"></span>
-            <span>امروز در حال نبرد</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-700 text-zinc-200 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-zinc-400 ring-1 ring-amber-400 shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">امروز در حال نبرد</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-            <span>فریز اضطراری</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">فریز اضطراری</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
-            <span>بدهی باز</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">بدهی باز</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-600"></span>
-            <span>کالبدشکافی شده</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-600 shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">کالبدشکافی شده</span>
           </div>
-          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none">
-            <span className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700"></span>
-            <span>آینده</span>
+          <div className="inline-flex items-center gap-1.5 bg-[#09090b] px-2.5 py-1 rounded-xl border border-zinc-800 select-none pointer-events-none whitespace-nowrap">
+            <span className="w-2.5 h-2.5 rounded-full bg-zinc-800 border border-zinc-700 shrink-0"></span>
+            <span className="whitespace-nowrap leading-none">آینده</span>
           </div>
         </div>
       </div>
 
       {/* Unified 90-Cell Tactical Grid */}
-      <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 touch-pan-y">
-        <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-15 lg:grid-cols-18 gap-2">
+      <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-5 touch-pan-y">
+        <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-15 lg:grid-cols-18 gap-1.5 sm:gap-2">
           {allDays.map(cell => {
             let bgClass = 'bg-zinc-900/60 text-zinc-500 border-zinc-800/90 hover:border-zinc-700 hover:text-zinc-300';
             let title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): بدون داده`;
@@ -162,9 +162,9 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
                 type="button"
                 onClick={() => onSelectDate(cell.dateStr)}
                 title={title}
-                className={`h-10 rounded-xl border text-xs font-mono flex flex-col items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer touch-manipulation select-none ${bgClass}`}
+                className={`min-h-[44px] h-11 sm:h-12 rounded-xl border text-xs sm:text-sm font-mono flex flex-col items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer touch-manipulation select-none ${bgClass}`}
               >
-                <span>{toPersianDigits(cell.dayNumber)}</span>
+                <span className="leading-none">{toPersianDigits(cell.dayNumber)}</span>
               </button>
             );
           })}
