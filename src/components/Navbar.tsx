@@ -47,34 +47,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenDebtAutopsy
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
-  const [adminUnlockToast, setAdminUnlockToast] = useState(false);
-
-  // Secret 5-click counter on brand logo to reveal admin panel / auth
-  const clickCountRef = useRef(0);
-  const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleBrandClick = () => {
-    clickCountRef.current += 1;
     haptics.lightTap();
-    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
-
-    if (clickCountRef.current >= 5) {
-      clickCountRef.current = 0;
-      haptics.masterySuccess();
-      try {
-        const currentSecret = localStorage.getItem('bushido_secret_dev_mode') === 'true';
-        localStorage.setItem('bushido_secret_dev_mode', (!currentSecret).toString());
-      } catch (e) {}
-
-      setAdminUnlockToast(true);
-      setTimeout(() => setAdminUnlockToast(false), 3500);
-      onOpenAuthModal();
-      return;
-    }
-
-    clickTimerRef.current = setTimeout(() => {
-      clickCountRef.current = 0;
-    }, 2000);
+    onSelectTab('battlefield');
   };
 
   // Exactly 4 primary user tabs as strictly required
@@ -112,13 +88,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Brand & Cycle Switcher */}
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 shrink">
               <div className="flex items-center gap-2 shrink-0">
-                {/* 5-click easter egg on brand logo */}
+                {/* Brand Logo */}
                 <button
                   type="button"
                   onClick={handleBrandClick}
                   className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl flex items-center justify-center text-black font-black shadow-lg text-sm sm:text-base transition-transform active:scale-90 shrink-0 select-none cursor-pointer focus:outline-none"
                   style={{ backgroundColor: themeConfig.colorHex }}
-                  title="سیستم دیسیپلین بوشیدو (۵ بار کلیک برای دسترسی فرمانده)"
+                  title="سیستم دیسیپلین بوشیدو (بازگشت به میدان نبرد)"
                 >
                   武
                 </button>
@@ -311,14 +287,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Secret admin unlock banner notification */}
-        {adminUnlockToast && (
-          <div className="bg-amber-950/90 border-t border-b border-amber-500/40 px-4 py-2 text-center text-xs text-amber-200 flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
-            <Sparkles className="w-4 h-4 text-amber-400 animate-spin" />
-            <span>حالت دسترسی مخفی فرمانده ارشد فعال شد.</span>
-          </div>
-        )}
       </header>
 
       {/* Mobile Bottom Navigation Bar (4 clean tabs with spring layoutId active indicator) */}

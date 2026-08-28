@@ -218,30 +218,34 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col items-start sm:items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] overscroll-contain overflow-y-auto max-h-[100dvh]" 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 pt-[max(0.75rem,calc(env(safe-area-inset-top,0px)+0.5rem))] pb-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))] overflow-y-auto" 
       dir="rtl"
     >
+      <div 
+        className="fixed inset-0" 
+        onClick={onClose}
+      />
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="bg-zinc-900 border border-amber-500/40 rounded-2xl sm:rounded-3xl w-full max-w-2xl text-zinc-100 shadow-2xl overflow-hidden flex flex-col max-h-[min(92dvh,calc(100dvh-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-1.5rem))] my-auto"
+        className="relative z-10 bg-zinc-900 border border-amber-500/40 rounded-2xl sm:rounded-3xl w-full max-w-2xl text-zinc-100 shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] my-auto"
       >
         {/* STEP 1: PLANS SELECTION */}
         {step === 'plans' && (
           <div className="flex flex-col flex-1 overflow-hidden min-h-0">
             {/* Header */}
-            <div className="p-5 sm:p-6 bg-gradient-to-r from-amber-950/60 via-zinc-900 to-zinc-950 border-b border-zinc-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
+            <div className="p-4 sm:p-6 bg-gradient-to-r from-amber-950/60 via-zinc-900 to-zinc-950 border-b border-zinc-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 sm:gap-3">
                 <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center shadow-lg shrink-0">
                   <Crown className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg md:text-xl font-black text-zinc-100 flex items-center gap-2">
+                  <h2 className="text-sm sm:text-lg md:text-xl font-black text-zinc-100 flex items-center gap-2">
                     ارتقا به اشتراک «سامورایی ویژه VIP»
                   </h2>
-                  <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                  <p className="text-[10px] sm:text-xs text-zinc-400 mt-0.5">
                     فعال‌سازی تمامی ابزارهای مهندسی دیسیپلین، آنالیز و صدور گواهینامه
                   </p>
                 </div>
@@ -255,16 +259,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </button>
             </div>
 
-            <div className="p-5 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
+            <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
               {/* Plan Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 sm:gap-4">
                 {PLANS.map(plan => {
                   const isSelected = selectedPlan.id === plan.id;
                   return (
                     <div
                       key={plan.id}
                       onClick={() => setSelectedPlan(plan)}
-                      className={`rounded-2xl p-5 border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
+                      className={`rounded-2xl p-4 sm:p-5 border-2 transition-all cursor-pointer relative flex flex-col justify-between ${
                         isSelected
                           ? 'bg-amber-950/30 border-amber-500 shadow-xl shadow-amber-500/10'
                           : 'bg-[#09090b]/70 border-zinc-800 hover:border-zinc-700'
@@ -276,9 +280,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         </div>
                       )}
 
-                      <div className="space-y-3">
+                      <div className="space-y-2.5 sm:space-y-3">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-sm text-zinc-100">{plan.title}</h3>
+                          <h3 className="font-bold text-xs sm:text-sm text-zinc-100">{plan.title}</h3>
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                             isSelected ? 'border-amber-400 bg-amber-400 text-black' : 'border-zinc-600'
                           }`}>
@@ -287,15 +291,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         </div>
 
                         <div className="flex items-baseline gap-1">
-                          <span className="text-2xl sm:text-3xl font-black font-mono text-amber-400">
+                          <span className="text-xl sm:text-3xl font-black font-mono text-amber-400">
                             {plan.formattedPrice}
                           </span>
                           <span className="text-xs text-zinc-400">تومان</span>
                         </div>
 
-                        <ul className="space-y-2 pt-2 border-t border-zinc-800/80 text-xs text-zinc-300">
+                        <ul className="space-y-1.5 sm:space-y-2 pt-2 border-t border-zinc-800/80 text-[11px] sm:text-xs text-zinc-300">
                           {plan.features.map((feat, i) => (
-                            <li key={i} className="flex items-start gap-2">
+                            <li key={i} className="flex items-start gap-1.5 sm:gap-2">
                               <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                               <span>{feat}</span>
                             </li>
@@ -308,13 +312,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
 
               {/* Secure Payment Note */}
-              <div className="bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between text-xs text-zinc-400">
+              <div className="bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-3 sm:p-4 flex items-center justify-between text-xs text-zinc-400">
                 <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-emerald-400" />
-                  <span>اتصال امن به درگاه رسمی پرداخت زرین‌پال / شاپرک</span>
+                  <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="text-[11px] sm:text-xs">اتصال امن به درگاه پرداخت شاپرک</span>
                 </div>
-                <span className="text-[11px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded">
-                  Zarinpal Mock Sandbox
+                <span className="text-[10px] sm:text-[11px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded shrink-0">
+                  شبیه‌ساز پرداخت
                 </span>
               </div>
 
@@ -326,11 +330,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               )}
 
               {/* Action Button */}
-              <div className="flex items-center justify-end gap-3 pt-2">
+              <div className="flex items-center justify-end gap-2.5 sm:gap-3 pt-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-5 py-2.5 rounded-xl text-zinc-400 hover:text-white text-xs font-semibold"
+                  className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-zinc-400 hover:text-white text-xs font-semibold"
                 >
                   انصراف
                 </button>
@@ -339,12 +343,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   type="button"
                   onClick={handleStartPayment}
                   disabled={isLoading}
-                  className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs sm:text-sm px-6 py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer"
+                  className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-xs sm:text-sm px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl flex items-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      در حال اتصال به زرین‌پال...
+                      در حال اتصال به درگاه...
                     </>
                   ) : (
                     <>
@@ -360,9 +364,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* STEP 2: REALISTIC MOCK IRANIAN PAYMENT GATEWAY (ZARINPAL / SHAPARAK) */}
         {step === 'gateway' && (
-          <div className="bg-[#f8fafc] text-zinc-900 min-h-[480px]">
+          <div className="bg-[#f8fafc] text-zinc-900 flex flex-col flex-1 overflow-hidden min-h-0">
             {/* Gateway Navbar */}
-            <div className="bg-[#1e293b] text-white px-6 py-3.5 flex items-center justify-between border-b border-zinc-700">
+            <div className="bg-[#1e293b] text-white px-4 sm:px-6 py-3 flex items-center justify-between border-b border-zinc-700 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 bg-amber-400 rounded-lg flex items-center justify-center text-zinc-900 font-bold text-xs">
                   ZP
@@ -373,31 +377,36 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex items-center gap-1 text-emerald-400 font-mono">
+              <div className="flex items-center gap-2 sm:gap-3 text-xs">
+                <div className="flex items-center gap-1 text-emerald-400 font-mono text-[10px] sm:text-xs">
                   <Lock className="w-3.5 h-3.5" />
                   <span>SSL 256-bit</span>
                 </div>
-                <div className="bg-zinc-800 px-2 py-1 rounded text-zinc-300 text-[11px] font-mono">
-                  زمان باقی‌مانده: ۹:۴۲
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setStep('plans')}
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
+                  title="بستن درگاه"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
             {/* Merchant Info Bar */}
-            <div className="bg-amber-50 border-b border-amber-200 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900">
+            <div className="bg-amber-50 border-b border-amber-200 px-4 sm:px-6 py-2 flex items-center justify-between text-xs text-amber-900 shrink-0">
               <div>
                 <span className="font-semibold">پذیرنده: </span>
-                <span>سامانه دیسیپلین بوشیدو (Bushido OS)</span>
+                <span>سامانه دیسیپلین بوشیدو</span>
               </div>
               <div>
-                <span className="font-semibold">مبلغ قابل پرداخت: </span>
+                <span className="font-semibold">مبلغ: </span>
                 <span className="font-bold font-mono text-emerald-700 text-sm">{selectedPlan.formattedPrice} تومان</span>
               </div>
             </div>
 
             {/* Gateway Form */}
-            <form onSubmit={handleVerifyPayment} className="p-6 space-y-4">
+            <form onSubmit={handleVerifyPayment} className="p-4 sm:p-6 space-y-3.5 sm:space-y-4 overflow-y-auto flex-1 min-h-0">
               {/* Card Number */}
               <div>
                 <label className="block text-xs font-bold text-zinc-700 mb-1">
@@ -409,15 +418,15 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     value={cardNumber}
                     onChange={e => setCardNumber(e.target.value)}
                     dir="ltr"
-                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2.5 text-sm font-mono text-zinc-800 tracking-wider text-center focus:outline-none focus:border-amber-500 shadow-xs"
+                    className="w-full bg-white border border-zinc-300 rounded-xl px-3.5 py-2 sm:py-2.5 text-sm font-mono text-zinc-800 tracking-wider text-center focus:outline-none focus:border-amber-500 shadow-xs"
                     required
                   />
-                  <CreditCard className="w-4 h-4 text-zinc-400 absolute left-3 top-3" />
+                  <CreditCard className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5 sm:top-3" />
                 </div>
               </div>
 
               {/* CVV2 & Expiry */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
                 <div>
                   <label className="block text-xs font-bold text-zinc-700 mb-1">
                     کد شناسایی (CVV2):
@@ -480,7 +489,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                     type="button"
                     onClick={handleSendOtp}
                     disabled={otpSent}
-                    className="bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-300 text-white disabled:text-zinc-500 text-xs font-bold px-4 py-2 rounded-xl transition shrink-0 cursor-pointer"
+                    className="bg-zinc-800 hover:bg-zinc-700 disabled:bg-zinc-300 text-white disabled:text-zinc-500 text-xs font-bold px-3 sm:px-4 py-2 rounded-xl transition shrink-0 cursor-pointer"
                   >
                     {otpSent ? `ارسال مجدد (${otpTimer})` : 'دریافت رمز پویا'}
                   </button>
@@ -522,7 +531,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('plans')}
-                  className="bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer"
+                  className="bg-zinc-200 hover:bg-zinc-300 text-zinc-700 font-bold text-xs px-4 sm:px-5 py-2.5 rounded-xl transition cursor-pointer"
                 >
                   انصراف و بازگشت
                 </button>
@@ -530,12 +539,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-7 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md shadow-emerald-600/30 cursor-pointer"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm px-5 sm:px-7 py-2.5 rounded-xl flex items-center gap-2 transition shadow-md shadow-emerald-600/30 cursor-pointer"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      در حال پردازش تراکنش...
+                      در حال پردازش...
                     </>
                   ) : (
                     <>
@@ -551,16 +560,16 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
         {/* STEP 3: PAYMENT SUCCESS RECEIPT */}
         {step === 'success' && receiptData && (
-          <div className="p-8 text-center space-y-6 animate-in zoom-in-95 duration-200">
-            <div className="w-20 h-20 rounded-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-xl shadow-emerald-950">
-              <CheckCircle2 className="w-10 h-10" />
+          <div className="p-6 sm:p-8 text-center space-y-5 sm:space-y-6 animate-in zoom-in-95 duration-200 overflow-y-auto flex-1">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-xl shadow-emerald-950">
+              <CheckCircle2 className="w-8 h-8 sm:w-10 sm:h-10" />
             </div>
 
             <div className="space-y-2">
               <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full font-bold font-mono">
                 👑 سامورایی ویژه (VIP Samurai) فعال شد
               </span>
-              <h2 className="text-2xl font-black text-zinc-100">
+              <h2 className="text-xl sm:text-2xl font-black text-zinc-100">
                 پرداخت با موفقیت انجام شد!
               </h2>
               <p className="text-xs sm:text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
@@ -569,7 +578,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
 
             {/* Official Digital Receipt */}
-            <div className="bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-5 max-w-md mx-auto text-xs space-y-3 font-mono text-zinc-300">
+            <div className="bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4 sm:p-5 max-w-md mx-auto text-xs space-y-3 font-mono text-zinc-300">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                 <span className="text-zinc-400">شماره پیگیری تراکنش (RefID):</span>
                 <span className="text-amber-400 font-bold">{receiptData.refId}</span>

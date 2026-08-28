@@ -205,12 +205,15 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           tier: 'vip_samurai'
         });
       }
-      showNotice('دسترسی مدیریت کل بوشیدو (Admin) با موفقیت فعال شد.');
+      onNavigateToAdmin();
+      showNotice('دسترسی مدیریت کل بوشیدو (Admin) فعال شد و به پنل هدایت شدید.');
     } else {
       soundFX.playSlash();
       showNotice('شناسه یا کد امنیتی نامعتبر است.');
     }
   };
+
+  const isLoggedIn = !!userProfile.id && userProfile.id !== 'guest' && !!(userProfile.phoneNumber || userProfile.email);
 
   // Calculate remaining VIP days
   let vipDaysRemaining = 0;
@@ -424,7 +427,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   )}
 
                   {/* Auth Action */}
-                  {userProfile.id ? (
+                  {isLoggedIn ? (
                     <div className="space-y-2 pt-1">
                       {userProfile.isAdmin === true && (
                         <button
@@ -460,7 +463,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                         className="w-full bg-amber-500 hover:bg-amber-400 text-black text-xs font-black py-3 rounded-2xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-[0.98] whitespace-nowrap shadow-md shadow-amber-500/20"
                       >
                         <LogIn className="w-4 h-4" />
-                        <span>ورود یا عضویت</span>
+                        <span>ورود یا ایجاد حساب کاربری</span>
                       </button>
                     </div>
                   )}

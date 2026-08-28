@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem } from './types';
 import { createInitialSystemState, GUEST_USER_PROFILE, DEFAULT_ADMIN_USER_PROFILE } from './data/initialData';
-import { computeCycleMetrics } from './engine/bushidoCalculations';
+import { computeCycleMetrics, createEmptyCycleMetrics } from './engine/bushidoCalculations';
 import { getLogicalTodayDate, addDaysToDate } from './utils/dateUtils';
 import { applyAccentTheme } from './utils/themeUtils';
 import { 
@@ -194,15 +194,17 @@ export default function App() {
   }, [authToken]);
 
   const currentCycle = useMemo(() => {
-    return systemState.cycles.find(c => c.id === activeCycleId) || systemState.cycles[0];
+    return systemState.cycles.find(c => c.id === activeCycleId) || systemState.cycles[0] || null;
   }, [systemState.cycles, activeCycleId]);
 
   const logicalToday = getLogicalTodayDate();
 
+  const emptyMetrics = useMemo(() => createEmptyCycleMetrics(), []);
+
   const cycleMetrics = useMemo(() => {
-    if (!currentCycle) return null;
+    if (!currentCycle) return emptyMetrics;
     return computeCycleMetrics(currentCycle, systemState.logs, systemState.cycles, logicalToday);
-  }, [currentCycle, systemState.logs, systemState.cycles, logicalToday]);
+  }, [currentCycle, systemState.logs, systemState.cycles, logicalToday, emptyMetrics]);
 
   const handleUpdateLog = useCallback(async (updatedLog: DailyLog) => {
     // 1. Optimistic UI update
@@ -538,14 +540,6 @@ export default function App() {
     setIsAuthModalOpen(false);
     showAppToast('با موفقیت از حساب کاربری خارج شدید.');
   };
-
-  if (!currentCycle || !cycleMetrics) {
-    return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center text-zinc-400 font-bold text-sm">
-        در حال راه‌اندازی موتور دیسیپلین بوشیدو...
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col selection:bg-amber-500 selection:text-black pb-20 lg:pb-8">

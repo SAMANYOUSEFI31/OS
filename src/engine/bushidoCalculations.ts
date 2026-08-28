@@ -55,6 +55,43 @@ export const FOUNDATION_HABITS: HabitDef[] = [
   }
 ];
 
+export function createEmptyCycleMetrics(): CycleMetrics {
+  return {
+    status: 'active',
+    statusLabelFa: 'بدون چرخه فعال',
+    elapsedDays: 0,
+    remainingDays: 90,
+    totalCycleDays: 90,
+    logsCount: 0,
+    standardDaysCount: 0,
+    burnedDaysCount: 0,
+    unresolvedDebtCount: 0,
+    resolvedDebtCount: 0,
+    frozenDaysCount: 0,
+    inactiveDaysCount: 0,
+    incompleteDaysCount: 0,
+    totalScore: 0,
+    disciplinePercentage: 0,
+    completionPercentage: 0,
+    pureStreak: 0,
+    maxPureStreak: 0,
+    globalLiveStreak: 0,
+    allTimeMaxStreak: 0,
+    allTimeMaxScore: 0,
+    allTimeMaxStandardDays: 0,
+    currentRank: 'رونین (مبتدی)',
+    activeTheme: 'amber',
+    vulnerableHabits: [],
+    level: {
+      titleFa: 'رونین',
+      minPct: 0,
+      description: 'آغازگر مسیر دیسیپلین',
+      badgeColor: 'amber'
+    },
+    days: []
+  };
+}
+
 /**
  * Computes individual daily log properties strictly per Notion Formula 2.0 specs
  */

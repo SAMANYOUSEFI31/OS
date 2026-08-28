@@ -564,10 +564,11 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
               </button>
             )}
 
-            {onDeleteCycle && cycles.length > 1 && (
+            {onDeleteCycle && (
               <button
                 onClick={handleDeleteCurrentCycle}
                 className="bg-red-950/30 hover:bg-red-900/50 border border-red-500/30 text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer active:scale-[0.98] text-[11px] whitespace-nowrap"
+                title="حذف این چرخه"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>حذف</span>
@@ -976,7 +977,7 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
             <table className="w-full text-right text-xs">
               <thead className="bg-[#09090b] border-b border-zinc-800 text-zinc-400 font-semibold select-none">
                 <tr>
-                  <th className="p-3.5 whitespace-nowrap min-w-[110px] text-right">تاریخ روز</th>
+                  <th className="p-3.5 whitespace-nowrap min-w-[110px] text-center">تاریخ روز</th>
                   <th className="p-3.5 whitespace-nowrap min-w-[130px] text-center">۵ پایه تعهد</th>
                   <th className="p-3.5 whitespace-nowrap min-w-[90px] text-center">ماموریت ویژه</th>
                   <th className="p-3.5 whitespace-nowrap min-w-[80px] text-center">امتیاز</th>
@@ -1000,12 +1001,12 @@ export const ArchivesView: React.FC<ArchivesViewProps> = ({
 
                     return (
                       <tr key={l.id} className={`hover:bg-zinc-800/40 transition ${isToday ? 'bg-rose-500/5 hover:bg-rose-500/10' : ''}`}>
-                        <td className="p-3.5 font-mono whitespace-nowrap align-middle text-right">
+                        <td className="p-3.5 font-mono whitespace-nowrap align-middle text-center">
                           <button
                             onClick={() => onSelectDate(l.date)}
-                            className="hover:text-amber-400 font-bold flex items-center gap-1.5 cursor-pointer text-zinc-100"
+                            className="hover:text-amber-400 font-bold inline-flex items-center justify-center gap-1.5 cursor-pointer text-zinc-100 mx-auto"
                           >
-                            <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                            <Calendar className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
                             <span>{formatPersianDate(l.date, { short: true })}</span>
                             {isToday && (
                               <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.5 rounded font-sans">
