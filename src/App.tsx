@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, Suspense, lazy } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem } from './types';
 import { createInitialSystemState, GUEST_USER_PROFILE, DEFAULT_ADMIN_USER_PROFILE } from './data/initialData';
@@ -14,18 +14,15 @@ import {
 } from './utils/storageUtils';
 import { Navbar } from './components/Navbar';
 import { BattlefieldView } from './components/BattlefieldView';
+import { CycleDashboardView } from './components/CycleDashboardView';
+import { ArchivesView } from './components/ArchivesView';
+import { ProfileSettingsView } from './components/ProfileSettingsView';
+import { AdminView } from './components/AdminView';
 import { AutopsyModal } from './components/AutopsyModal';
 import { PaymentModal } from './components/PaymentModal';
 import { AuthModal } from './components/AuthModal';
-import { ViewLoadingSkeleton } from './components/ViewLoadingSkeleton';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import { RotateCcw, CheckCircle2, AlertTriangle, X, Eye, ShieldCheck } from 'lucide-react';
-
-// 2026 High Performance Code-Splitting / Lazy Loading for heavy views
-const CycleDashboardView = lazy(() => import('./components/CycleDashboardView').then(m => ({ default: m.CycleDashboardView })));
-const ArchivesView = lazy(() => import('./components/ArchivesView').then(m => ({ default: m.ArchivesView })));
-const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then(m => ({ default: m.ProfileSettingsView })));
-const AdminView = lazy(() => import('./components/AdminView').then(m => ({ default: m.AdminView })));
 
 export default function App() {
   const [authToken, setAuthToken] = useState<string | null>(() => {
@@ -599,8 +596,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-20 sm:pb-8">
-        <Suspense fallback={<ViewLoadingSkeleton />}>
-          <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait">
             {activeTab === 'battlefield' && (
               <motion.div
                 key="battlefield"
@@ -743,14 +739,13 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-        </Suspense>
       </main>
 
       {/* Autopsy Drawer/Modal */}
       {autopsyTargetLog && (
         <AutopsyModal
           log={autopsyTargetLog}
-          cycleTheme={currentCycle.targetTheme}
+          cycleTheme={currentCycle?.targetTheme ?? 'amber'}
           allUnresolvedLogs={systemState.logs.filter(l => {
             if (l.date >= logicalToday) return false;
             const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
