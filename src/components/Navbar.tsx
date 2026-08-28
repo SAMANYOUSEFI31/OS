@@ -68,19 +68,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Top Hub Bar Header with Dynamic Safe Area Protection */}
+      {/* Top Hub Bar Header with Dynamic Island & PWA Safe-Area Support */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b] border-b border-zinc-800/80 transition-all select-none" 
+        className="sticky top-0 z-40 bg-[#09090b] border-b border-zinc-800 transition-all pt-[env(safe-area-inset-top,0px)]" 
         dir="rtl"
       >
-        {/* Safe Area Spacer: این بخش منطقه نوار وضعیت هر گوشی را کاملاً مشکی نگه می‌دارد */}
-        <div className="w-full bg-[#09090b] h-[env(safe-area-inset-top,0px)] shrink-0" />
-
-        {/* محتوای اصلی نوار بالا که دقیقاً زیر محدوده Safe Area شروع می‌شود */}
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4 py-1">
+          <div className="flex items-center justify-between h-14 sm:h-16 gap-1.5 sm:gap-4">
             
-            {/* لوگو و انتخاب‌گر چرخه */}
+            {/* Brand & Cycle Switcher */}
             <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 shrink">
               <div className="flex items-center gap-2 shrink-0">
                 <div
@@ -99,7 +95,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               </div>
 
-              {/* منوی کشویی انتخاب چرخه */}
+              {/* Cycle Switcher Dropdown */}
               <div className="relative min-w-0">
                 <button 
                   type="button"
@@ -172,7 +168,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
 
-            {/* تب‌های دسکتاپ */}
+            {/* Desktop Navigation Tabs */}
             <nav className="hidden lg:flex items-center gap-1 xl:gap-2 h-10">
               {mainTabs.map(tab => {
                 const Icon = tab.icon;
@@ -217,9 +213,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               })}
             </nav>
 
-            {/* نشان‌های اطلاعاتی و کادرهای رنگی */}
+            {/* User Tier, Auth & Streak Controls */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-              {/* نشان هشدار بدهی */}
+              {/* Debt Alert Badge */}
               {metrics.unresolvedDebtCount > 0 && (
                 <button 
                   type="button"
@@ -239,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
 
-              {/* نشان روزهای زنجیره (آیکون شعله روزها) */}
+              {/* Pure Streak Flame */}
               <div 
                 className="h-8 sm:h-9 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 sm:px-2.5 rounded-xl inline-flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shrink-0"
                 title="تعداد روزهای زنجیره خالص متوالی بدون شکست"
@@ -248,7 +244,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="whitespace-nowrap font-mono">{toPersianDigits(metrics.pureStreak)} روز</span>
               </div>
 
-              {/* نشان حساب ویژه‌ VIP */}
+              {/* VIP Status Badge */}
               {userProfile.isVip && (
                 <div 
                   onClick={onOpenPaymentModal}
@@ -260,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
               )}
 
-              {/* دکمه پنل مدیریت */}
+              {/* Admin Panel Quick Access Button */}
               {userProfile.isAdmin && (
                 <button
                   type="button"
@@ -280,7 +276,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* نوار ناوبری پایین در موبایل */}
+      {/* Mobile Bottom Navigation Bar */}
       <nav 
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none"
         dir="rtl"
