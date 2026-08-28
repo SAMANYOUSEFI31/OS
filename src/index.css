@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
+/* جلوگیری از معکوس شدن رنگ‌ها در مرورگرهای سامسونگ و شیائومی */
+@media (prefers-color-scheme: dark) {
+  html, body {
+    force-dark-mode: none !important;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
 :root {
-  color-scheme: dark;
+  color-scheme: dark only;
   --accent-primary: #E11D48;
   --accent-glow: rgba(225, 29, 72, 0.3);
   --accent-subtle: rgba(225, 29, 72, 0.12);
@@ -9,7 +17,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: dark only;
   scroll-behavior: smooth;
 }
 
