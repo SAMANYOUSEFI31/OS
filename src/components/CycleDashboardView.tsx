@@ -233,7 +233,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
             {/* Coach Voice Banner */}
             <div className="w-full bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3.5 mt-2 shadow-sm">
               <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
-                <Compass className="w-5 h-5 text-amber-400/90" />
+                <Compass className="w-5 h-5 text-zinc-200" />
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] font-bold text-zinc-400 block">پیام رفتاری مربی دیسیپلین:</span>
@@ -398,7 +398,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800/90 border border-zinc-700/80 flex items-center justify-center text-zinc-200 shrink-0">
-                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <Trophy className="w-5 h-5 text-zinc-200" />
                   </div>
                   <div>
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">

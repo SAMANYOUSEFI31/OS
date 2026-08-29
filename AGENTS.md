@@ -42,3 +42,7 @@
    - User accent theme selection NEVER recolors the semantic Pure Streak flame.
 9. **Modal & Container Copy Contrast Rule**:
    - Multi-line body copy and explanatory descriptions must use neutral text (`text-zinc-300` / `text-slate-300`), NEVER saturated colored text. Saturated semantic colors are strictly reserved for icons, titles, metric badges, and status pills.
+10. **Section Header Icon Neutrality & Semantic Color Exclusivity**:
+   - Section headers (e.g. Coach Banner, Hall of Records master box, Settings groups, Guide sections) must strictly use neutral zinc icons (`text-zinc-200` or `text-zinc-300`). Saturated semantic colors (rose, emerald, amber, red, purple, blue) are strictly reserved for actual state indicators and metric cards (Discipline Holy Trinity), never for static container titles.
+11. **Direct Milestone State Feedback (No Redundant Toasts)**:
+   - Day milestones (8/10 Standard Day and 10/10 Mastery Day) are directly reflected in the Battlefield daily score badge and audio chime. Redundant floating toast banners are eliminated for a dignified, stoic user experience.
