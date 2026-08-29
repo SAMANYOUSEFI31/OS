@@ -57,6 +57,11 @@ export default function App() {
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  // UX Standard: Automatically reset scroll to top when switching main tabs
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [activeTab]);
+
   const showAppToast = useCallback((msg: string, type: ToastType = 'success', duration = 2500) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     setToasts(prev => [...prev.slice(-2), { id, message: msg, type, duration }]);
