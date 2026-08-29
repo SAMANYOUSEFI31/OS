@@ -103,14 +103,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     } catch (e) {}
   };
 
-  // Martial Honor Banner State (Standard Day or 10/10 Mastery Day)
-  const [martialHonorToast, setMartialHonorToast] = useState<{
-    type: 'standard' | 'mastery';
-    title: string;
-    subtitle: string;
-    score: number;
-  } | null>(null);
-
   // Find or construct the log for selected date
   let activeLog = logs.find(l => l.date === selectedDate);
   if (!activeLog) {
@@ -175,28 +167,11 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
         // 10/10 Mastery - Noble Bronze Harmonized Resonance
         soundFX.playMastery();
         haptics.masterySuccess();
-        setMartialHonorToast({
-          type: 'mastery',
-          title: 'کمال تعهد روز محقق شد (۱۰ از ۱۰)',
-          subtitle: '۵ رکن تعهد فونداسیون + ماموریت ویژه با پیروزی کامل ثبت گردید.',
-          score: 10
-        });
       } else {
         // 8/10 Standard Day - Emerald Vitality
         soundFX.playStandardDay();
         haptics.standardDaySuccess();
-        setMartialHonorToast({
-          type: 'standard',
-          title: 'روز استاندارد محقق شد',
-          subtitle: '۵ رکن فونداسیون بوشیدو با موفقیت تکمیل شد و ارزش روز تثبیت گردید.',
-          score: 8
-        });
       }
-
-      // Auto dismiss martial banner after 5 seconds
-      setTimeout(() => {
-        setMartialHonorToast(null);
-      }, 5000);
     } else {
       soundFX.playCheck();
       haptics.lightTap();
@@ -226,16 +201,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       // Reached 10/10 Mastery
       soundFX.playMastery();
       haptics.masterySuccess();
-      setMartialHonorToast({
-        type: 'mastery',
-        title: 'کمال تعهد روز محقق شد (۱۰ از ۱۰)',
-        subtitle: '۵ رکن فونداسیون + ماموریت ویژه با موفقیت کامل در پرونده ثبت شد.',
-        score: 10
-      });
-
-      setTimeout(() => {
-        setMartialHonorToast(null);
-      }, 5000);
     } else {
       soundFX.playCheck();
       haptics.lightTap();
@@ -436,55 +401,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="space-y-4 sm:space-y-6 w-full max-w-full"
           >
-          {/* Martial Honor Achievement Banner */}
-          {martialHonorToast && (
-            <div 
-              className={`rounded-2xl p-3.5 sm:p-4 border-2 shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-top-4 backdrop-blur-xl flex items-start sm:items-center justify-between gap-3 ${
-                martialHonorToast.type === 'mastery'
-                  ? 'bg-gradient-to-r from-amber-950/90 via-[#121215] to-amber-950/90 border-amber-500 shadow-amber-950/50'
-                  : 'bg-gradient-to-r from-emerald-950/90 via-[#121215] to-emerald-950/90 border-emerald-500 shadow-emerald-950/50'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                  martialHonorToast.type === 'mastery'
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-inner'
-                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-inner'
-                }`}>
-                  <Swords className="w-5 h-5 animate-pulse" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className={`text-sm sm:text-base font-black flex items-center gap-1.5 ${
-                      martialHonorToast.type === 'mastery' ? 'text-amber-300' : 'text-emerald-300'
-                    }`}>
-                      <Swords className="w-4 h-4" />
-                      <span>{martialHonorToast.title}</span>
-                    </h4>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold font-mono border ${
-                      martialHonorToast.type === 'mastery'
-                        ? 'bg-amber-500/20 text-amber-200 border-amber-500/40'
-                        : 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
-                    }`}>
-                      {toPersianDigits(martialHonorToast.score)} از ۱۰ امتیاز
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-300 mt-0.5">
-                    {martialHonorToast.subtitle}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setMartialHonorToast(null)}
-                className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800/80 transition cursor-pointer shrink-0"
-                aria-label="بستن"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
           {/* 2. Lock & Information Banners with Contextual Jump Action */}
           {isFuture ? (
             <div className="bg-[#121215]/80 border border-zinc-800 rounded-2xl p-3.5 sm:p-4 text-zinc-100 shadow-xl backdrop-blur-md">
@@ -638,7 +554,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                   </span>
 
                   {/* Habit Count Badge */}
-                  <span className="text-[11px] sm:text-xs text-zinc-300 bg-[#18181b] px-2.5 py-1 rounded-xl border border-zinc-800 font-medium shrink-0">
+                  <span className="text-[11px] sm:text-xs text-zinc-300 bg-[#09090b]/80 px-2.5 py-1 rounded-xl border border-zinc-800 font-medium shrink-0">
                     {toPersianDigits(computed.habitsCount)} از {toPersianDigits(5)} پایه
                   </span>
 
@@ -649,7 +565,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                       : computed.statusType === 'personal_frozen'
                       ? 'bg-blue-500/15 border-blue-500/30 text-blue-300'
                       : isToday
-                      ? 'bg-[#18181b] border-zinc-800 text-zinc-400'
+                      ? 'bg-[#09090b]/80 border border-zinc-800 text-zinc-400'
                       : 'bg-red-500/15 border-red-500/30 text-red-300'
                   }`}>
                     <Flame className={`w-3.5 h-3.5 ${
@@ -678,7 +594,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                   ? 'bg-amber-950/40 border-amber-500/60 shadow-md shadow-amber-950/40 ring-1 ring-amber-500/40'
                   : computed.isStandard
                   ? 'bg-emerald-950/40 border-emerald-500/60 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-500/40'
-                  : 'bg-[#18181b] border-zinc-800'
+                  : 'bg-[#09090b]/80 border-zinc-800'
               }`}>
                 {/* Score Header Label */}
                 <div className="text-[11px] sm:text-xs text-zinc-400 font-medium flex items-center justify-center gap-1.5">

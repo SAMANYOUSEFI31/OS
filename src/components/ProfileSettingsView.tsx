@@ -22,6 +22,8 @@ import {
   AlertTriangle, 
   CheckCircle2, 
   Menu, 
+  Settings,
+  Sliders,
   Sun, 
   Dumbbell, 
   BookOpen, 
@@ -191,10 +193,10 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   ];
 
   const SECTIONS_CONFIG: SubTabItem<SettingsSection>[] = [
-    { id: 'account', label: 'حساب', icon: User, activeColor: 'text-amber-400' },
-    { id: 'settings', label: 'تنظیمات', icon: Moon, activeColor: 'text-rose-400' },
-    { id: 'habits', label: 'راهنما', icon: BookMarked, activeColor: 'text-blue-400' },
-    { id: 'support', label: 'پشتیبانی', icon: Headphones, activeColor: 'text-purple-400' },
+    { id: 'account', label: 'حساب', icon: User },
+    { id: 'settings', label: 'تنظیمات', icon: Settings },
+    { id: 'habits', label: 'راهنما', icon: BookMarked },
+    { id: 'support', label: 'پشتیبانی', icon: Headphones },
   ];
 
   return (
@@ -269,7 +271,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <User className="w-5 h-5 text-amber-400" />
+                    <User className="w-5 h-5 text-zinc-200" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
@@ -406,139 +408,149 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             </div>
           )}
 
-          {/* Section 2: System Settings & Database Vault (Unified) */}
+          {/* Section 2: System Settings & Database Vault (Unified Master Card) */}
           {activeSection === 'settings' && (
             <div className="space-y-4">
-              {/* Part A: Cutoff Hour */}
-              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-6">
+                {/* Master Header */}
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <Moon className="w-5 h-5 text-amber-400" />
+                    <Settings className="w-5 h-5 text-zinc-200" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
-                      مهلت پایانی شبانه (مرز کات‌آف)
+                      تنظیمات و پیکربندی سامانه
                     </h3>
                     <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
-                      ثبت عادات تا پیش از این ساعت، برای روز قبل لحاظ می‌شود
+                      شخصی‌سازی مهلت کات‌آف شبانه، نسخه پشتیبان فایل و نگهداری پایگاه داده
                     </p>
                   </div>
                 </div>
 
-                <p className="text-xs text-zinc-300 leading-relaxed bg-[#18181b] p-3.5 rounded-2xl border border-zinc-800 text-right">
-                  اگر شب‌ها تا دیروقت بیدار هستید، ثبت عادات تا قبل از این ساعت کماکان برای روز گذشته محاسبه می‌شود تا روز تقویمی شما قبل از خواب از دست نرود.
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-1">
-                  {cutoffHoursList.map(item => {
-                    const isSelected = currentCutoff === item.hour;
-                    return (
-                      <button
-                        key={item.hour}
-                        type="button"
-                        onClick={() => handleSelectCutoffHour(item.hour)}
-                        className={`px-3.5 py-3 rounded-xl text-xs font-bold flex items-center justify-between border transition cursor-pointer active:scale-[0.98] ${
-                          isSelected
-                            ? 'bg-zinc-800 border-emerald-500/50 text-white shadow-md'
-                            : 'bg-[#18181b] border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                        }`}
-                      >
-                        <span className="whitespace-nowrap">{item.label}</span>
-                        {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Part B: Backup & Database Vault */}
-              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <Database className="w-5 h-5 text-emerald-400" />
+                {/* Sub-Card 1: Cutoff Hour Configuration */}
+                <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
+                      <Moon className="w-4 h-4 text-zinc-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-zinc-200">
+                        مهلت پایانی شبانه (مرز کات‌آف)
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        ثبت عادات تا پیش از این ساعت برای روز قبل محاسبه می‌شود.
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
-                      پشتیبان‌گیری و پایگاه داده
-                    </h3>
-                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
-                      خروجی گرفتن، بازیابی فایل یا بازنشانی داده‌های سامانه
-                    </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1">
+                    {cutoffHoursList.map(item => {
+                      const isSelected = currentCutoff === item.hour;
+                      return (
+                        <button
+                          key={item.hour}
+                          type="button"
+                          onClick={() => handleSelectCutoffHour(item.hour)}
+                          className={`px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-between border transition cursor-pointer active:scale-[0.98] ${
+                            isSelected
+                              ? 'bg-zinc-800 border-amber-500/50 text-amber-300 shadow-sm'
+                              : 'bg-[#121215] border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                          }`}
+                        >
+                          <span className="whitespace-nowrap">{item.label}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* Standard Safe Operations: Export & Import */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {/* Export JSON Card */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFX.playCheck();
-                      onExportData();
-                      showNotice('فایل پشتیبان داده‌های بوشیدو ذخیره شد.');
-                    }}
-                    className="bg-[#18181b] hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm"
-                  >
-                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
-                      <Download className="w-5 h-5" />
+                {/* Sub-Card 2: Backup & Database Vault */}
+                <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
+                      <Database className="w-4 h-4 text-zinc-300" />
                     </div>
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <span className="font-bold text-xs sm:text-sm text-zinc-100 block">خروجی پشتیبان (JSON)</span>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
-                        دریافت نسخه پشتیبان از تمام چرخه‌ها و لاگ‌ها
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-zinc-200">
+                        پشتیبان‌گیری و بازیابی پایگاه داده
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        خروجی استاندارد JSON برای حفظ داده‌ها در حافظه آفلاین
                       </p>
                     </div>
-                  </button>
+                  </div>
 
-                  {/* Import JSON Card */}
-                  <label className="bg-[#18181b] hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-4 rounded-2xl flex items-start gap-3.5 text-right transition cursor-pointer active:scale-[0.98] group shadow-sm">
-                    <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 group-hover:border-zinc-600 transition shrink-0">
-                      <Upload className="w-5 h-5" />
-                    </div>
-                    <div className="space-y-1 min-w-0 flex-1">
-                      <span className="font-bold text-xs sm:text-sm text-zinc-100 block">بازیابی نسخه پشتیبان</span>
-                      <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
-                        بارگذاری فایل JSON و بازنشانی داده‌ها
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      accept=".json"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
-                  </label>
-                </div>
-
-                {/* Danger Zone: Reset Data */}
-                <div className="pt-2">
-                  <div className="bg-red-950/15 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-start sm:items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
-                        <AlertTriangle className="w-5 h-5" />
-                      </div>
-                      <div className="space-y-0.5 text-right">
-                        <h4 className="font-bold text-xs sm:text-sm text-red-200">
-                          بازنشانی کل داده‌های سامانه
-                        </h4>
-                        <p className="text-[11px] text-zinc-400 leading-relaxed">
-                          تمام لاگ‌ها و سوابق پاک شده و سامانه به وضعیت اولیه بازمی‌گردد.
-                        </p>
-                      </div>
-                    </div>
-
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Export JSON Card */}
                     <button
                       type="button"
                       onClick={() => {
-                        setIsConfirmResetOpen(true);
+                        soundFX.playCheck();
+                        onExportData();
+                        showNotice('فایل پشتیبان داده‌های بوشیدو ذخیره شد.');
                       }}
-                      className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition whitespace-nowrap shrink-0 shadow-sm"
+                      className="bg-[#121215] hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-3.5 rounded-xl flex items-start gap-3 text-right transition cursor-pointer active:scale-[0.98] group"
                     >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>بازنشانی به وضعیت اولیه</span>
+                      <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 transition shrink-0">
+                        <Download className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <span className="font-bold text-xs sm:text-sm text-zinc-100 block">خروجی پشتیبان (JSON)</span>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
+                          دریافت نسخه کامل چرخه‌ها و لاگ‌ها
+                        </p>
+                      </div>
                     </button>
+
+                    {/* Import JSON Card */}
+                    <label className="bg-[#121215] hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 text-zinc-200 p-3.5 rounded-xl flex items-start gap-3 text-right transition cursor-pointer active:scale-[0.98] group">
+                      <div className="w-9 h-9 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 group-hover:text-zinc-100 transition shrink-0">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <div className="space-y-0.5 min-w-0 flex-1">
+                        <span className="font-bold text-xs sm:text-sm text-zinc-100 block">بازیابی نسخه پشتیبان</span>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
+                          بارگذاری فایل JSON و بازیابی
+                        </p>
+                      </div>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept=".json"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
                   </div>
+                </div>
+
+                {/* Sub-Card 3: Danger Zone */}
+                <div className="bg-red-950/20 border border-red-500/30 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                      <AlertTriangle className="w-4.5 h-4.5" />
+                    </div>
+                    <div className="space-y-0.5 text-right">
+                      <h4 className="font-bold text-xs sm:text-sm text-red-200">
+                        بازنشانی کل داده‌های سامانه
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        تمام لاگ‌ها و سوابق پاک شده و سامانه به وضعیت اولیه بازمی‌گردد.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsConfirmResetOpen(true);
+                    }}
+                    className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 font-bold px-3.5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition whitespace-nowrap shrink-0 shadow-sm"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>بازنشانی به وضعیت اولیه</span>
+                  </button>
                 </div>
               </div>
             </div>
@@ -550,7 +562,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <BookMarked className="w-5 h-5 text-blue-400" />
+                    <BookMarked className="w-5 h-5 text-zinc-200" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
@@ -580,19 +592,13 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                           onClick={() => {
                             setExpandedHabitKey(isExpanded ? null : item.key);
                           }}
-                          className="w-full p-4 flex items-center justify-between gap-3 text-right hover:bg-zinc-800/40 transition cursor-pointer"
+                          className="w-full p-4 flex items-center justify-between gap-3 text-right hover:bg-zinc-800/40 transition cursor-pointer group"
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
-                              item.color === 'amber'
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                : item.color === 'emerald'
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : item.color === 'blue'
-                                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-                                : item.color === 'violet'
-                                ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
-                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border transition ${
+                              isExpanded
+                                ? 'bg-zinc-700/60 border-zinc-600 text-white'
+                                : 'bg-zinc-800 border-zinc-700 text-zinc-300 group-hover:text-zinc-100'
                             }`}>
                               {HABIT_ICONS_MAP[item.key]}
                             </div>
@@ -650,7 +656,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <Headphones className="w-5 h-5 text-purple-400" />
+                    <Headphones className="w-5 h-5 text-zinc-200" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
@@ -674,9 +680,9 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                             {ch.channel}
                           </span>
                           <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-300">
-                            {ch.iconName === 'Send' && <Send className="w-3.5 h-3.5 text-blue-400" />}
-                            {ch.iconName === 'Radio' && <Radio className="w-3.5 h-3.5 text-rose-400" />}
-                            {ch.iconName === 'Mail' && <Mail className="w-3.5 h-3.5 text-amber-400" />}
+                            {ch.iconName === 'Send' && <Send className="w-3.5 h-3.5 text-zinc-300" />}
+                            {ch.iconName === 'Radio' && <Radio className="w-3.5 h-3.5 text-zinc-300" />}
+                            {ch.iconName === 'Mail' && <Mail className="w-3.5 h-3.5 text-zinc-300" />}
                           </div>
                         </div>
 

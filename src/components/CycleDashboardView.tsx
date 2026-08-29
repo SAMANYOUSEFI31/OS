@@ -24,7 +24,8 @@ import {
   Gauge,
   Grid3X3,
   BarChart3,
-  Plus
+  Plus,
+  Compass
 } from 'lucide-react';
 
 interface CycleDashboardViewProps {
@@ -107,22 +108,19 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
     { 
       id: 'overview', 
       label: 'دید کلی', 
-      icon: Gauge, 
-      activeColor: 'text-amber-400' 
+      icon: Gauge
     },
     { 
       id: 'heatmap', 
       label: 'نقشه ۹۰ روزه', 
       icon: Grid3X3, 
-      badge: `${toPersianDigits(90)} روز`, 
-      activeColor: 'text-rose-400' 
+      badge: `${toPersianDigits(90)} روز`
     },
     { 
       id: 'analytics', 
       label: 'ماتریس عادات', 
       icon: BarChart3, 
-      hasAlert: hasVulnerabilities || hasUnresolvedDebt, 
-      activeColor: 'text-emerald-400' 
+      hasAlert: hasVulnerabilities || hasUnresolvedDebt
     },
   ];
 
@@ -223,7 +221,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
                   <span>پیشروی تقویمی دوره</span>
                   <span>{toPersianDigits(elapsedPercentage)}٪ سپری شده</span>
                 </div>
-                <div className="w-full bg-[#18181b] h-2 rounded-full overflow-hidden border border-zinc-800">
+                <div className="w-full bg-[#09090b] h-2 rounded-full overflow-hidden border border-zinc-800">
                   <div 
                     className="bg-gradient-to-l from-rose-500 to-rose-700 h-full rounded-full transition-all duration-500" 
                     style={{ width: `${elapsedPercentage}%` }}
@@ -233,9 +231,9 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
             </div>
 
             {/* Coach Voice Banner */}
-            <div className="w-full bg-[#18181b] border border-zinc-800 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3.5 mt-2 shadow-sm">
+            <div className="w-full bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-3.5 sm:p-4 flex items-start gap-3.5 mt-2 shadow-sm">
               <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
-                <Zap className="w-5 h-5 text-amber-400" />
+                <Compass className="w-5 h-5 text-amber-400/90" />
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] font-bold text-zinc-400 block">پیام رفتاری مربی دیسیپلین:</span>
@@ -247,7 +245,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
           </div>
 
           {/* Discipline Score Badge Column (Harmonized with Battlefield Daily Score Box) */}
-          <div className="lg:col-span-4 bg-[#18181b] border border-zinc-800 rounded-2xl p-4 sm:p-5 text-center flex flex-col items-center justify-center space-y-2.5 shadow-sm transition-all w-full max-w-[280px] mx-auto lg:max-w-none lg:w-full">
+          <div className="lg:col-span-4 bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 text-center flex flex-col items-center justify-center space-y-2.5 shadow-sm transition-all w-full max-w-[280px] mx-auto lg:max-w-none lg:w-full">
             <span className="text-xs text-zinc-400 font-medium inline-flex items-center gap-1.5">
               <TrendingUp className="w-4 h-4 text-zinc-400" />
               <span>شاخص انضباط سیستم (Discipline Score)</span>

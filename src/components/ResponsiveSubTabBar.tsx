@@ -70,7 +70,7 @@ export function ResponsiveSubTabBar<T extends string = string>({
               {Icon && (
                 <Icon
                   className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 transition-colors duration-150 ${
-                    isActive ? (tab.activeColor || 'text-amber-400') : 'text-zinc-400'
+                    isActive ? 'text-white' : 'text-zinc-400 group-hover:text-zinc-200'
                   }`}
                 />
               )}
