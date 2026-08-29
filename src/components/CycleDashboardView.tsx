@@ -106,23 +106,20 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
   const SUB_TABS: SubTabItem<DashboardSubTab>[] = [
     { 
       id: 'overview', 
-      label: 'دید کلی و رکوردها', 
-      shortLabel: 'دید کلی', 
+      label: 'دید کلی', 
       icon: Gauge, 
       activeColor: 'text-amber-400' 
     },
     { 
       id: 'heatmap', 
-      label: 'نقشه تاکتیکی ۹۰ روزه', 
-      shortLabel: 'نقشه ۹۰ روزه', 
+      label: 'نقشه ۹۰ روزه', 
       icon: Grid3X3, 
       badge: `${toPersianDigits(90)} روز`, 
       activeColor: 'text-rose-400' 
     },
     { 
       id: 'analytics', 
-      label: 'ارکان و آسیب‌پذیری', 
-      shortLabel: 'تحلیل ارکان', 
+      label: 'ماتریس عادات', 
       icon: BarChart3, 
       hasAlert: hasVulnerabilities || hasUnresolvedDebt, 
       activeColor: 'text-emerald-400' 

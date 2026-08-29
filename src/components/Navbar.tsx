@@ -70,9 +70,13 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const currentCycleIndex = currentCycle 
+    ? cycles.findIndex(c => c.id === currentCycle.id)
+    : -1;
+
   const cycleTitleDisplay = currentCycle 
-    ? (currentCycle.title.split('—')[0] || currentCycle.title)
-    : 'تعریف چرخه نبرد';
+    ? `چرخه ${toPersianDigits(currentCycleIndex >= 0 ? currentCycleIndex + 1 : 1)}`
+    : 'تعریف چرخه';
 
   const handleDeleteCycleClick = (e: React.MouseEvent, cycleId: string) => {
     e.stopPropagation();
@@ -121,10 +125,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button 
                   type="button"
                   onClick={() => setIsCycleDropdownOpen(!isCycleDropdownOpen)}
-                  className="h-8 sm:h-9 bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1.5 transition cursor-pointer max-w-[120px] xs:max-w-[150px] sm:max-w-[210px] shrink-0"
+                  className="h-8 sm:h-9 bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2 sm:px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1 sm:gap-1.5 transition cursor-pointer shrink-0"
                 >
                   <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${currentCycle ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
-                  <span className="font-bold truncate text-[11px] sm:text-xs">
+                  <span className="font-bold whitespace-nowrap text-[11px] sm:text-xs">
                     {cycleTitleDisplay}
                   </span>
                   <ChevronDown className="w-3 h-3 text-zinc-400 shrink-0" />

@@ -191,10 +191,10 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   ];
 
   const SECTIONS_CONFIG: SubTabItem<SettingsSection>[] = [
-    { id: 'account', label: 'حساب و اشتراک', shortLabel: 'حساب', icon: User, activeColor: 'text-amber-400' },
-    { id: 'settings', label: 'تنظیمات و پایگاه داده', shortLabel: 'تنظیمات', icon: Moon, activeColor: 'text-rose-400' },
-    { id: 'habits', label: 'فلسفه و راهنمای عادات', shortLabel: 'راهنما', icon: BookMarked, activeColor: 'text-blue-400' },
-    { id: 'support', label: 'ارتباط با پشتیبانی', shortLabel: 'پشتیبانی', icon: Headphones, activeColor: 'text-purple-400' },
+    { id: 'account', label: 'حساب', icon: User, activeColor: 'text-amber-400' },
+    { id: 'settings', label: 'تنظیمات', icon: Moon, activeColor: 'text-rose-400' },
+    { id: 'habits', label: 'راهنما', icon: BookMarked, activeColor: 'text-blue-400' },
+    { id: 'support', label: 'پشتیبانی', icon: Headphones, activeColor: 'text-purple-400' },
   ];
 
   return (

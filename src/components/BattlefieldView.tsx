@@ -6,6 +6,7 @@ import { formatPersianDate, getLogicalTodayDate, addDaysToDate, getRelativeDateL
 import { toPersianDigits } from '../utils/numberUtils';
 import { soundFX } from '../utils/audioEffects';
 import { haptics } from '../utils/haptics';
+import { OnboardingWelcomeView } from './OnboardingWelcomeView';
 import { 
   Sun, 
   Dumbbell, 
@@ -44,6 +45,8 @@ interface BattlefieldViewProps {
   onUpdateLog: (log: DailyLog) => void;
   onOpenAutopsy: (log: DailyLog) => void;
   onNavigateToArchives?: () => void;
+  onOpenCreateCycle?: () => void;
+  onNavigateToHabitsGuide?: () => void;
 }
 
 const HABIT_ICONS: Record<HabitKey, React.ReactNode> = {
@@ -63,36 +66,20 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
   onSelectDate,
   onUpdateLog,
   onOpenAutopsy,
-  onNavigateToArchives
+  onNavigateToArchives,
+  onOpenCreateCycle,
+  onNavigateToHabitsGuide
 }) => {
   const logicalToday = getLogicalTodayDate();
   const isToday = selectedDate === logicalToday;
 
-  // 1. Guard against No Active Cycle / Empty State
+  // 1. Guard against No Active Cycle / Empty State with Comprehensive Onboarding
   if (!currentCycle || !metrics) {
     return (
-      <div className="max-w-2xl mx-auto py-16 px-4 text-center space-y-6" dir="rtl">
-        <div className="w-20 h-20 rounded-3xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto shadow-xl">
-          <Target className="w-10 h-10" />
-        </div>
-        <div className="space-y-2">
-          <h2 className="text-xl sm:text-2xl font-black text-zinc-100">
-            هیچ چرخه فعالی در سیستم تعریف نشده است
-          </h2>
-          <p className="text-xs sm:text-sm text-zinc-400 max-w-md mx-auto leading-relaxed">
-            میدان نبرد بوشیدو بر اساس دوره‌های متمرکز ۹۰ روزه عمل می‌کند. برای شروع ثبت عادات روزانه و پیگیری دیسیپلین، ابتدا یک چرخه جدید تعریف کنید.
-          </p>
-        </div>
-        {onNavigateToArchives && (
-          <button
-            onClick={onNavigateToArchives}
-            className="bg-amber-500 hover:bg-amber-400 text-black font-black text-xs px-6 py-3 rounded-2xl inline-flex items-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>تعریف چرخه جدید در بایگانی و فرماندهی</span>
-          </button>
-        )}
-      </div>
+      <OnboardingWelcomeView
+        onOpenCreateCycle={onOpenCreateCycle || onNavigateToArchives || (() => {})}
+        onNavigateToHabitsGuide={onNavigateToHabitsGuide || (() => {})}
+      />
     );
   }
 
@@ -439,15 +426,16 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       )}
 
       {/* 1.5. Dynamic Day Content with Directional Micro-Slide */}
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={selectedDate}
-          initial={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? -16 : 16) : 0 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? 16 : -16) : 0 }}
-          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-          className="space-y-4 sm:space-y-6"
-        >
+      <div className="w-full max-w-full overflow-hidden">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={selectedDate}
+            initial={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? -12 : 12) : 0 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: navDirection !== 0 ? (navDirection > 0 ? 12 : -12) : 0 }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+            className="space-y-4 sm:space-y-6 w-full max-w-full"
+          >
           {/* Martial Honor Achievement Banner */}
           {martialHonorToast && (
             <div 
@@ -1002,6 +990,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
           </div>
         </motion.div>
       </AnimatePresence>
+      </div>
     </div>
   );
 };

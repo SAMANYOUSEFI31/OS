@@ -21,6 +21,7 @@ import { AdminView } from './components/AdminView';
 import { AutopsyModal } from './components/AutopsyModal';
 import { PaymentModal } from './components/PaymentModal';
 import { AuthModal } from './components/AuthModal';
+import { CreateCycleModal } from './components/CreateCycleModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import { RotateCcw, CheckCircle2, AlertTriangle, X, Eye, ShieldCheck } from 'lucide-react';
 
@@ -52,6 +53,7 @@ export default function App() {
   const [autopsyTargetLog, setAutopsyTargetLog] = useState<DailyLog | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCreateCycleModalOpen, setIsCreateCycleModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -268,23 +270,14 @@ export default function App() {
     const remainingLogs = systemState.logs.filter(l => l.cycleId !== cycleId);
 
     if (remainingCycles.length === 0) {
-      // When deleting the only remaining cycle, reset to a pristine default 90-day cycle
-      const freshCycle: Cycle = {
-        id: `cycle-${Date.now()}`,
-        title: 'چرخه اول — فتح انضباط بوشیدو',
-        startDate: getLogicalTodayDate(),
-        targetTheme: 'انضباط و تمرکز بی‌رحمانه',
-        isArchived: false,
-        createdAt: new Date().toISOString()
-      };
+      // When deleting the only remaining cycle, cleanly enter zero-cycle state
       setSystemState(prev => ({
         ...prev,
-        cycles: [freshCycle],
+        cycles: [],
         logs: []
       }));
-      setActiveCycleId(freshCycle.id);
-      setSelectedDate(freshCycle.startDate);
-      showAppToast('چرخه حذف شد و چرخه جدید آماده نبرد است.', 'info');
+      setActiveCycleId('');
+      showAppToast('چرخه با موفقیت حذف شد. می‌توانید چرخه جدیدی تعریف کنید.', 'info');
     } else {
       setSystemState(prev => ({
         ...prev,
@@ -636,6 +629,8 @@ export default function App() {
                   onUpdateLog={handleUpdateLog}
                   onOpenAutopsy={log => setAutopsyTargetLog(log)}
                   onNavigateToArchives={() => setActiveTab('archives')}
+                  onOpenCreateCycle={() => setIsCreateCycleModalOpen(true)}
+                  onNavigateToHabitsGuide={() => setActiveTab('profile')}
                 />
               </motion.div>
             )}
@@ -800,6 +795,14 @@ export default function App() {
 
       {/* Global Micro-Toast Notification Layer */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Create Cycle Modal */}
+      <CreateCycleModal
+        isOpen={isCreateCycleModalOpen}
+        existingCycles={systemState.cycles}
+        onClose={() => setIsCreateCycleModalOpen(false)}
+        onCreateCycle={handleCreateNewCycle}
+      />
 
       {/* Reset Confirmation Modal */}
       {isResetConfirmOpen && (
