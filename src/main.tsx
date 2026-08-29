@@ -4,8 +4,8 @@ import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
-// Register PWA Service Worker for offline resilience
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+// Register PWA Service Worker for offline resilience (Standard PWA Production Lifecycle)
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && (import.meta.env.PROD || !window.location.hostname.includes('localhost'))) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

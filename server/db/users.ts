@@ -61,7 +61,9 @@ export async function createUser(data: {
   const id = `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
   const isFirstUser = memoryStore.users.length === 0;
-  const isAdmin = data.isAdmin !== undefined ? data.isAdmin : (isFirstUser || data.email === 'admin@bushido.app');
+  const isMasterAccount = data.email === 'admin@bushido.app' || data.phoneNumber === '09120000000';
+  const isAdmin = data.isAdmin !== undefined ? data.isAdmin : (isFirstUser || isMasterAccount);
+  const isVip = Boolean(data.isVip || (isMasterAccount ? true : false));
 
   const newUser: DBUser = {
     id,
@@ -69,13 +71,13 @@ export async function createUser(data: {
     phoneNumber: data.phoneNumber ? data.phoneNumber.trim() : null,
     name: data.name || (data.phoneNumber ? `کاربر ${data.phoneNumber.slice(-4)}` : (data.email ? data.email.split('@')[0] : 'سامورایی دیسیپلین')),
     passwordHash: data.passwordHash || null,
-    tier: data.tier || (data.isVip ? 'vip_samurai' : 'free'),
-    isVip: Boolean(data.isVip),
+    tier: data.tier || (isVip ? 'vip_samurai' : 'free'),
+    isVip,
     isAdmin,
     nightOwlCutoffHour: 4,
     accentTheme: 'amber',
-    vipSince: data.isVip ? now : null,
-    vipExpiresAt: data.isVip ? new Date(Date.now() + 365 * 86400000).toISOString() : null,
+    vipSince: isVip ? now : null,
+    vipExpiresAt: isVip ? new Date(Date.now() + 365 * 86400000).toISOString() : null,
     paymentRefId: null,
     createdAt: now,
     updatedAt: now
@@ -164,6 +166,7 @@ export async function adminUpdateUser(
     tier?: string;
     isAdmin?: boolean;
     vipExpiresAt?: string | null;
+    daysExtension?: number;
   }
 ): Promise<DBUser | null> {
   const targetUser = await findUserById(userId);
@@ -175,14 +178,20 @@ export async function adminUpdateUser(
     updatedAt: nowStr
   };
 
+  if (data.isAdmin !== undefined) {
+    updatePayload.isAdmin = data.isAdmin;
+  }
+
   if (data.isVip !== undefined) {
     updatePayload.isVip = data.isVip;
     if (data.isVip) {
       updatePayload.tier = data.tier || 'vip_samurai';
       updatePayload.vipSince = targetUser.vipSince || nowStr;
-      if (!updatePayload.vipExpiresAt && !targetUser.vipExpiresAt) {
-        updatePayload.vipExpiresAt = new Date(Date.now() + 365 * 86400000).toISOString();
-      }
+      
+      const currentExpiry = targetUser.vipExpiresAt ? new Date(targetUser.vipExpiresAt).getTime() : Date.now();
+      const baseTime = currentExpiry > Date.now() ? currentExpiry : Date.now();
+      const extDays = typeof data.daysExtension === 'number' && data.daysExtension > 0 ? data.daysExtension : 365;
+      updatePayload.vipExpiresAt = new Date(baseTime + extDays * 86400000).toISOString();
     } else {
       updatePayload.tier = 'free';
       updatePayload.vipExpiresAt = null;

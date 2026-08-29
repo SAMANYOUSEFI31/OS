@@ -189,15 +189,26 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     // Find or create user
     let user = await findUserByIdentifier(cleanId);
+    const isMasterAdmin = cleanId === 'admin@bushido.app' || cleanId === '09120000000';
+
     if (!user) {
       const isEmail = cleanId.includes('@');
       user = await createUser({
         email: isEmail ? cleanId : undefined,
         phoneNumber: !isEmail ? cleanId : undefined,
         name: name?.trim() || (isEmail ? cleanId.split('@')[0] : 'سامورایی دیسیپلین'),
-        tier: 'free',
-        isVip: false
+        tier: isMasterAdmin ? 'vip_samurai' : 'free',
+        isVip: isMasterAdmin,
+        isAdmin: isMasterAdmin
       });
+    } else if (isMasterAdmin && (!user.isAdmin || !user.isVip)) {
+      // Auto-reconcile master admin privileges
+      const updatedMaster = await updateUser(user.id, {
+        isAdmin: true,
+        isVip: true,
+        tier: 'vip_samurai'
+      });
+      if (updatedMaster) user = updatedMaster;
     }
 
     const token = generateToken({
@@ -739,9 +750,20 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
     const userId = req.params.id;
     const { tier, isVip, isAdmin, name, daysExtension } = req.body;
 
+    const targetUser = await findUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'کاربر مورد نظر یافت نشد.' });
+    }
+
+    // Protection for root admin: Prevent demotion or revocation of root admin account
+    const isTargetRootAdmin = targetUser.email === 'admin@bushido.app' || targetUser.phoneNumber === '09120000000';
+    if (isTargetRootAdmin && (isAdmin === false || isVip === false)) {
+      return res.status(403).json({ error: 'حساب مالک ارشد سیستم غیرقابل عزل یا تنزل می‌باشد.' });
+    }
+
     const updated = await adminUpdateUser(userId, {
       tier,
-      isVip: typeof isVip === 'boolean' ? isVip : tier === 'vip_samurai',
+      isVip: typeof isVip === 'boolean' ? isVip : (tier ? tier === 'vip_samurai' : undefined),
       isAdmin: typeof isAdmin === 'boolean' ? isAdmin : undefined,
       name,
       daysExtension: Number(daysExtension) || undefined

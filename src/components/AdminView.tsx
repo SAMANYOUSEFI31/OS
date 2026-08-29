@@ -204,6 +204,38 @@ export const AdminView: React.FC<AdminViewProps> = ({
     }
   };
 
+  const handleToggleAdminStatus = async (userId: string, currentAdminStatus: boolean) => {
+    setIsUpdatingUser(userId);
+    setActionMessage(null);
+    try {
+      const newAdminStatus = !currentAdminStatus;
+      const res = await fetch(`/api/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          isAdmin: newAdminStatus
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        soundFX.playCheck();
+        setActionMessage(`نقش کاربری با موفقیت به ${newAdminStatus ? 'مدیر سامانه (Admin)' : 'کاربر عادی'} تغییر یافت.`);
+        await fetchAdminData();
+        if (onRefreshUserProfile) {
+          onRefreshUserProfile();
+        }
+      } else {
+        setActionMessage(data.error || 'خطا در تغییر سطح دسترسی کاربر.');
+      }
+    } catch (err) {
+      console.error('Admin toggle status error:', err);
+      setActionMessage('خطا در ارتباط با سرور.');
+    } finally {
+      setIsUpdatingUser(null);
+    }
+  };
+
   const filteredUsers = users.filter(u => {
     const matchesSearch = 
       (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -579,6 +611,24 @@ export const AdminView: React.FC<AdminViewProps> = ({
                           {/* Action Controls */}
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
+                              {/* Toggle Admin Privilege Button */}
+                              {(!isCurrentUser && user.email !== 'admin@bushido.app' && user.phoneNumber !== '09120000000') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleAdminStatus(user.id, !!user.isAdmin)}
+                                  disabled={isUpdatingUser === user.id}
+                                  className={`px-2 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer flex items-center gap-1 border ${
+                                    user.isAdmin 
+                                      ? 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border-purple-500/40' 
+                                      : 'bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 border-zinc-700 hover:text-zinc-200'
+                                  }`}
+                                  title={user.isAdmin ? 'عزل از مدیریت سامانه' : 'ارتقا به مدیر سامانه'}
+                                >
+                                  <ShieldCheck className={`w-3.5 h-3.5 ${user.isAdmin ? 'text-purple-400' : 'text-zinc-500'}`} />
+                                  <span>{user.isAdmin ? 'عزل ادمین' : 'ارتقا ادمین'}</span>
+                                </button>
+                              )}
+
                               {/* Impersonate / Switch View Button */}
                               {onImpersonateUser && !isCurrentUser && (
                                 <button
@@ -588,7 +638,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                   title="مشاهده سامانه از دید این کاربر"
                                 >
                                   <Eye className="w-3.5 h-3.5 text-sky-400" />
-                                  <span>مشاهده دید کاربر</span>
+                                  <span>دید کاربر</span>
                                 </button>
                               )}
 
@@ -600,7 +650,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                     className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer"
                                     title="تمدید ۹۰ روزه اشتراک"
                                   >
-                                    +۹۰ روز تمدید
+                                    +۹۰ روز
                                   </button>
                                   <button
                                     onClick={() => handleUpdateUserTier(user.id, 'ronin_free')}
@@ -608,7 +658,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                     className="bg-zinc-800 hover:bg-red-950/60 hover:text-red-300 hover:border-red-500/40 text-zinc-400 border border-zinc-700 px-2 py-1 rounded-lg text-[11px] transition cursor-pointer"
                                     title="تنزل به حساب رایگان"
                                   >
-                                    تنزل به رایگان
+                                    تنزل
                                   </button>
                                 </>
                               ) : (
@@ -618,7 +668,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                                   className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-1 rounded-lg text-[11px] transition cursor-pointer shadow-sm flex items-center gap-1"
                                 >
                                   <Crown className="w-3 h-3" />
-                                  <span>ارتقا به VIP</span>
+                                  <span>ارتقا VIP</span>
                                 </button>
                               )}
                             </div>
