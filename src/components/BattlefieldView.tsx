@@ -98,6 +98,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
   const isCycleArchived = !!currentCycle.isArchived;
   const isFuture = selectedDate > logicalToday;
+  const isPast = selectedDate < logicalToday;
 
   // Single-time swipe hint state persisted in localStorage
   const [hasSeenSwipeHint, setHasSeenSwipeHint] = useState<boolean>(() => {
@@ -410,21 +411,9 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
           </button>
         </div>
 
-        {/* Auxiliary Row: Jump to Today (Right in RTL) & Night Owl Cutoff Badge (Centered/Balanced) */}
-        <div className={`flex items-center gap-2 pt-2 border-t border-zinc-800/80 ${isToday ? 'justify-center' : 'justify-between'}`}>
-          {!isToday && (
-            <button
-              type="button"
-              onClick={() => navigateDate(logicalToday, 0)}
-              className="h-8 bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs px-3 rounded-xl transition cursor-pointer inline-flex items-center justify-center gap-1.5 font-bold whitespace-nowrap shrink-0 shadow-xs active:scale-95"
-              title="پرش مستقیم به روز جاری نبرد"
-            >
-              <Zap className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span className="leading-none">پرش به امروز</span>
-            </button>
-          )}
-
-          <div className={`h-8 bg-[#09090b] px-3 rounded-xl border border-zinc-800 text-[11px] sm:text-xs text-zinc-400 inline-flex items-center justify-center gap-2 whitespace-nowrap shrink-0 ${!isToday ? 'mr-auto' : ''}`}>
+        {/* Auxiliary Row: Night Owl Cutoff Badge (Centered & Stable) */}
+        <div className="flex items-center justify-center pt-2 border-t border-zinc-800/80">
+          <div className="h-8 bg-[#09090b] px-3.5 rounded-xl border border-zinc-800 text-[11px] sm:text-xs text-zinc-400 inline-flex items-center justify-center gap-2 whitespace-nowrap shadow-xs">
             <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
             <span className="leading-none">کات‌آف شبانه: {toPersianDigits(nightOwlCutoffHour)}:۰۰ بامداد</span>
           </div>
@@ -508,7 +497,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
             </div>
           )}
 
-          {/* 2. Lock & Information Banners */}
+          {/* 2. Lock & Information Banners with Contextual Jump Action */}
           {isFuture ? (
             <div className="bg-[#121215]/80 border border-zinc-800 rounded-2xl p-3.5 sm:p-4 text-zinc-100 shadow-xl backdrop-blur-md">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
@@ -534,10 +523,39 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectDate(logicalToday)}
-                  className="w-full sm:w-auto h-9 bg-amber-500/10 hover:bg-amber-500/20 active:bg-amber-500/25 text-amber-300 border border-amber-500/30 font-bold text-xs px-3.5 rounded-xl inline-flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shrink-0 whitespace-nowrap active:scale-[0.98]"
+                  className="w-full sm:w-auto h-9 bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs px-3.5 rounded-xl inline-flex items-center justify-center gap-1.5 transition cursor-pointer shadow-sm shrink-0 whitespace-nowrap active:scale-[0.98]"
                 >
-                  <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="leading-none">بازگشت به امروز</span>
+                  <Zap className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span className="leading-none">پرش به روز جاری</span>
+                </button>
+              </div>
+            </div>
+          ) : isPast && !isCycleArchived ? (
+            <div className="bg-[#121215]/80 border border-zinc-800/90 rounded-2xl p-3 sm:p-3.5 text-zinc-100 shadow-md">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-4">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-zinc-800 border border-zinc-700/80 text-zinc-400 flex items-center justify-center shrink-0 shadow-inner">
+                    <Calendar className="w-4 h-4 text-zinc-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-zinc-200">
+                        مشاهده تاریخچه ({getRelativeDateLabel(selectedDate, logicalToday)})
+                      </span>
+                      <span className="text-[10px] bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 rounded-md font-mono">
+                        {formatPersianDate(selectedDate, { short: true })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => onSelectDate(logicalToday)}
+                  className="w-full sm:w-auto h-8 bg-rose-500/15 hover:bg-rose-500/25 active:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-bold text-xs px-3 rounded-xl inline-flex items-center justify-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 whitespace-nowrap active:scale-[0.98]"
+                >
+                  <Zap className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  <span className="leading-none">پرش به روز جاری</span>
                 </button>
               </div>
             </div>

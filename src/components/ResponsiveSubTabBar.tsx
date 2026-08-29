@@ -52,7 +52,7 @@ export function ResponsiveSubTabBar<T extends string = string>({
               key={tab.id}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`w-full min-h-[44px] h-11 sm:h-12 py-1.5 sm:py-2 px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-150 cursor-pointer flex flex-row items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap leading-none relative z-10 select-none active:scale-[0.98] ${
+              className={`w-full min-h-[44px] h-11 sm:h-12 py-1.5 sm:py-2 px-1 xs:px-1.5 sm:px-3 rounded-xl font-bold text-xs sm:text-sm transition-colors duration-150 cursor-pointer flex items-center justify-center gap-1 sm:gap-2 whitespace-nowrap leading-none relative z-10 select-none active:scale-[0.98] ${
                 isActive
                   ? 'text-white font-black'
                   : 'text-zinc-400 hover:text-zinc-200'
@@ -69,17 +69,17 @@ export function ResponsiveSubTabBar<T extends string = string>({
 
               {Icon && (
                 <Icon
-                  className={`w-4 h-4 sm:w-4.5 sm:h-4.5 shrink-0 transition-colors duration-150 ${
+                  className={`w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-4.5 sm:h-4.5 shrink-0 transition-colors duration-150 ${
                     isActive ? (tab.activeColor || 'text-amber-400') : 'text-zinc-400'
                   }`}
                 />
               )}
 
-              {/* Text label: Long on sm+, Short on micro screens if available */}
+              {/* Text label: Long on sm+, Short single-word on micro screens */}
               <span className="transition-colors duration-150 hidden sm:inline whitespace-nowrap">
                 {tab.label}
               </span>
-              <span className="transition-colors duration-150 sm:hidden whitespace-nowrap">
+              <span className="transition-colors duration-150 sm:hidden whitespace-nowrap text-[11px] xs:text-xs">
                 {tab.shortLabel || tab.label}
               </span>
 

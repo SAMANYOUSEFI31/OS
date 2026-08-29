@@ -1,11 +1,12 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserProfile, SystemSettings } from '../types';
+import { UserProfile, SystemSettings, HabitKey } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
 import { formatPersianDate, daysBetween } from '../utils/dateUtils';
 import { BUSHIDO_CRIMSON_THEME } from '../utils/themeUtils';
 import { soundFX } from '../utils/audioEffects';
 import { ResponsiveSubTabBar, SubTabItem } from './ResponsiveSubTabBar';
+import { BUSHIDO_HABITS_PHILOSOPHY, SUPPORT_CONTACT_CHANNELS } from '../data/moreTabData';
 import { 
   User, 
   Crown, 
@@ -16,20 +17,26 @@ import {
   Check, 
   LogIn, 
   LogOut, 
-  ChevronLeft,
-  Moon,
-  Database,
-  AlertTriangle,
-  CheckCircle2,
-  Settings,
-  UserCheck,
-  Shield,
+  Moon, 
+  Database, 
+  AlertTriangle, 
+  CheckCircle2, 
+  Menu, 
+  Sun, 
+  Dumbbell, 
+  BookOpen, 
+  PenTool, 
+  Briefcase, 
+  Send, 
+  Radio, 
+  Mail, 
+  Headphones, 
+  Info, 
+  ExternalLink, 
+  BookMarked,
   Clock,
-  KeyRound,
-  FileSpreadsheet,
   ChevronDown,
-  ChevronUp,
-  HelpCircle
+  ChevronUp
 } from 'lucide-react';
 
 interface ProfileSettingsViewProps {
@@ -47,7 +54,15 @@ interface ProfileSettingsViewProps {
   onNavigateToAdmin: () => void;
 }
 
-type SettingsSection = 'account' | 'discipline' | 'vault';
+type SettingsSection = 'account' | 'settings' | 'habits' | 'support';
+
+const HABIT_ICONS_MAP: Record<HabitKey, React.ReactNode> = {
+  wakeUp: <Sun className="w-5 h-5" />,
+  workout: <Dumbbell className="w-5 h-5" />,
+  study: <BookOpen className="w-5 h-5" />,
+  journal: <PenTool className="w-5 h-5" />,
+  hardTask: <Briefcase className="w-5 h-5" />
+};
 
 export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   userProfile,
@@ -63,18 +78,18 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   onExportData,
   onNavigateToAdmin
 }) => {
-  // Active Section for Progressive Disclosure (reduces cognitive load & mobile viewport scrolling)
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
   const [navDirection, setNavDirection] = useState<number>(0);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
   const [isConfirmResetOpen, setIsConfirmResetOpen] = useState(false);
+  const [expandedHabitKey, setExpandedHabitKey] = useState<HabitKey | null>('wakeUp');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const themeConfig = BUSHIDO_CRIMSON_THEME;
   const currentCutoff = userProfile.nightOwlCutoffHour ?? settings.nightOwlCutoffHour ?? 4;
 
-  const SECTIONS_LIST: SettingsSection[] = ['account', 'discipline', 'vault'];
+  const SECTIONS_LIST: SettingsSection[] = ['account', 'settings', 'habits', 'support'];
 
   const switchSection = (newSec: SettingsSection) => {
     const currIdx = SECTIONS_LIST.indexOf(activeSection);
@@ -85,7 +100,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     }
   };
 
-  // Touch swipe gesture handlers for switching sections effortlessly across entire view
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -116,17 +130,20 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.8) {
       const currIdx = SECTIONS_LIST.indexOf(activeSection);
       if (deltaX < 0) {
-        // Swipe Left in RTL -> Next section
         if (currIdx < SECTIONS_LIST.length - 1) {
           switchSection(SECTIONS_LIST[currIdx + 1]);
         }
       } else {
-        // Swipe Right in RTL -> Prev section
         if (currIdx > 0) {
           switchSection(SECTIONS_LIST[currIdx - 1]);
         }
       }
     }
+  };
+
+  const showNotice = (msg: string) => {
+    setSaveSuccessMsg(msg);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
   };
 
   const handleSelectCutoffHour = (hour: number) => {
@@ -136,13 +153,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     onUpdateUserProfile(updatedProfile);
     onUpdateSettings(updatedSettings);
     showNotice(`مهلت پایانی شبانه روی ساعت ${toPersianDigits(hour)}:۰۰ بامداد تنظیم شد.`);
-  };
-
-  const showNotice = (msg: string) => {
-    setSaveSuccessMsg(msg);
-    setTimeout(() => {
-      setSaveSuccessMsg(null);
-    }, 4000);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,7 +175,6 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
 
   const isLoggedIn = !!userProfile.id && userProfile.id !== 'guest' && !!(userProfile.phoneNumber || userProfile.email);
 
-  // Calculate remaining VIP days
   let vipDaysRemaining = 0;
   if (userProfile.isVip && userProfile.vipExpiresAt) {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -182,9 +191,10 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   ];
 
   const SECTIONS_CONFIG: SubTabItem<SettingsSection>[] = [
-    { id: 'account', label: 'حساب و اشتراک', shortLabel: 'حساب و VIP', icon: User, activeColor: 'text-amber-400' },
-    { id: 'discipline', label: 'ساعت کات‌آف شبانه', shortLabel: 'کات‌آف شب', icon: Clock, activeColor: 'text-rose-400' },
-    { id: 'vault', label: 'پایگاه داده و پشتیبان', shortLabel: 'پشتیبان داده', icon: Database, activeColor: 'text-emerald-400' },
+    { id: 'account', label: 'حساب و اشتراک', shortLabel: 'حساب', icon: User, activeColor: 'text-amber-400' },
+    { id: 'settings', label: 'تنظیمات و پایگاه داده', shortLabel: 'تنظیمات', icon: Moon, activeColor: 'text-rose-400' },
+    { id: 'habits', label: 'فلسفه و راهنمای عادات', shortLabel: 'راهنما', icon: BookMarked, activeColor: 'text-blue-400' },
+    { id: 'support', label: 'ارتباط با پشتیبانی', shortLabel: 'پشتیبانی', icon: Headphones, activeColor: 'text-purple-400' },
   ];
 
   return (
@@ -209,14 +219,14 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             <div 
               className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shadow-md shrink-0 select-none pointer-events-none"
             >
-              <Settings className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-200" />
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-zinc-200" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-base sm:text-lg font-black text-zinc-100 truncate">
-                حساب کاربری و تنظیمات
+              <h1 className="text-base sm:text-lg font-black text-zinc-100">
+                مرکز تنظیمات و خدمات سامورایی
               </h1>
-              <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 truncate">
-                مدیریت اشتراک سامورایی، مهلت شبانه و امنیت داده‌ها
+              <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                مدیریت حساب، اشتراک VIP، راهنمای عادات، پشتیبانی و پایگاه داده
               </p>
             </div>
           </div>
@@ -235,7 +245,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
         </div>
       </div>
 
-      {/* Progressive Disclosure: Segmented Categorization Bar (Standard Ergonomic Component) */}
+      {/* Progressive Disclosure: Segmented Categorization Bar */}
       <ResponsiveSubTabBar<SettingsSection>
         tabs={SECTIONS_CONFIG}
         activeTab={activeSection}
@@ -250,52 +260,65 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-          className="space-y-4 w-full max-w-full"
+          transition={{ duration: 0.16, ease: 'easeOut' }}
+          className="space-y-4"
         >
-          {/* Section 1: Account & VIP Identity */}
+          {/* Section 1: Account & VIP Membership */}
           {activeSection === 'account' && (
             <div className="space-y-4">
-              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 relative overflow-hidden shadow-xl space-y-5">
-                {/* User Identity Row */}
-                <div className="flex items-start justify-between gap-3 relative z-10">
-                  <div className="flex items-center gap-3.5 min-w-0">
-                    <div className="w-12 h-12 rounded-2xl bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-zinc-200 text-lg font-black shadow-inner shrink-0">
-                      {userProfile.name ? userProfile.name.charAt(0) : '武'}
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="text-base sm:text-lg font-black text-zinc-100 flex items-center gap-2 truncate">
-                        <span className="truncate">{userProfile.name || 'جنگجوی بوشیدو'}</span>
-                        {userProfile.isAdmin && (
-                          <span className="bg-red-500/20 border border-red-500/40 text-red-400 text-[10px] px-2 py-0.5 rounded-md font-bold whitespace-nowrap shrink-0">
-                            مدیر
-                          </span>
-                        )}
-                      </h2>
-                      <p className="text-xs text-zinc-400 font-mono mt-0.5 truncate">
-                        {userProfile.phoneNumber 
-                          ? toPersianDigits(userProfile.phoneNumber) 
-                          : userProfile.email || 'حساب کاربری محلی (مهمان)'}
-                      </p>
-                    </div>
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                    <User className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
+                      پروفایل و اشتراک سامورایی
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                      مشخصات هویتی و وضعیت فعال بودن قابلیت‌های ویژه
+                    </p>
                   </div>
                 </div>
 
-                {/* VIP & Access Status Details */}
-                <div className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 space-y-3 relative z-10">
+                {/* Identity Card */}
+                <div className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-zinc-400">سطح دسترسی:</span>
+                    <span className="text-zinc-400">نام / شناسه کاربری:</span>
                     <span className="font-bold text-zinc-200">
-                      {userProfile.isVip ? 'سامورایی ویژه VIP (دسترسی کامل)' : 'رونین (طرح استاندارد)'}
+                      {userProfile.displayName || 'سامورایی بوشیدو'}
                     </span>
                   </div>
 
-                  {userProfile.isVip && userProfile.vipExpiresAt && (
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
+                    <span className="text-zinc-400">شماره موبایل / ایمیل:</span>
+                    <span className="font-mono text-zinc-300 font-bold" dir="ltr">
+                      {userProfile.phoneNumber || userProfile.email || 'حساب کاربری مهمان (لوکال)'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
+                    <span className="text-zinc-400">سطح دسترسی سامانه:</span>
+                    <span className={`font-bold flex items-center gap-1.5 ${
+                      userProfile.isVip ? 'text-amber-400' : 'text-zinc-400'
+                    }`}>
+                      {userProfile.isVip ? (
+                        <>
+                          <Crown className="w-3.5 h-3.5" />
+                          <span>اشتراک سامورایی ویژه (VIP)</span>
+                        </>
+                      ) : (
+                        <span>طرح استاندارد (پایه)</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {userProfile.isVip && (
                     <>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-400">پایان اشتراک:</span>
-                        <span className="font-bold text-amber-300">
-                          {formatPersianDate(userProfile.vipExpiresAt.split('T')[0])}
+                      <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
+                        <span className="text-zinc-400">تاریخ انقضای اشتراک:</span>
+                        <span className="font-mono text-zinc-300">
+                          {userProfile.vipExpiresAt ? formatPersianDate(userProfile.vipExpiresAt.split('T')[0]) : 'نامحدود'}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-xs pt-2 border-t border-zinc-800">
@@ -383,9 +406,10 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             </div>
           )}
 
-          {/* Section 2: Discipline & Nightly Cutoff Hour */}
-          {activeSection === 'discipline' && (
+          {/* Section 2: System Settings & Database Vault (Unified) */}
+          {activeSection === 'settings' && (
             <div className="space-y-4">
+              {/* Part A: Cutoff Hour */}
               <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
@@ -395,7 +419,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
                       مهلت پایانی شبانه (مرز کات‌آف)
                     </h3>
-                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
                       ثبت عادات تا پیش از این ساعت، برای روز قبل لحاظ می‌شود
                     </p>
                   </div>
@@ -426,22 +450,18 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   })}
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* Section 3: Data Vault & Safe Backup */}
-          {activeSection === 'vault' && (
-            <div className="space-y-4">
+              {/* Part B: Backup & Database Vault */}
               <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
                 <div className="flex items-center gap-3.5">
                   <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
-                    <Database className="w-5 h-5 text-amber-400" />
+                    <Database className="w-5 h-5 text-emerald-400" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm sm:text-base font-bold text-zinc-100">
                       پشتیبان‌گیری و پایگاه داده
                     </h3>
-                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5">
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
                       خروجی گرفتن، بازیابی فایل یا بازنشانی داده‌های سامانه
                     </p>
                   </div>
@@ -491,7 +511,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   </label>
                 </div>
 
-                {/* Collapsible Danger Zone: Reset Data */}
+                {/* Danger Zone: Reset Data */}
                 <div className="pt-2">
                   <div className="bg-red-950/15 border border-red-500/30 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start sm:items-center gap-3">
@@ -519,6 +539,182 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                       <span>بازنشانی به وضعیت اولیه</span>
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 3: Habit Philosophies & Guidelines */}
+          {activeSection === 'habits' && (
+            <div className="space-y-4">
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                    <BookMarked className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
+                      فلسفه و استانداردهای ۵ پایه انضباطی
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                      راهنمای دقیق منظور سیستم از هر عادت، دام‌های رایج و تاکتیک‌های پیروزی
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-[#18181b] p-3.5 rounded-2xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed text-right">
+                  ۵ پایه بوشیدو بر اساس روانشناسی رفتار و ایجاد مقاومت ذهنی طراحی شده‌اند. برای مشاهده جزئیات هر عادت، روی آن ضربه بزنید:
+                </div>
+
+                {/* Habit Cards Accordion */}
+                <div className="space-y-2.5 pt-1">
+                  {BUSHIDO_HABITS_PHILOSOPHY.map(item => {
+                    const isExpanded = expandedHabitKey === item.key;
+                    return (
+                      <div
+                        key={item.key}
+                        className="bg-[#18181b] border border-zinc-800 rounded-2xl overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedHabitKey(isExpanded ? null : item.key);
+                          }}
+                          className="w-full p-4 flex items-center justify-between gap-3 text-right hover:bg-zinc-800/40 transition cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border ${
+                              item.color === 'amber'
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : item.color === 'emerald'
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : item.color === 'blue'
+                                ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
+                                : item.color === 'violet'
+                                ? 'bg-purple-500/10 border-purple-500/30 text-purple-400'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            }`}>
+                              {HABIT_ICONS_MAP[item.key]}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="text-xs sm:text-sm font-bold text-zinc-100">
+                                {item.titleFa}
+                              </h4>
+                              <p className="text-[11px] text-zinc-400 leading-relaxed">
+                                {item.subtitleFa}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-zinc-500">
+                            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-1 space-y-3 text-xs border-t border-zinc-800/70">
+                            <div className="bg-[#121215] p-3 rounded-xl border border-zinc-800/80 space-y-1">
+                              <span className="font-bold text-amber-400 text-[11px] block">چرا حیاتی است؟</span>
+                              <p className="text-zinc-300 leading-relaxed text-right">{item.whyItMatters}</p>
+                            </div>
+
+                            <div className="bg-[#121215] p-3 rounded-xl border border-zinc-800/80 space-y-1">
+                              <span className="font-bold text-emerald-400 text-[11px] block">معیار استاندارد اجرا:</span>
+                              <p className="text-zinc-300 leading-relaxed text-right">{item.dailyStandard}</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              <div className="bg-[#121215] p-3 rounded-xl border border-zinc-800/80 space-y-1">
+                                <span className="font-bold text-rose-400 text-[11px] block">دام‌های رایج:</span>
+                                <p className="text-zinc-400 leading-relaxed text-right">{item.commonPitfalls}</p>
+                              </div>
+
+                              <div className="bg-[#121215] p-3 rounded-xl border border-zinc-800/80 space-y-1">
+                                <span className="font-bold text-blue-400 text-[11px] block">تاکتیک و راهکار:</span>
+                                <p className="text-zinc-300 leading-relaxed text-right">{item.tacticalAdvice}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 4: Support & Contact Channels */}
+          {activeSection === 'support' && (
+            <div className="space-y-4">
+              <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-200 shrink-0 shadow-inner">
+                    <Headphones className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm sm:text-base font-bold text-zinc-100">
+                      ارتباط با پشتیبانی و جامعه بوشیدو
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                      دریافت راهنمایی، گزارش مشکلات یا ارتباط مستقیم با تیم توسعه
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {SUPPORT_CONTACT_CHANNELS.map(ch => (
+                    <div
+                      key={ch.channel}
+                      className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-md">
+                            {ch.channel}
+                          </span>
+                          <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-300">
+                            {ch.iconName === 'Send' && <Send className="w-3.5 h-3.5 text-blue-400" />}
+                            {ch.iconName === 'Radio' && <Radio className="w-3.5 h-3.5 text-rose-400" />}
+                            {ch.iconName === 'Mail' && <Mail className="w-3.5 h-3.5 text-amber-400" />}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-bold text-zinc-100">
+                            {ch.title}
+                          </h4>
+                          <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed text-right">
+                            {ch.description}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-zinc-800 space-y-2">
+                        <div className="text-xs font-mono font-bold text-zinc-300 text-left" dir="ltr">
+                          {ch.value}
+                        </div>
+                        {ch.link && (
+                          <a
+                            href={ch.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>{ch.actionLabel}</span>
+                            <ExternalLink className="w-3 h-3 text-zinc-400" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-[#18181b] p-4 rounded-2xl border border-zinc-800 flex items-start gap-3">
+                  <Info className="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-zinc-400 leading-relaxed text-right">
+                    زمان پاسخ‌گویی پشتیبانی معمولاً در کمتر از ۲ ساعت کاری است. همچنین می‌توانید با ذخیره خروجی پشتیبان، داده‌های خود را همیشه در امان نگه دارید.
+                  </p>
                 </div>
               </div>
             </div>

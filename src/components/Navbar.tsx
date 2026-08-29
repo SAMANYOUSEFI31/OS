@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
 import { THEME_PALETTES } from '../utils/themeUtils';
 import { haptics } from '../utils/haptics';
+import { soundFX } from '../utils/audioEffects';
 import { 
   Swords, 
   LayoutDashboard, 
   Archive, 
-  Settings, 
+  Menu, 
   Flame, 
   AlertTriangle, 
   ChevronDown,
   Crown,
-  ShieldCheck
+  ShieldCheck,
+  Plus,
+  Trash2
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -28,6 +31,8 @@ interface NavbarProps {
   onOpenPaymentModal: () => void;
   onOpenAuthModal: () => void;
   onOpenDebtAutopsy?: () => void;
+  onOpenNewCycleModal?: () => void;
+  onDeleteCycle?: (cycleId: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -41,15 +46,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   userProfile,
   onOpenPaymentModal,
   onOpenAuthModal,
-  onOpenDebtAutopsy
+  onOpenDebtAutopsy,
+  onOpenNewCycleModal,
+  onDeleteCycle
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
+  const [confirmDeleteCycleId, setConfirmDeleteCycleId] = useState<string | null>(null);
 
+  // 3 Primary Canonical Tabs for Maximum Touch Ergonomics & Clean Hierarchy
   const mainTabs = [
     { id: 'battlefield', label: 'میدان نبرد', icon: Swords },
     { id: 'dashboard', label: 'اتاق فرماندهی', icon: LayoutDashboard },
-    { id: 'archives', label: 'بایگانی و کارنامه', icon: Archive },
-    { id: 'profile', label: 'حساب و تنظیمات', icon: Settings },
+    { id: 'profile', label: 'بیشتر', icon: Menu },
   ];
 
   const currentTheme = userProfile.accentTheme || settings.accentTheme || 'amber';
@@ -65,6 +73,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   const cycleTitleDisplay = currentCycle 
     ? (currentCycle.title.split('—')[0] || currentCycle.title)
     : 'تعریف چرخه نبرد';
+
+  const handleDeleteCycleClick = (e: React.MouseEvent, cycleId: string) => {
+    e.stopPropagation();
+    if (confirmDeleteCycleId === cycleId) {
+      soundFX.playSlash();
+      if (onDeleteCycle) {
+        onDeleteCycle(cycleId);
+      }
+      setConfirmDeleteCycleId(null);
+    } else {
+      setConfirmDeleteCycleId(cycleId);
+    }
+  };
 
   return (
     <>
@@ -113,11 +134,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <>
                     <div 
                       className="fixed inset-0 z-40" 
-                      onClick={() => setIsCycleDropdownOpen(false)}
+                      onClick={() => {
+                        setIsCycleDropdownOpen(false);
+                        setConfirmDeleteCycleId(null);
+                      }}
                     />
-                    <div className="absolute right-0 mt-2 w-72 bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                       <div className="px-3 py-1.5 text-[10px] text-zinc-400 font-bold border-b border-zinc-800 flex items-center justify-between">
-                        <span>انتخاب چرخه ۹۰ روزه:</span>
+                        <span>انتخاب و مدیریت چرخه‌های ۹۰ روزه:</span>
                         <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>
                       </div>
                       <div className="max-h-60 overflow-y-auto py-1">
@@ -126,40 +150,83 @@ export const Navbar: React.FC<NavbarProps> = ({
                             چرخه‌ای تعریف نشده است.
                           </div>
                         ) : (
-                          cycles.map(c => (
-                            <button
-                              key={c.id}
-                              onClick={() => {
-                                onSelectCycle(c);
-                                setIsCycleDropdownOpen(false);
-                              }}
-                              className={`w-full text-right px-3 py-2.5 text-xs hover:bg-zinc-800 transition flex items-center justify-between cursor-pointer ${
-                                currentCycle && c.id === currentCycle.id ? 'text-emerald-400 font-bold bg-zinc-800/80' : 'text-zinc-300'
-                              }`}
-                            >
-                              <span className="truncate pl-2">{c.title}</span>
-                              {c.isArchived ? (
-                                <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
-                                  بایگانی
-                                </span>
-                              ) : currentCycle && c.id === currentCycle.id ? (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-                              ) : null}
-                            </button>
-                          ))
+                          cycles.map(c => {
+                            const isCurrent = currentCycle && c.id === currentCycle.id;
+                            const isConfirming = confirmDeleteCycleId === c.id;
+
+                            return (
+                              <div
+                                key={c.id}
+                                className={`w-full px-3 py-2 text-xs hover:bg-zinc-800/80 transition flex items-center justify-between gap-2 cursor-pointer border-b border-zinc-850 last:border-0 ${
+                                  isCurrent ? 'text-emerald-400 font-bold bg-zinc-800/50' : 'text-zinc-300'
+                                }`}
+                                onClick={() => {
+                                  onSelectCycle(c);
+                                  setIsCycleDropdownOpen(false);
+                                  setConfirmDeleteCycleId(null);
+                                }}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                  <span className="truncate text-right">{c.title}</span>
+                                  {c.isArchived && (
+                                    <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
+                                      بایگانی
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Delete Action inside Dropdown */}
+                                {onDeleteCycle && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteCycleClick(e, c.id)}
+                                    className={`p-1.5 rounded-lg text-xs transition shrink-0 cursor-pointer flex items-center justify-center ${
+                                      isConfirming 
+                                        ? 'bg-red-500 hover:bg-red-600 text-white font-black px-2 py-1 shadow-md animate-pulse' 
+                                        : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
+                                    }`}
+                                    title={isConfirming ? 'کلیک مجدد برای حذف قطعی' : 'حذف این چرخه'}
+                                  >
+                                    {isConfirming ? (
+                                      <span className="text-[10px] whitespace-nowrap leading-none">تایید حذف؟</span>
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                       
-                      <div className="p-2 border-t border-zinc-800">
+                      <div className="p-2 border-t border-zinc-800 space-y-1.5 bg-[#0e0e11] rounded-b-2xl">
+                        {onOpenNewCycleModal && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCycleDropdownOpen(false);
+                              setConfirmDeleteCycleId(null);
+                              onOpenNewCycleModal();
+                            }}
+                            className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10 active:scale-[0.98]"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>+ تعریف چرخه جدید ۹۰ روزه</span>
+                          </button>
+                        )}
                         <button
+                          type="button"
                           onClick={() => {
                             setIsCycleDropdownOpen(false);
+                            setConfirmDeleteCycleId(null);
                             onSelectTab('archives');
                           }}
-                          className="w-full py-1.5 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="w-full py-1.5 px-3 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Archive className="w-3.5 h-3.5" />
-                          <span>مدیریت و بایگانی چرخه‌ها</span>
+                          <Archive className="w-3.5 h-3.5 text-zinc-400" />
+                          <span>کارنامه و بایگانی چرخه‌ها</span>
                         </button>
                       </div>
                     </div>
@@ -276,12 +343,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar (3 Clean Canonical Tabs) */}
       <nav 
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none"
         dir="rtl"
       >
-        <div className="grid grid-cols-4 max-w-md mx-auto relative h-14 items-center">
+        <div className="grid grid-cols-3 max-w-md mx-auto relative h-14 items-center">
           {mainTabs.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -327,7 +394,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </div>
 
                 <span 
-                  className="h-3.5 text-[10px] tracking-tight mt-0.5 leading-none whitespace-nowrap transition-colors duration-200 flex items-center justify-center"
+                  className="h-3.5 text-[10.5px] tracking-tight mt-0.5 leading-none whitespace-nowrap transition-colors duration-200 flex items-center justify-center"
                   style={{ color: isActive ? themeConfig.colorHex : undefined }}
                 >
                   {tab.label}

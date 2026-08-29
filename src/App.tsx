@@ -267,16 +267,35 @@ export default function App() {
     const remainingCycles = systemState.cycles.filter(c => c.id !== cycleId);
     const remainingLogs = systemState.logs.filter(l => l.cycleId !== cycleId);
 
-    setSystemState(prev => ({
-      ...prev,
-      cycles: prev.cycles.filter(c => c.id !== cycleId),
-      logs: prev.logs.filter(l => l.cycleId !== cycleId)
-    }));
-
-    // 2. Switch active cycle immediately if current was deleted
-    if (activeCycleId === cycleId && remainingCycles.length > 0) {
-      setActiveCycleId(remainingCycles[0].id);
-      setSelectedDate(remainingCycles[0].startDate);
+    if (remainingCycles.length === 0) {
+      // When deleting the only remaining cycle, reset to a pristine default 90-day cycle
+      const freshCycle: Cycle = {
+        id: `cycle-${Date.now()}`,
+        title: 'چرخه اول — فتح انضباط بوشیدو',
+        startDate: getLogicalTodayDate(),
+        targetTheme: 'انضباط و تمرکز بی‌رحمانه',
+        isArchived: false,
+        createdAt: new Date().toISOString()
+      };
+      setSystemState(prev => ({
+        ...prev,
+        cycles: [freshCycle],
+        logs: []
+      }));
+      setActiveCycleId(freshCycle.id);
+      setSelectedDate(freshCycle.startDate);
+      showAppToast('چرخه حذف شد و چرخه جدید آماده نبرد است.', 'info');
+    } else {
+      setSystemState(prev => ({
+        ...prev,
+        cycles: remainingCycles,
+        logs: remainingLogs
+      }));
+      if (activeCycleId === cycleId) {
+        setActiveCycleId(remainingCycles[0].id);
+        setSelectedDate(remainingCycles[0].startDate);
+      }
+      showAppToast('چرخه مورد نظر با موفقیت حذف شد.', 'success');
     }
 
     try {
@@ -291,7 +310,7 @@ export default function App() {
     } catch (e) {
       console.warn('Failed to sync cycle deletion to server:', e);
     }
-  }, [authToken, activeCycleId, systemState.cycles, systemState.logs]);
+  }, [authToken, activeCycleId, systemState.cycles, systemState.logs, showAppToast]);
 
   const handleUpdateUserProfile = useCallback(async (updatedProfile: UserProfile) => {
     setSystemState(prev => ({
@@ -576,6 +595,8 @@ export default function App() {
         userProfile={systemState.userProfile}
         onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onOpenNewCycleModal={() => setIsCreateCycleModalOpen(true)}
+        onDeleteCycle={handleDeleteCycle}
         onOpenDebtAutopsy={() => {
           // Find first unresolved debt log
           const firstDebt = systemState.logs.find(l => {
