@@ -212,7 +212,7 @@ export async function adminCreateTestUser(data: {
 }): Promise<DBUser> {
   const identifier = data.email || data.phoneNumber || data.identifier || '';
   const isEmail = identifier.includes('@');
-  
+
   const user = await createUser({
     name: data.name,
     email: data.email || (isEmail ? identifier : undefined),
