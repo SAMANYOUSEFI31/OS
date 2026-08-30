@@ -203,16 +203,22 @@ export async function adminUpdateUser(
 
 export async function adminCreateTestUser(data: {
   name: string;
-  identifier: string;
+  email?: string;
+  phoneNumber?: string;
+  identifier?: string;
   isVip?: boolean;
   tier?: string;
+  isAdmin?: boolean;
 }): Promise<DBUser> {
-  const isEmail = data.identifier.includes('@');
+  const identifier = data.email || data.phoneNumber || data.identifier || '';
+  const isEmail = identifier.includes('@');
+  
   const user = await createUser({
     name: data.name,
-    email: isEmail ? data.identifier : undefined,
-    phoneNumber: !isEmail ? data.identifier : undefined,
+    email: data.email || (isEmail ? identifier : undefined),
+    phoneNumber: data.phoneNumber || (!isEmail && identifier ? identifier : undefined),
     isVip: data.isVip,
+    isAdmin: data.isAdmin,
     tier: data.tier || (data.isVip ? 'vip_samurai' : 'free')
   });
 
