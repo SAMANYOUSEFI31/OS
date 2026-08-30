@@ -614,7 +614,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0 flex flex-col">
         <AnimatePresence mode="wait">
             {activeTab === 'battlefield' && (
               <motion.div
@@ -623,6 +623,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="flex-1 flex flex-col w-full min-h-full"
               >
                 <BattlefieldView
                   currentCycle={currentCycle}
@@ -647,6 +648,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="flex-1 flex flex-col w-full min-h-full"
               >
                 <CycleDashboardView
                   currentCycle={currentCycle}
@@ -674,6 +676,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="flex-1 flex flex-col w-full min-h-full"
               >
                 <ArchivesView
                   cycles={systemState.cycles}
@@ -700,6 +703,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="flex-1 flex flex-col w-full min-h-full"
               >
                 <ProfileSettingsView
                   userProfile={systemState.userProfile}

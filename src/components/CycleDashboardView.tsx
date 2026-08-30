@@ -182,7 +182,7 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
 
   return (
     <div 
-      className="space-y-6 sm:space-y-8 max-w-6xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
+      className="space-y-6 sm:space-y-8 max-w-6xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex-1 w-full min-h-full flex flex-col justify-start" 
       dir="rtl"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}

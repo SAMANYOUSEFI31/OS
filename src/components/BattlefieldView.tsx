@@ -318,7 +318,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
   return (
     <div 
-      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
+      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex-1 w-full min-h-full flex flex-col justify-start" 
       dir="rtl"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -668,7 +668,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
           <div className="space-y-2.5 sm:space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 px-1">
               <h3 className="font-bold text-xs sm:text-sm text-zinc-200 flex items-center gap-2">
-                <Swords className="w-4 h-4 text-emerald-400 shrink-0" />
+                <Swords className="w-4 h-4 text-zinc-300 shrink-0" />
                 <span>۵ رکن تعهد فونداسیون</span>
               </h3>
               <span className="text-[11px] sm:text-xs text-zinc-300 font-mono whitespace-nowrap bg-[#18181b] px-2 py-0.5 rounded-lg border border-zinc-800">

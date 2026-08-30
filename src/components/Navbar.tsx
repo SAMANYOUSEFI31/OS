@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
@@ -67,6 +67,56 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (tabId !== activeTab) {
       haptics.lightTap();
       onSelectTab(tabId);
+    }
+  };
+
+  // Mobile Bottom Bar Horizontal Swipe Handler (Ergonomic 1-hand swipe between primary tabs)
+  const bottomNavTouchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  const handleBottomNavTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (touch) {
+      bottomNavTouchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+    }
+  };
+
+  const handleBottomNavTouchEnd = (e: React.TouchEvent) => {
+    if (!bottomNavTouchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const deltaX = touch.clientX - bottomNavTouchStartRef.current.x;
+    const deltaY = touch.clientY - bottomNavTouchStartRef.current.y;
+    const elapsed = Date.now() - bottomNavTouchStartRef.current.time;
+    bottomNavTouchStartRef.current = null;
+
+    // Strict intentional threshold for bottom bar swipe:
+    // 1. Vector slope: deltaX dominates deltaY (slope > 1.3)
+    // 2. Clear movement >= 35px or quick flick >= 25px within 250ms
+    const isQuickFlick = elapsed < 250 && Math.abs(deltaX) >= 25;
+    const isStandardSwipe = Math.abs(deltaX) >= 35;
+
+    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+      const tabOrder = ['battlefield', 'dashboard', 'profile'];
+      const currentCanonicalTab = 
+        activeTab === 'cycle' ? 'dashboard' :
+        (activeTab === 'settings' || activeTab === 'habits' || activeTab === 'support') ? 'profile' :
+        (activeTab === 'court' || activeTab === 'database') ? 'dashboard' :
+        activeTab;
+
+      const currentIndex = tabOrder.indexOf(currentCanonicalTab);
+      if (currentIndex !== -1) {
+        if (deltaX < 0) {
+          // Swipe Left -> Next Tab in RTL (battlefield -> dashboard -> profile)
+          if (currentIndex < tabOrder.length - 1) {
+            handleTabClick(tabOrder[currentIndex + 1]);
+          }
+        } else {
+          // Swipe Right -> Prev Tab in RTL (profile -> dashboard -> battlefield)
+          if (currentIndex > 0) {
+            handleTabClick(tabOrder[currentIndex - 1]);
+          }
+        }
+      }
     }
   };
 
@@ -308,7 +358,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* Pure Streak Flame */}
               <div 
-                className="h-8 sm:h-9 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 sm:px-2.5 rounded-xl inline-flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shrink-0"
+                className="h-8 sm:h-9 bg-rose-500/10 border border-rose-500/20 text-rose-400 px-2 sm:px-2.5 rounded-xl inline-flex items-center justify-center gap-1 text-[11px] sm:text-xs font-bold shrink-0 cursor-default select-none pointer-events-none"
                 title="تعداد روزهای زنجیره خالص متوالی بدون شکست"
               >
                 <Flame className="w-3.5 h-3.5 shrink-0 fill-current text-rose-400" />
@@ -317,14 +367,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {/* VIP Status Badge */}
               {userProfile.isVip && (
-                <div 
+                <button
+                  type="button"
                   onClick={onOpenPaymentModal}
-                  className="h-8 sm:h-9 bg-amber-500/15 border border-amber-500/30 text-amber-300 px-2 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs shrink-0"
-                  title="حساب سامورایی ویژه فعال است"
+                  className="h-8 sm:h-9 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 hover:border-amber-500/50 text-amber-300 px-2 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs shrink-0 transition active:scale-95"
+                  title="حساب سامورایی ویژه فعال است - کلیک برای مدیریت"
                 >
                   <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="font-mono">VIP</span>
-                </div>
+                </button>
               )}
 
               {/* Admin Panel Quick Access Button */}
@@ -347,10 +398,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       </header>
 
-      {/* Mobile Bottom Navigation Bar (3 Clean Canonical Tabs) */}
+      {/* Mobile Bottom Navigation Bar (3 Clean Canonical Tabs with Swipe Support) */}
       <nav 
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090b]/95 border-t border-zinc-800/90 crisp-blur px-2 py-1 pb-safe select-none touch-pan-x"
         dir="rtl"
+        onTouchStart={handleBottomNavTouchStart}
+        onTouchEnd={handleBottomNavTouchEnd}
       >
         <div className="grid grid-cols-3 max-w-md mx-auto relative h-14 items-center">
           {mainTabs.map(tab => {

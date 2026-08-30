@@ -36,7 +36,6 @@ export function ResponsiveSubTabBar<T extends string = string>({
 }: ResponsiveSubTabBarProps<T>) {
   return (
     <div
-      data-no-swipe="true"
       className={`w-full max-w-full bg-[#121215] border border-zinc-800 p-1 sm:p-1.5 rounded-2xl flex items-center shadow-lg select-none relative ${className}`}
     >
       <div 
@@ -46,6 +45,7 @@ export function ResponsiveSubTabBar<T extends string = string>({
         {tabs.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
+          const activeIconColor = tab.activeColor || 'text-amber-400';
 
           return (
             <button
@@ -62,7 +62,7 @@ export function ResponsiveSubTabBar<T extends string = string>({
                 <motion.div
                   layoutId={layoutId}
                   layout="position"
-                  className="absolute inset-0 rounded-xl bg-zinc-800 border border-zinc-700 shadow-sm -z-10 pointer-events-none"
+                  className="absolute inset-0 rounded-xl bg-zinc-800/90 border border-zinc-700 shadow-sm -z-10 pointer-events-none"
                   transition={{ type: 'spring', stiffness: 500, damping: 38 }}
                 />
               )}

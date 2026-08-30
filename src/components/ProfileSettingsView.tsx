@@ -203,7 +203,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     <div 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6 touch-pan-y min-h-[calc(100dvh-9rem)] flex flex-col justify-start" 
+      className="space-y-5 sm:space-y-6 animate-in fade-in duration-200 select-none pb-6 touch-pan-y min-h-[calc(100dvh-9rem)] flex-1 w-full min-h-full flex flex-col justify-start" 
       dir="rtl"
     >
       {/* Toast Notice */}
@@ -674,26 +674,40 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                       key={ch.channel}
                       className="bg-[#18181b] border border-zinc-800 rounded-2xl p-4 flex flex-col justify-between space-y-3"
                     >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded-md">
+                      <div className="space-y-2.5">
+                        {/* RTL Header: Right=Brand Icon + Title, Left=Channel Badge */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0">
+                              {ch.iconName === 'Send' && (
+                                <div className="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shadow-xs">
+                                  <Send className="w-4 h-4" />
+                                </div>
+                              )}
+                              {ch.iconName === 'Radio' && (
+                                <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shadow-xs">
+                                  <Radio className="w-4 h-4" />
+                                </div>
+                              )}
+                              {ch.iconName === 'Mail' && (
+                                <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-xs">
+                                  <Mail className="w-4 h-4" />
+                                </div>
+                              )}
+                            </div>
+                            <h4 className="text-xs sm:text-sm font-bold text-zinc-100 truncate">
+                              {ch.title}
+                            </h4>
+                          </div>
+
+                          <span className="text-[10px] font-mono text-zinc-400 bg-zinc-800/90 border border-zinc-700/60 px-2 py-0.5 rounded-md shrink-0 select-none pointer-events-none">
                             {ch.channel}
                           </span>
-                          <div className="w-7 h-7 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-300">
-                            {ch.iconName === 'Send' && <Send className="w-3.5 h-3.5 text-zinc-300" />}
-                            {ch.iconName === 'Radio' && <Radio className="w-3.5 h-3.5 text-zinc-300" />}
-                            {ch.iconName === 'Mail' && <Mail className="w-3.5 h-3.5 text-zinc-300" />}
-                          </div>
                         </div>
 
-                        <div>
-                          <h4 className="text-xs sm:text-sm font-bold text-zinc-100">
-                            {ch.title}
-                          </h4>
-                          <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed text-right">
-                            {ch.description}
-                          </p>
-                        </div>
+                        <p className="text-[11px] text-zinc-400 leading-relaxed text-right">
+                          {ch.description}
+                        </p>
                       </div>
 
                       <div className="pt-2 border-t border-zinc-800 space-y-2">
