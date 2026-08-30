@@ -33,7 +33,7 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
     const dayNumber = idx + 1;
     const dateStr = addDaysToDate(currentCycle.startDate, idx);
     const dayLog = logs.find(l => l.date === dateStr);
-    const computed = dayLog ? computeDailyProperties(dayLog, logs, logicalToday) : null;
+    const computed = dayLog ? computeDailyProperties(dayLog, logs, logicalToday, currentCycle.startDate) : null;
     const isToday = dateStr === logicalToday;
     const isPast = dateStr < logicalToday;
     const isFuture = dateStr > logicalToday;

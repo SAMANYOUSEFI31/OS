@@ -120,14 +120,35 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     };
   }
 
-  const computed = computeDailyProperties(activeLog, logs, logicalToday);
+  const computed = computeDailyProperties(activeLog, logs, logicalToday, currentCycle.startDate);
 
-  // Find all unresolved past days that cause system lock (strictly before today)
-  const unresolvedPastLogs = logs.filter(l => {
-    if (l.date >= logicalToday) return false;
-    const c = computeDailyProperties(l, logs, logicalToday);
-    return c.statusType === 'burned_unresolved';
-  });
+  // Find all unresolved past days that cause system lock (strictly before today) across the full timeline from cycle start
+  const unresolvedPastLogs: DailyLog[] = [];
+  if (currentCycle.startDate && currentCycle.startDate < logicalToday) {
+    let checkDate = currentCycle.startDate;
+    while (checkDate < logicalToday) {
+      let l = logs.find(item => item.date === checkDate);
+      if (!l) {
+        l = {
+          id: `virtual-${checkDate}`,
+          cycleId: currentCycle.id,
+          date: checkDate,
+          createdAt: new Date().toISOString(),
+          wakeUp: false,
+          workout: false,
+          study: false,
+          journal: false,
+          hardTask: false,
+          specialMission: false
+        };
+      }
+      const c = computeDailyProperties(l, logs, logicalToday, currentCycle.startDate);
+      if (c.statusType === 'burned_unresolved') {
+        unresolvedPastLogs.push(l);
+      }
+      checkDate = addDaysToDate(checkDate, 1);
+    }
+  }
 
   const isLocked = (unresolvedPastLogs.length > 0 && isToday) || isCycleArchived || isFuture;
 

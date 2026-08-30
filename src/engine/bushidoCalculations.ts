@@ -98,7 +98,8 @@ export function createEmptyCycleMetrics(): CycleMetrics {
 export function computeDailyProperties(
   log: DailyLog, 
   allCycleLogs: DailyLog[], 
-  logicalToday: string = getLogicalTodayDate()
+  logicalToday: string = getLogicalTodayDate(),
+  cycleStartDate?: string
 ): DailyComputed {
   const habitsCount = [
     log.wakeUp,
@@ -127,14 +128,36 @@ export function computeDailyProperties(
   // A day only strictly requires autopsy if it is in the past (< logicalToday) and not standard/frozen
   const needsAutopsy = log.date < logicalToday && !isStandard && statusType === 'burned_unresolved';
 
-  // Check if previous days strictly before this date have unresolved debts
-  const pastUnresolvedCount = allCycleLogs.filter(l => {
-    if (l.date >= log.date || l.date >= logicalToday) return false;
-    const lCount = [l.wakeUp, l.workout, l.study, l.journal, l.hardTask].filter(Boolean).length;
-    const lStandard = lCount === 5;
-    if (lStandard || l.failureReason === 'دلایل شخصی') return false;
-    return !l.failureReason || !l.failureTime;
-  }).length;
+  // Check if previous days strictly before this date (within the cycle) have unresolved debts
+  // Evaluates every calendar day between cycle start and this date/today to ensure absent/missing days are counted
+  let pastUnresolvedCount = 0;
+  if (cycleStartDate && log.date > cycleStartDate) {
+    let checkDate = cycleStartDate;
+    while (checkDate < log.date && checkDate < logicalToday) {
+      const existing = allCycleLogs.find(l => l.date === checkDate);
+      if (!existing) {
+        // Missing past calendar day in cycle is automatically an open unresolved debt
+        pastUnresolvedCount += 1;
+      } else {
+        const lCount = [existing.wakeUp, existing.workout, existing.study, existing.journal, existing.hardTask].filter(Boolean).length;
+        const lStandard = lCount === 5;
+        if (!lStandard && existing.failureReason !== 'دلایل شخصی') {
+          if (!existing.failureReason || !existing.failureTime) {
+            pastUnresolvedCount += 1;
+          }
+        }
+      }
+      checkDate = addDaysToDate(checkDate, 1);
+    }
+  } else {
+    pastUnresolvedCount = allCycleLogs.filter(l => {
+      if (l.date >= log.date || l.date >= logicalToday) return false;
+      const lCount = [l.wakeUp, l.workout, l.study, l.journal, l.hardTask].filter(Boolean).length;
+      const lStandard = lCount === 5;
+      if (lStandard || l.failureReason === 'دلایل شخصی') return false;
+      return !l.failureReason || !l.failureTime;
+    }).length;
+  }
 
   const isLockedDueToPastDebt = log.date === logicalToday && pastUnresolvedCount > 0;
 
@@ -255,11 +278,48 @@ export function computeCycleMetrics(
   }
   const remainingDays = Math.max(0, 90 - elapsedDays);
 
-  // Compute stats for each day log
-  const computedList = cycleLogs.map(l => ({
-    log: l,
-    computed: computeDailyProperties(l, cycleLogs, logicalToday)
-  }));
+  // Build full synthesized timeline up to logicalToday or cycleEndDate
+  // This guarantees absent days (where user didn't log) are accurately recognized as open debts / inactive days
+  const effectiveEnd = logicalToday > cycleEndDate ? cycleEndDate : logicalToday;
+  const synthesizedList: { log: DailyLog; computed: DailyComputed }[] = [];
+  
+  if (status !== 'upcoming') {
+    let curr = cycleStartDate;
+    while (curr <= effectiveEnd) {
+      let existingLog = cycleLogs.find(l => l.date === curr);
+      if (!existingLog) {
+        existingLog = {
+          id: `virtual-${curr}`,
+          cycleId: cycle.id,
+          date: curr,
+          createdAt: new Date().toISOString(),
+          wakeUp: false,
+          workout: false,
+          study: false,
+          journal: false,
+          hardTask: false,
+          specialMission: false
+        };
+      }
+      synthesizedList.push({
+        log: existingLog,
+        computed: computeDailyProperties(existingLog, cycleLogs, logicalToday, cycleStartDate)
+      });
+      curr = addDaysToDate(curr, 1);
+    }
+  }
+
+  // Also include any future logs that might have been created or modified
+  cycleLogs.forEach(l => {
+    if (l.date > effectiveEnd) {
+      synthesizedList.push({
+        log: l,
+        computed: computeDailyProperties(l, cycleLogs, logicalToday, cycleStartDate)
+      });
+    }
+  });
+
+  const computedList = synthesizedList;
 
   const logsCount = cycleLogs.length;
   const standardDaysCount = computedList.filter(c => c.computed.isStandard).length;

@@ -2,13 +2,10 @@ import { toPersianDigits } from './numberUtils';
 
 // Persian Solar Hijri (Jalali) & Gregorian Date utilities
 
-export function getLogicalTodayDate(cutoffHour = 4): string {
-  const now = new Date();
-  // If current hour is between 00:00 and cutoffHour (e.g. 04:00 AM), consider it the previous calendar day
-  const logicalDate = new Date(now.getTime() - cutoffHour * 60 * 60 * 1000);
-  return formatDateISO(logicalDate);
-}
-
+/**
+ * Formats a Date object to YYYY-MM-DD using its LOCAL calendar parts.
+ * Deterministic, no timezone offset skew.
+ */
 export function formatDateISO(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -16,14 +13,39 @@ export function formatDateISO(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Returns the logical battle date string (YYYY-MM-DD).
+ * For night owls: before cutoffHour (e.g. 04:00 AM), it counts as the previous calendar day.
+ * Implemented deterministically using local calendar date arithmetic.
+ */
+export function getLogicalTodayDate(cutoffHour = 4): string {
+  const now = new Date();
+  const currentHour = now.getHours();
+  
+  const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (currentHour < cutoffHour) {
+    targetDate.setDate(targetDate.getDate() - 1);
+  }
+  return formatDateISO(targetDate);
+}
+
+/**
+ * Adds integer days to a YYYY-MM-DD date string deterministically without Timezone DST or UTC jumps.
+ */
 export function addDaysToDate(dateStr: string, days: number): string {
+  if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d));
-  date.setUTCDate(date.getUTCDate() + days);
+  // Using Local Date at noon (12:00:00) prevents any Daylight Saving Time (DST) or midnight skew
+  const date = new Date(y, m - 1, d, 12, 0, 0);
+  date.setDate(date.getDate() + days);
   return formatDateISO(date);
 }
 
+/**
+ * Returns difference in calendar days between two YYYY-MM-DD date strings (dateStr2 - dateStr1).
+ */
 export function daysBetween(dateStr1: string, dateStr2: string): number {
+  if (!dateStr1 || !dateStr2) return 0;
   const [y1, m1, d1] = dateStr1.split('-').map(Number);
   const [y2, m2, d2] = dateStr2.split('-').map(Number);
   const t1 = Date.UTC(y1, m1 - 1, d1);
