@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DailyLog, Cycle, CycleMetrics } from '../types';
 import { FOUNDATION_HABITS } from '../engine/bushidoCalculations';
 import { toPersianDigits } from '../utils/numberUtils';
@@ -10,7 +10,6 @@ import {
   Briefcase, 
   Rocket, 
   ShieldCheck, 
-  AlertTriangle, 
   Layers, 
   CheckCircle2 
 } from 'lucide-react';
@@ -21,17 +20,66 @@ interface HabitFidelityMatrixProps {
   logs: DailyLog[];
 }
 
-export const HabitFidelityMatrix: React.FC<HabitFidelityMatrixProps> = ({
+const HabitFidelityMatrixComponent: React.FC<HabitFidelityMatrixProps> = ({
   currentCycle,
   metrics,
   logs
 }) => {
-  const cycleLogs = logs.filter(
-    l => l.cycleId === currentCycle.id || (l.date >= currentCycle.startDate && l.date <= currentCycle.endDate)
-  );
+  const {
+    habitStats,
+    specialMissionRate,
+    specialMissionCount,
+    activeBase,
+    averageFidelity
+  } = useMemo(() => {
+    const cycleLogs = logs.filter(
+      l => l.cycleId === currentCycle.id || (l.date >= currentCycle.startDate && l.date <= currentCycle.endDate)
+    );
 
-  const totalLogs = cycleLogs.length;
-  const activeBase = Math.max(1, totalLogs - metrics.frozenDaysCount);
+    const totalLogs = cycleLogs.length;
+    const base = Math.max(1, totalLogs - (metrics.frozenDaysCount || 0));
+
+    // Calculate statistics for all 5 foundation habits
+    const stats = FOUNDATION_HABITS.map(h => {
+      const successCount = cycleLogs.filter(l => l[h.key]).length;
+      const ratePct = totalLogs > 0 ? Math.round((successCount / base) * 100) : 0;
+      
+      let tierLabel = 'آهنین و پایدار';
+      let tierColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+      let barColor = 'bg-emerald-500';
+
+      if (ratePct < 70) {
+        tierLabel = 'آسیب‌پذیر (اصطکاک)';
+        tierColor = 'text-red-400 bg-red-500/10 border-red-500/20';
+        barColor = 'bg-red-500';
+      } else if (ratePct < 85) {
+        tierLabel = 'استاندارد و مطلوب';
+        tierColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+        barColor = 'bg-amber-400';
+      }
+
+      return {
+        ...h,
+        successCount,
+        ratePct,
+        tierLabel,
+        tierColor,
+        barColor
+      };
+    });
+
+    const missionCount = cycleLogs.filter(l => l.specialMission).length;
+    const missionRate = totalLogs > 0 ? Math.round((missionCount / totalLogs) * 100) : 0;
+    const avgFidelity = totalLogs > 0 ? Math.round(stats.reduce((acc, h) => acc + h.ratePct, 0) / stats.length) : 0;
+
+    return {
+      habitStats: stats,
+      specialMissionRate: missionRate,
+      specialMissionCount: missionCount,
+      activeBase: base,
+      averageFidelity: avgFidelity
+    };
+  }, [logs, currentCycle.id, currentCycle.startDate, currentCycle.endDate, metrics.frozenDaysCount]);
 
   // Icon mapping for each habit key
   const getIcon = (iconName: string, colorClass: string) => {
@@ -45,39 +93,6 @@ export const HabitFidelityMatrix: React.FC<HabitFidelityMatrixProps> = ({
       default: return <CheckCircle2 {...props} />;
     }
   };
-
-  // Calculate statistics for all 5 foundation habits
-  const habitStats = FOUNDATION_HABITS.map(h => {
-    const successCount = cycleLogs.filter(l => l[h.key]).length;
-    const ratePct = totalLogs > 0 ? Math.round((successCount / activeBase) * 100) : 0;
-    
-    let tierLabel = 'آهنین و پایدار';
-    let tierColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
-    let barColor = 'bg-emerald-500';
-
-    if (ratePct < 70) {
-      tierLabel = 'آسیب‌پذیر (اصطکاک)';
-      tierColor = 'text-red-400 bg-red-500/10 border-red-500/20';
-      barColor = 'bg-red-500';
-    } else if (ratePct < 85) {
-      tierLabel = 'استاندارد و مطلوب';
-      tierColor = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
-      barColor = 'bg-amber-400';
-    }
-
-    return {
-      ...h,
-      successCount,
-      ratePct,
-      tierLabel,
-      tierColor,
-      barColor
-    };
-  });
-
-  // Special missions bonus calculation
-  const specialMissionCount = cycleLogs.filter(l => l.specialMission).length;
-  const specialMissionRate = totalLogs > 0 ? Math.round((specialMissionCount / totalLogs) * 100) : 0;
 
   return (
     <div className="bg-[#121215]/90 border border-zinc-800 rounded-3xl p-5 sm:p-7 shadow-xl space-y-6" dir="rtl">
@@ -110,11 +125,7 @@ export const HabitFidelityMatrix: React.FC<HabitFidelityMatrixProps> = ({
           <div className="text-right">
             <span className="text-[10px] text-zinc-400 block font-medium">وفاداری میانگین ارکان</span>
             <span className="text-base font-black text-zinc-100 font-mono leading-tight">
-              {toPersianDigits(
-                totalLogs > 0
-                  ? Math.round(habitStats.reduce((acc, h) => acc + h.ratePct, 0) / habitStats.length)
-                  : 0
-              )}٪
+              {toPersianDigits(averageFidelity)}٪
             </span>
           </div>
         </div>
@@ -212,3 +223,6 @@ export const HabitFidelityMatrix: React.FC<HabitFidelityMatrixProps> = ({
     </div>
   );
 };
+
+export const HabitFidelityMatrix = React.memo(HabitFidelityMatrixComponent);
+

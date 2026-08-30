@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyLog, Cycle, CycleMetrics, HabitKey } from '../types';
 import { FOUNDATION_HABITS, computeDailyProperties } from '../engine/bushidoCalculations';
@@ -103,10 +103,11 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     } catch (e) {}
   };
 
-  // Find or construct the log for selected date
-  let activeLog = logs.find(l => l.date === selectedDate);
-  if (!activeLog) {
-    activeLog = {
+  // Find or construct memoized stable log for selected date
+  const activeLog: DailyLog = useMemo(() => {
+    const found = logs.find(l => l.date === selectedDate);
+    if (found) return found;
+    return {
       id: `log-${selectedDate}`,
       cycleId: currentCycle.id,
       date: selectedDate,
@@ -118,7 +119,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       hardTask: false,
       specialMission: false
     };
-  }
+  }, [logs, selectedDate, currentCycle.id]);
 
   const computed = computeDailyProperties(activeLog, logs, logicalToday, currentCycle.startDate);
 
@@ -235,11 +236,49 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
   const [isSaved, setIsSaved] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sync with selected date changes
+  // Keep latest notes, activeLog, and handler in refs to guarantee zero data-loss on rapid unmount / date switch
+  const latestNotesRef = useRef(notesValue);
+  latestNotesRef.current = notesValue;
+
+  const latestActiveLogRef = useRef(activeLog);
+  latestActiveLogRef.current = activeLog;
+
+  const onUpdateLogRef = useRef(onUpdateLog);
+  onUpdateLogRef.current = onUpdateLog;
+
+  const isCycleArchivedRef = useRef(isCycleArchived);
+  isCycleArchivedRef.current = isCycleArchived;
+
+  const isFutureRef = useRef(isFuture);
+  isFutureRef.current = isFuture;
+
+  // Flush any pending note changes immediately
+  const flushPendingNotes = useCallback(() => {
+    const currentActiveLog = latestActiveLogRef.current;
+    if (!currentActiveLog || isCycleArchivedRef.current || isFutureRef.current) return;
+    const currentVal = latestNotesRef.current;
+    if (currentVal !== (currentActiveLog.notes || '')) {
+      const updated: DailyLog = {
+        ...currentActiveLog,
+        notes: currentVal
+      };
+      onUpdateLogRef.current(updated);
+      setIsSaved(true);
+    }
+  }, []);
+
+  // Sync with selected date changes while flushing any unsaved pending edits from the previous date
+  const lastSyncDateRef = useRef(selectedDate);
   useEffect(() => {
-    setNotesValue(activeLog?.notes || '');
-    setIsSaved(true);
-  }, [selectedDate, activeLog?.notes]);
+    if (lastSyncDateRef.current !== selectedDate) {
+      flushPendingNotes();
+      setNotesValue(activeLog?.notes || '');
+      setIsSaved(true);
+      lastSyncDateRef.current = selectedDate;
+    } else if (isSaved && notesValue !== (activeLog?.notes || '')) {
+      setNotesValue(activeLog?.notes || '');
+    }
+  }, [selectedDate, activeLog?.notes, isSaved, flushPendingNotes]);
 
   // Auto-resize textarea height to fit content naturally without awkward drag scroll
   useEffect(() => {
@@ -251,37 +290,34 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
   // Debounced auto-save to global store
   useEffect(() => {
-    if (isCycleArchived || isFuture) return;
-    if (notesValue === (activeLog?.notes || '')) return;
+    if (isCycleArchived || isFuture || isSaved) return;
 
-    setIsSaved(false);
     const timer = setTimeout(() => {
-      const updated: DailyLog = {
-        ...activeLog!,
-        notes: notesValue
-      };
-      onUpdateLog(updated);
-      setIsSaved(true);
-    }, 500);
+      const currentActiveLog = latestActiveLogRef.current;
+      if (currentActiveLog) {
+        const updated: DailyLog = {
+          ...currentActiveLog,
+          notes: notesValue
+        };
+        onUpdateLogRef.current(updated);
+        setIsSaved(true);
+      }
+    }, 450);
 
     return () => clearTimeout(timer);
-  }, [notesValue, isCycleArchived, isFuture, activeLog, onUpdateLog]);
+  }, [notesValue, isSaved, isCycleArchived, isFuture]);
 
   const handleNotesChange = (val: string) => {
     if (isCycleArchived || isFuture) return;
     setNotesValue(val);
+    if (isSaved) {
+      setIsSaved(false);
+    }
   };
 
   const handleNotesBlur = () => {
     if (isCycleArchived || isFuture) return;
-    if (notesValue !== (activeLog?.notes || '')) {
-      const updated: DailyLog = {
-        ...activeLog!,
-        notes: notesValue
-      };
-      onUpdateLog(updated);
-      setIsSaved(true);
-    }
+    flushPendingNotes();
   };
 
   // Track navigation direction for directional slide animation (1: next, -1: prev)

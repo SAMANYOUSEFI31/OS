@@ -1,16 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DailyLog, Cycle, CycleMetrics } from '../types';
 import { addDaysToDate, formatPersianDate, getLogicalTodayDate } from '../utils/dateUtils';
 import { computeDailyProperties } from '../engine/bushidoCalculations';
 import { toPersianDigits } from '../utils/numberUtils';
 import { 
-  Calendar, 
-  CheckCircle2, 
-  Flame, 
-  ShieldCheck, 
-  AlertOctagon,
-  Snowflake,
-  RotateCcw
+  Calendar
 } from 'lucide-react';
 
 interface TacticalHeatmap90Props {
@@ -20,7 +14,7 @@ interface TacticalHeatmap90Props {
   onSelectDate: (date: string) => void;
 }
 
-export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
+const TacticalHeatmap90Component: React.FC<TacticalHeatmap90Props> = ({
   currentCycle,
   metrics,
   logs,
@@ -28,26 +22,82 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
 }) => {
   const logicalToday = getLogicalTodayDate();
 
-  // Generate unified 90 days array
-  const allDays = Array.from({ length: 90 }, (_, idx) => {
-    const dayNumber = idx + 1;
-    const dateStr = addDaysToDate(currentCycle.startDate, idx);
-    const dayLog = logs.find(l => l.date === dateStr);
-    const computed = dayLog ? computeDailyProperties(dayLog, logs, logicalToday, currentCycle.startDate) : null;
-    const isToday = dateStr === logicalToday;
-    const isPast = dateStr < logicalToday;
-    const isFuture = dateStr > logicalToday;
+  // Create O(1) date-indexed lookup map for fast lookups across 90 days
+  const logsByDate = useMemo(() => {
+    const map = new Map<string, DailyLog>();
+    for (let i = 0; i < logs.length; i++) {
+      map.set(logs[i].date, logs[i]);
+    }
+    return map;
+  }, [logs]);
 
-    return {
-      dayNumber,
-      dateStr,
-      dayLog,
-      computed,
-      isToday,
-      isPast,
-      isFuture
-    };
-  });
+  // Generate unified and precomputed 90 days array with static classes
+  const allDays = useMemo(() => {
+    return Array.from({ length: 90 }, (_, idx) => {
+      const dayNumber = idx + 1;
+      const dateStr = addDaysToDate(currentCycle.startDate, idx);
+      const dayLog = logsByDate.get(dateStr);
+      const computed = dayLog ? computeDailyProperties(dayLog, logs, logicalToday, currentCycle.startDate) : null;
+      const isToday = dateStr === logicalToday;
+      const isPast = dateStr < logicalToday;
+      const isFuture = dateStr > logicalToday;
+
+      let bgClass = 'bg-[#121215] text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300';
+      let title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): بدون داده`;
+
+      if (isToday) {
+        if (computed && computed.statusType === 'standard') {
+          if (computed.score === 10) {
+            bgClass = 'bg-gradient-to-br from-amber-400 to-amber-500 text-zinc-950 border-amber-300 font-black shadow-md ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
+            title = `روز ${toPersianDigits(dayNumber)} (امروز): کمال تعهد ۱۰ از ۱۰ (۵ پایه + ماموریت ویژه)`;
+          } else {
+            bgClass = 'bg-emerald-500 text-black border-emerald-400 font-bold shadow-md ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
+            title = `روز ${toPersianDigits(dayNumber)} (امروز): روز استاندارد ۸ از ۱۰ (۵ پایه کامل)`;
+          }
+        } else if (computed && computed.statusType === 'personal_frozen') {
+          bgClass = 'bg-blue-600 text-white border-blue-400 ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
+          title = `روز ${toPersianDigits(dayNumber)} (امروز): توقف اضطراری (فریز)`;
+        } else {
+          // Today in progress (neutral zinc token with amber active battle ring)
+          const habitsDone = computed ? computed.habitsCount : 0;
+          bgClass = 'bg-zinc-800 text-zinc-100 border-zinc-600 ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950 font-black scale-105 z-10 shadow-lg';
+          title = `روز ${toPersianDigits(dayNumber)} (امروز نبرد جاری): در حال اجرا (${toPersianDigits(habitsDone)} از ۵ پایه)`;
+        }
+      } else if (computed) {
+        if (computed.statusType === 'standard') {
+          if (computed.score === 10) {
+            // 10/10 Gold / Amber Mastery Day
+            bgClass = 'bg-gradient-to-br from-amber-400 to-amber-500 text-zinc-950 border-amber-300 font-black shadow-md ring-1 ring-amber-400/40';
+            title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): کمال تعهد ۱۰ از ۱۰ (۵ پایه + ماموریت ویژه)`;
+          } else {
+            // 8/10 Emerald Standard Day
+            bgClass = 'bg-emerald-500 text-black border-emerald-400 font-bold shadow-xs';
+            title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): روز استاندارد ۸ از ۱۰ (۵ پایه کامل)`;
+          }
+        } else if (computed.statusType === 'personal_frozen') {
+          bgClass = 'bg-blue-600 text-white border-blue-400';
+          title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): توقف اضطراری (فریز)`;
+        } else if (computed.statusType === 'burned_unresolved') {
+          bgClass = 'bg-red-600 text-white border-red-400 animate-pulse';
+          title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): نیازمند کالبدشکافی (بدهی باز)`;
+        } else {
+          bgClass = 'bg-purple-600 text-white border-purple-400';
+          title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): پرونده کالبدشکافی بسته شد`;
+        }
+      } else if (isPast) {
+        bgClass = 'bg-red-950/40 text-red-400 border-red-900/60';
+        title = `روز ${toPersianDigits(dayNumber)} (${formatPersianDate(dateStr, { short: true })}): ثبت نشده (غیبت تقویمی)`;
+      }
+
+      return {
+        dayNumber,
+        dateStr,
+        dayNumberPersian: toPersianDigits(dayNumber),
+        bgClass,
+        title
+      };
+    });
+  }, [currentCycle.startDate, logsByDate, logs, logicalToday]);
 
   return (
     <div className="w-full max-w-full bg-[#121215] border border-zinc-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 md:p-7 shadow-xl space-y-4 sm:space-y-5 overflow-hidden" dir="rtl">
@@ -108,68 +158,22 @@ export const TacticalHeatmap90: React.FC<TacticalHeatmap90Props> = ({
       {/* Unified 90-Cell Tactical Grid */}
       <div className="w-full max-w-full bg-[#18181b] border border-zinc-800/90 rounded-xl sm:rounded-2xl p-2 sm:p-3.5 md:p-5 overflow-hidden touch-pan-y">
         <div className="grid grid-cols-6 sm:grid-cols-10 md:grid-cols-15 lg:grid-cols-18 gap-1 sm:gap-1.5 md:gap-2 w-full">
-          {allDays.map(cell => {
-            let bgClass = 'bg-[#121215] text-zinc-500 border-zinc-800 hover:border-zinc-700 hover:text-zinc-300';
-            let title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): بدون داده`;
-
-            if (cell.isToday) {
-              if (cell.computed && cell.computed.statusType === 'standard') {
-                if (cell.computed.score === 10) {
-                  bgClass = 'bg-gradient-to-br from-amber-400 to-amber-500 text-zinc-950 border-amber-300 font-black shadow-md ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
-                  title = `روز ${toPersianDigits(cell.dayNumber)} (امروز): کمال تعهد ۱۰ از ۱۰ (۵ پایه + ماموریت ویژه)`;
-                } else {
-                  bgClass = 'bg-emerald-500 text-black border-emerald-400 font-bold shadow-md ring-2 ring-emerald-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
-                  title = `روز ${toPersianDigits(cell.dayNumber)} (امروز): روز استاندارد ۸ از ۱۰ (۵ پایه کامل)`;
-                }
-              } else if (cell.computed && cell.computed.statusType === 'personal_frozen') {
-                bgClass = 'bg-blue-600 text-white border-blue-400 ring-2 ring-blue-400 ring-offset-2 ring-offset-zinc-950 scale-105 z-10';
-                title = `روز ${toPersianDigits(cell.dayNumber)} (امروز): توقف اضطراری (فریز)`;
-              } else {
-                // Today in progress (neutral zinc token with amber active battle ring)
-                const habitsDone = cell.computed ? cell.computed.habitsCount : 0;
-                bgClass = 'bg-zinc-800 text-zinc-100 border-zinc-600 ring-2 ring-amber-400 ring-offset-2 ring-offset-zinc-950 font-black scale-105 z-10 shadow-lg';
-                title = `روز ${toPersianDigits(cell.dayNumber)} (امروز نبرد جاری): در حال اجرا (${toPersianDigits(habitsDone)} از ۵ پایه)`;
-              }
-            } else if (cell.computed) {
-              if (cell.computed.statusType === 'standard') {
-                if (cell.computed.score === 10) {
-                  // 10/10 Gold / Amber Mastery Day
-                  bgClass = 'bg-gradient-to-br from-amber-400 to-amber-500 text-zinc-950 border-amber-300 font-black shadow-md ring-1 ring-amber-400/40';
-                  title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): کمال تعهد ۱۰ از ۱۰ (۵ پایه + ماموریت ویژه)`;
-                } else {
-                  // 8/10 Emerald Standard Day
-                  bgClass = 'bg-emerald-500 text-black border-emerald-400 font-bold shadow-xs';
-                  title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): روز استاندارد ۸ از ۱۰ (۵ پایه کامل)`;
-                }
-              } else if (cell.computed.statusType === 'personal_frozen') {
-                bgClass = 'bg-blue-600 text-white border-blue-400';
-                title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): توقف اضطراری (فریز)`;
-              } else if (cell.computed.statusType === 'burned_unresolved') {
-                bgClass = 'bg-red-600 text-white border-red-400 animate-pulse';
-                title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): نیازمند کالبدشکافی (بدهی باز)`;
-              } else {
-                bgClass = 'bg-purple-600 text-white border-purple-400';
-                title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): پرونده کالبدشکافی بسته شد`;
-              }
-            } else if (cell.isPast) {
-              bgClass = 'bg-red-950/40 text-red-400 border-red-900/60';
-              title = `روز ${toPersianDigits(cell.dayNumber)} (${formatPersianDate(cell.dateStr, { short: true })}): ثبت نشده (غیبت تقویمی)`;
-            }
-
-            return (
-              <button
-                key={cell.dayNumber}
-                type="button"
-                onClick={() => onSelectDate(cell.dateStr)}
-                title={title}
-                className={`min-h-[44px] h-10 sm:h-11 md:h-12 w-full min-w-0 rounded-xl border text-xs sm:text-sm font-mono flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer touch-manipulation select-none ${bgClass}`}
-              >
-                <span className="leading-none">{toPersianDigits(cell.dayNumber)}</span>
-              </button>
-            );
-          })}
+          {allDays.map(cell => (
+            <button
+              key={cell.dayNumber}
+              type="button"
+              onClick={() => onSelectDate(cell.dateStr)}
+              title={cell.title}
+              className={`min-h-[44px] h-10 sm:h-11 md:h-12 w-full min-w-0 rounded-xl border text-xs sm:text-sm font-mono flex flex-col items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer touch-manipulation select-none ${cell.bgClass}`}
+            >
+              <span className="leading-none">{cell.dayNumberPersian}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
   );
 };
+
+export const TacticalHeatmap90 = React.memo(TacticalHeatmap90Component);
+

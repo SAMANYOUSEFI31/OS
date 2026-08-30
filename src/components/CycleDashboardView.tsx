@@ -44,7 +44,7 @@ interface CycleDashboardViewProps {
 
 type DashboardSubTab = 'overview' | 'heatmap' | 'analytics';
 
-export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
+const CycleDashboardViewComponent: React.FC<CycleDashboardViewProps> = ({
   currentCycle,
   metrics,
   logs,
@@ -606,4 +606,6 @@ export const CycleDashboardView: React.FC<CycleDashboardViewProps> = ({
     </div>
   );
 };
+
+export const CycleDashboardView = React.memo(CycleDashboardViewComponent);
 

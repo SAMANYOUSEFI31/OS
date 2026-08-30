@@ -1,5 +1,7 @@
-// Bushido Discipline OS - Service Worker (Offline PWA Cache)
-const CACHE_NAME = 'bushido-discipline-v1';
+// Bushido Discipline OS - Service Worker (Offline PWA Cache v2)
+const STATIC_CACHE_NAME = 'bushido-static-v2';
+const RUNTIME_CACHE_NAME = 'bushido-runtime-v2';
+
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -10,27 +12,40 @@ const PRECACHE_ASSETS = [
   '/icon-maskable.svg'
 ];
 
-// Install: Precache App Shell
+// Install: Precache App Shell with error-resilient allSettled
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
+    caches.open(STATIC_CACHE_NAME).then(async (cache) => {
+      await Promise.allSettled(
+        PRECACHE_ASSETS.map(async (url) => {
+          try {
+            const response = await fetch(url, { cache: 'no-cache' });
+            if (response && response.ok) {
+              await cache.put(url, response);
+            }
+          } catch (err) {
+            console.warn('[PWA] Precache item skip:', url, err);
+          }
+        })
+      );
     }).then(() => self.skipWaiting())
   );
 });
 
-// Activate: Clean up old caches
+// Activate: Clean up old caches from previous versions
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys
+          .filter((key) => key !== STATIC_CACHE_NAME && key !== RUNTIME_CACHE_NAME)
+          .map((key) => caches.delete(key))
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch: Strategy dispatch
+// Fetch: Multi-strategy caching dispatch
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -40,15 +55,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. API Requests: Network Only or Network with Graceful Fallback
+  // 1. API Requests: Network Only with Graceful Offline JSON Fallback
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request).catch(() => {
         return new Response(
-          JSON.stringify({ offline: true, error: 'اینترنت قطع است. داده‌ها در حافظه محلی دستگاه ذخیره شدند.' }),
+          JSON.stringify({ 
+            offline: true, 
+            error: 'اینترنت قطع است. داده‌ها در حافظه محلی دستگاه محفوظ هستند.' 
+          }),
           {
             status: 503,
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json; charset=utf-8' }
           }
         );
       })
@@ -56,35 +74,85 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Navigation Requests (HTML): Network first with cache fallback to /index.html
+  // 2. Navigation Requests (HTML entry points): Network-First with Cache Fallback
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.status === 200) {
+          if (response && response.status === 200) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            caches.open(STATIC_CACHE_NAME).then((cache) => {
+              cache.put(request, copy);
+              cache.put('/index.html', copy.clone());
+            });
           }
           return response;
         })
         .catch(async () => {
           const cached = await caches.match(request);
           if (cached) return cached;
-          return caches.match('/index.html');
+          const indexCached = await caches.match('/index.html');
+          if (indexCached) return indexCached;
+          return caches.match('/');
         })
     );
     return;
   }
 
-  // 3. Static Assets (Scripts, Styles, Fonts, Images): Cache First / Stale-While-Revalidate
-  const isStatic = 
-    url.origin === self.location.origin ||
+  // 3. Vite Hashed Immutable Assets (/assets/*): Cache-First
+  if (url.pathname.startsWith('/assets/')) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(request).then((networkResponse) => {
+          if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
+            const copy = networkResponse.clone();
+            caches.open(RUNTIME_CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        });
+      })
+    );
+    return;
+  }
+
+  // 4. External Fonts & CDN Styles (Google Fonts, etc.): Stale-While-Revalidate
+  const isExternalFontOrStyle = 
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('gstatic.com') ||
-    request.destination === 'style' ||
-    request.destination === 'script' ||
-    request.destination === 'font' ||
-    request.destination === 'image';
+    request.destination === 'font';
+
+  if (isExternalFontOrStyle) {
+    event.respondWith(
+      caches.match(request).then((cachedResponse) => {
+        const fetchPromise = fetch(request)
+          .then((networkResponse) => {
+            if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
+              const copy = networkResponse.clone();
+              caches.open(RUNTIME_CACHE_NAME).then((cache) => cache.put(request, copy));
+            }
+            return networkResponse;
+          })
+          .catch(() => cachedResponse);
+
+        return cachedResponse || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // 5. Other Static Assets (Images, Icons, Scripts): Stale-While-Revalidate with Runtime Cache
+  const isStatic = 
+    url.origin === self.location.origin && (
+      request.destination === 'style' ||
+      request.destination === 'script' ||
+      request.destination === 'image' ||
+      url.pathname.endsWith('.svg') ||
+      url.pathname.endsWith('.png') ||
+      url.pathname.endsWith('.json')
+    );
 
   if (isStatic) {
     event.respondWith(
@@ -94,7 +162,7 @@ self.addEventListener('fetch', (event) => {
           fetch(request)
             .then((networkResponse) => {
               if (networkResponse && networkResponse.status === 200) {
-                caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
+                caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(request, networkResponse));
               }
             })
             .catch(() => {});
@@ -104,7 +172,7 @@ self.addEventListener('fetch', (event) => {
         return fetch(request).then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+            caches.open(STATIC_CACHE_NAME).then((cache) => cache.put(request, copy));
           }
           return networkResponse;
         });
@@ -113,6 +181,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Default network fetch
+  // Default: Network fetch
   event.respondWith(fetch(request));
 });
+

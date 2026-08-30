@@ -555,6 +555,25 @@ export default function App() {
     showAppToast('با موفقیت از حساب کاربری خارج شدید.');
   };
 
+  const dashboardAllTimeSettings = useMemo(() => ({
+    allTimeMaxStreak: systemState.settings?.allTimeMaxStreak ?? 0,
+    allTimeMaxScore: systemState.settings?.allTimeMaxScore ?? 0,
+    allTimeMaxStandardDays: systemState.settings?.allTimeMaxStandardDays ?? 0,
+  }), [
+    systemState.settings?.allTimeMaxStreak,
+    systemState.settings?.allTimeMaxScore,
+    systemState.settings?.allTimeMaxStandardDays
+  ]);
+
+  const handleDashboardSelectDate = useCallback((d: string) => {
+    handleSelectDate(d);
+    setActiveTab('battlefield');
+  }, [handleSelectDate]);
+
+  const handleDashboardNavigateTab = useCallback((tab: string) => {
+    setActiveTab(tab);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col w-full max-w-full selection:bg-amber-500 selection:text-black pb-20 lg:pb-8">
       {/* Top Banner when Admin is Impersonating a User */}
@@ -655,16 +674,9 @@ export default function App() {
                   metrics={cycleMetrics}
                   logs={systemState.logs}
                   cycles={systemState.cycles}
-                  allTimeSettings={{
-                    allTimeMaxStreak: systemState.settings?.allTimeMaxStreak ?? 0,
-                    allTimeMaxScore: systemState.settings?.allTimeMaxScore ?? 0,
-                    allTimeMaxStandardDays: systemState.settings?.allTimeMaxStandardDays ?? 0,
-                  }}
-                  onSelectDate={d => {
-                    handleSelectDate(d);
-                    setActiveTab('battlefield');
-                  }}
-                  onNavigateTab={tab => setActiveTab(tab)}
+                  allTimeSettings={dashboardAllTimeSettings}
+                  onSelectDate={handleDashboardSelectDate}
+                  onNavigateTab={handleDashboardNavigateTab}
                 />
               </motion.div>
             )}

@@ -61,14 +61,15 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
   const [aiFeedback, setAiFeedback] = useState(log.aiFeedback || '');
   const [isLoadingAi, setIsLoadingAi] = useState(false);
 
-  // Sync state when log changes (e.g. when user clicks next/prev debt day)
+  // Sync state when log changes (e.g. when user clicks next/prev debt day or saves current debt)
   useEffect(() => {
     setReason(log.failureReason || '');
     setTime(log.failureTime || '');
     setNotes(log.autopsyNotes || '');
     setCountermeasure(log.countermeasure || '');
     setAiFeedback(log.aiFeedback || '');
-  }, [log.id, log.date]);
+    setIsLoadingAi(false);
+  }, [log.id, log.date, log.failureReason, log.failureTime, log.autopsyNotes, log.countermeasure, log.aiFeedback]);
 
   const missedHabits = FOUNDATION_HABITS
     .filter(h => !log[h.key])
@@ -138,11 +139,14 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
     haptics.debtResolved();
     onSave(updated);
 
-    // If there are other unresolved debts, smoothly transition to next
-    if (hasMultipleDebts && currentIndex >= 0) {
+    // If there are other unresolved debts in the batch, seamlessly advance to next unresolved debt
+    if (onSelectLog && allUnresolvedLogs.length > 1) {
       const remainingDebts = allUnresolvedLogs.filter(l => l.date !== log.date);
       if (remainingDebts.length > 0) {
-        onSelectLog(remainingDebts[0]);
+        // Pick next debt relative to current position, or wrap around
+        const nextIdx = currentIndex >= 0 && currentIndex < allUnresolvedLogs.length - 1 ? currentIndex : 0;
+        const nextTarget = remainingDebts[nextIdx] || remainingDebts[0];
+        onSelectLog(nextTarget);
         return;
       }
     }

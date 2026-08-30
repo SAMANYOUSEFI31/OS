@@ -24,6 +24,9 @@ import {
   Menu, 
   Settings,
   Sliders,
+  Flame,
+  Award,
+  Trophy,
   Sun, 
   Dumbbell, 
   BookOpen, 
@@ -427,7 +430,62 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Card 1: Cutoff Hour Configuration */}
+                {/* Sub-Card 1: All-Time Discipline Records (Hall of Records Benchmark) */}
+                <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
+                      <Trophy className="w-4 h-4 text-zinc-300" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-zinc-200">
+                        رکوردهای تاریخی ثبت‌شده در سامانه (Hall of Records)
+                      </h4>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        سقف رکوردهای ثبت‌شده دیسیپلین در تنظیمات مرکزی پایگاه داده
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="bg-[#121215] border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                      <div className="space-y-0.5 text-right">
+                        <span className="text-[11px] text-zinc-400 block">طولانی‌ترین زنجیره تاریخ</span>
+                        <span className="text-base sm:text-lg font-black font-mono text-rose-400">
+                          {toPersianDigits(settings?.allTimeMaxStreak || 0)} <span className="text-xs font-normal text-zinc-500">روز</span>
+                        </span>
+                      </div>
+                      <div className="w-7 h-7 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
+                        <Flame className="w-3.5 h-3.5 text-rose-400" />
+                      </div>
+                    </div>
+
+                    <div className="bg-[#121215] border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                      <div className="space-y-0.5 text-right">
+                        <span className="text-[11px] text-zinc-400 block">بیشترین روز استاندارد</span>
+                        <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+                          {toPersianDigits(settings?.allTimeMaxStandardDays || 0)} <span className="text-xs font-normal text-zinc-500">روز</span>
+                        </span>
+                      </div>
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                    </div>
+
+                    <div className="bg-[#121215] border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
+                      <div className="space-y-0.5 text-right">
+                        <span className="text-[11px] text-zinc-400 block">بالاترین امتیاز کسب‌شده</span>
+                        <span className="text-base sm:text-lg font-black font-mono text-amber-400">
+                          {toPersianDigits(settings?.allTimeMaxScore || 0)} <span className="text-xs font-normal text-zinc-500">امتیاز</span>
+                        </span>
+                      </div>
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sub-Card 2: Cutoff Hour Configuration */}
                 <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
@@ -465,7 +523,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   </div>
                 </div>
 
-                {/* Sub-Card 2: Backup & Database Vault */}
+                {/* Sub-Card 3: Backup & Database Vault */}
                 <div className="bg-[#09090b]/80 border border-zinc-800/90 rounded-2xl p-4 sm:p-5 space-y-3.5">
                   <div className="flex items-center gap-2.5">
                     <div className="w-8 h-8 rounded-lg bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-300 shrink-0">
