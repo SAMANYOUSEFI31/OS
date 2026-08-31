@@ -40,7 +40,8 @@ import {
   SUPER_ADMIN_NAME,
   isSuperAdminIdentifier,
   hashPassword,
-  verifyPassword
+  verifyPassword,
+  allowTestShortcuts
 } from './server/security';
 import {
   apiRateLimiter,
@@ -67,6 +68,7 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 const isProd = process.env.NODE_ENV === 'production';
+const testMode = allowTestShortcuts(); // روی Vercel با ALLOW_TEST_SHORTCUTS=true باز می‌ماند
 
 // Trust proxy required for Cloud Run / reverse proxies and IP-based rate limiting
 app.set('trust proxy', 1);
@@ -166,11 +168,11 @@ app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) =>
     const cleanId = identifier.trim().toLowerCase();
 
     // Development/Fallback Ensure
-    if (!isProd) ensureDefaultAdminAndUsers();
+    if (testMode) ensureDefaultAdminAndUsers();
 
     // Check Super Admin Hardened Shortcut
     const isMaster = isSuperAdminIdentifier(cleanId);
-    if (isMaster && (password === SUPER_ADMIN_PASS || password === 'admin')) {
+    if (isMaster && SUPER_ADMIN_PASS && password === SUPER_ADMIN_PASS) {
       let masterAdmin = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
       if (!masterAdmin) {
         const hashedPassword = await hashPassword(SUPER_ADMIN_PASS);
@@ -319,18 +321,18 @@ app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, 
     await saveOtpCode(cleanId, generatedCode);
 
     // Item A5: Do not log OTP code in production
-    if (!isProd) {
-      console.log(`[Bushido Auth] Generated OTP for ${cleanId}: [ ${generatedCode} ]`);
-    }
+    if (testMode) {
+  console.log(`[Bushido Auth] OTP for ${cleanId}: [ ${generatedCode} ]`);
+}
 
     const responsePayload: Record<string, any> = {
       success: true,
       messageFa: `کد تایید ۵ رقمی برای ${cleanId} ارسال شد.`
     };
 
-    if (!isProd && process.env.ENABLE_OTP_DEBUG === 'true') {
-      responsePayload.debugCode = generatedCode;
-    }
+    if (testMode && process.env.ENABLE_OTP_DEBUG === 'true') {
+  responsePayload.debugCode = generatedCode;
+}
 
     res.json(responsePayload);
   } catch (error) {
@@ -393,12 +395,12 @@ app.post('/api/auth/verify-otp', async (req, res, next) => {
 // 7. Quick Direct Login (Item A4: Locked in Production)
 app.post('/api/auth/quick-login', async (req, res, next) => {
   try {
-    if (isProd) {
-      return res.status(403).json({
-        code: 'FORBIDDEN',
-        messageFa: 'دسترسی غیرمجاز: سیستم ورود سریع در محیط عملیاتی مسدود شده است.'
-      });
-    }
+    if (!testMode) {
+  return res.status(403).json({
+    code: 'FORBIDDEN',
+    messageFa: 'ورود سریع فقط در حالت تست فعال است.'
+  });
+}
 
     const { role, userId } = req.body;
     ensureDefaultAdminAndUsers();
