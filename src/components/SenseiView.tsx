@@ -58,9 +58,13 @@ export const SenseiView: React.FC<SenseiViewProps> = ({
       soundFX.playCheck();
 
       // Optional background sync
+      const token = localStorage.getItem('bushido_auth_token');
       fetch('/api/ai/coach', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           cycleTitle: currentCycle.title,
           elapsedDays: metrics.elapsedDays,

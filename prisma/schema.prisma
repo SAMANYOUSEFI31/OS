@@ -125,6 +125,7 @@ model DailyLog {
   updatedAt      DateTime   @updatedAt
 
   @@unique([cycleId, date])
+  @@unique([userId, date])
   @@index([userId])
   @@index([cycleId])
   @@index([userId, date])

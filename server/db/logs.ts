@@ -53,34 +53,51 @@ export async function upsertDailyLog(
 
   if (isPrismaAvailable && prisma) {
     try {
-      const existing = await prisma.dailyLog.findFirst({
+      const upserted = await prisma.dailyLog.upsert({
         where: {
+          userId_date: {
+            userId,
+            date: data.date
+          }
+        },
+        update: {
+          cycleId: data.cycleId,
+          wakeUp: data.wakeUp,
+          workout: data.workout,
+          study: data.study,
+          journal: data.journal,
+          hardTask: data.hardTask,
+          specialMission: data.specialMission,
+          failureReason: data.failureReason,
+          failureTime: data.failureTime,
+          autopsyNotes: data.autopsyNotes,
+          countermeasure: data.countermeasure,
+          aiFeedback: data.aiFeedback,
+          notes: data.notes,
+          updatedAt: now
+        },
+        create: {
+          id: `log-${userId}-${data.date}`,
           userId,
-          date: data.date
+          cycleId: data.cycleId,
+          date: data.date,
+          wakeUp: data.wakeUp,
+          workout: data.workout,
+          study: data.study,
+          journal: data.journal,
+          hardTask: data.hardTask,
+          specialMission: data.specialMission,
+          failureReason: data.failureReason,
+          failureTime: data.failureTime,
+          autopsyNotes: data.autopsyNotes,
+          countermeasure: data.countermeasure,
+          aiFeedback: data.aiFeedback,
+          notes: data.notes,
+          createdAt: now,
+          updatedAt: now
         }
       });
-
-      if (existing) {
-        const updated = await prisma.dailyLog.update({
-          where: { id: existing.id },
-          data: {
-            ...data,
-            updatedAt: now
-          }
-        });
-        return updated;
-      } else {
-        const created = await prisma.dailyLog.create({
-          data: {
-            id: `log-${userId}-${data.date}`,
-            userId,
-            ...data,
-            createdAt: now,
-            updatedAt: now
-          }
-        });
-        return created;
-      }
+      return upserted;
     } catch (e) {
       console.warn('[Database] Prisma upsertDailyLog failed, falling back to local store:', e);
     }

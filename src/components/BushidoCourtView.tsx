@@ -66,9 +66,13 @@ export const BushidoCourtView: React.FC<BushidoCourtViewProps> = ({
       });
 
       // Background sync if online
+      const token = localStorage.getItem('bushido_auth_token');
       fetch('/api/ai/verdict', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           cycleTitle: currentCycle.title,
           standardDays: metrics.standardDaysCount,

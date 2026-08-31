@@ -291,8 +291,7 @@ export function ensureDefaultAdminAndUsers() {
   const existingAdmin = memoryStore.users.find(
     u => u.id === 'admin-master-001' || 
          u.phoneNumber === SUPER_ADMIN_PHONE || 
-         u.email === SUPER_ADMIN_EMAIL ||
-         u.phoneNumber === '09120000000'
+         u.email === SUPER_ADMIN_EMAIL
   );
 
   if (!existingAdmin) {

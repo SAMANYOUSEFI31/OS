@@ -12,7 +12,7 @@ export const SUPER_ADMIN_NAME = 'فرمانده ارشد سامورایی (مد�
 export function isSuperAdminIdentifier(identifier?: string | null): boolean {
   if (!identifier) return false;
   const clean = identifier.trim().toLowerCase();
-  return clean === SUPER_ADMIN_PHONE || clean === SUPER_ADMIN_EMAIL || clean === '09120000000';
+  return clean === SUPER_ADMIN_PHONE || clean === SUPER_ADMIN_EMAIL;
 }
 
 export function hashPassword(password: string): string {

@@ -633,13 +633,19 @@ app.post('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) =
       return res.status(400).json({ error: 'اطلاعات عنوان و تاریخ شروع/پایان الزامی است.' });
     }
 
+    const sanitizedTitle = String(title).trim().slice(0, 120);
+    const sanitizedTheme = typeof targetTheme === 'string' ? targetTheme.trim().slice(0, 200) : null;
+    const sanitizedRules = Array.isArray(rules)
+      ? rules.filter(r => typeof r === 'string').map(r => r.trim().slice(0, 200)).slice(0, 20)
+      : [];
+
     const newCycle = await createCycle(userId, {
-      title,
-      startDate,
-      endDate,
-      targetTheme,
+      title: sanitizedTitle,
+      startDate: String(startDate).slice(0, 20),
+      endDate: String(endDate).slice(0, 20),
+      targetTheme: sanitizedTheme || undefined,
       inheritedStreak: Number(inheritedStreak) || 0,
-      rules: Array.isArray(rules) ? rules : []
+      rules: sanitizedRules
     });
 
     res.json({ cycle: newCycle });
@@ -654,7 +660,29 @@ app.put('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res
   try {
     const userId = req.user!.userId;
     const cycleId = req.params.id;
-    const updated = await updateCycle(userId, cycleId, req.body);
+    const { title, targetTheme, rules, isArchived, reportRead, verdict } = req.body;
+
+    const sanitizedUpdate: Record<string, any> = {};
+    if (typeof title === 'string' && title.trim()) {
+      sanitizedUpdate.title = title.trim().slice(0, 120);
+    }
+    if (targetTheme !== undefined) {
+      sanitizedUpdate.targetTheme = typeof targetTheme === 'string' ? targetTheme.trim().slice(0, 200) : null;
+    }
+    if (Array.isArray(rules)) {
+      sanitizedUpdate.rules = rules.filter(r => typeof r === 'string').map(r => r.trim().slice(0, 200)).slice(0, 20);
+    }
+    if (typeof isArchived === 'boolean') {
+      sanitizedUpdate.isArchived = isArchived;
+    }
+    if (typeof reportRead === 'boolean') {
+      sanitizedUpdate.reportRead = reportRead;
+    }
+    if (verdict !== undefined) {
+      sanitizedUpdate.verdict = verdict;
+    }
+
+    const updated = await updateCycle(userId, cycleId, sanitizedUpdate);
 
     if (!updated) {
       return res.status(404).json({ error: 'چرخه مورد نظر یافت نشد.' });
@@ -689,17 +717,49 @@ app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, 
  * DAILY LOGS ENDPOINTS (User-Scoped - Unified /api/logs)
  * ========================================================================= */
 
-// Handler for upserting daily logs
+// Handler for upserting daily logs with safe string clamping
 const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
     const userId = req.user!.userId;
-    const { cycleId, date } = req.body;
+    const {
+      cycleId,
+      date,
+      wakeUp,
+      workout,
+      study,
+      journal,
+      hardTask,
+      specialMission,
+      failureReason,
+      failureTime,
+      autopsyNotes,
+      countermeasure,
+      aiFeedback,
+      notes
+    } = req.body;
 
     if (!cycleId || !date) {
       return res.status(400).json({ error: 'شناسه چرخه و تاریخ روز الزامی است.' });
     }
 
-    const log = await upsertDailyLog(userId, req.body);
+    const sanitizedData = {
+      cycleId: String(cycleId).slice(0, 100),
+      date: String(date).slice(0, 20),
+      wakeUp: Boolean(wakeUp),
+      workout: Boolean(workout),
+      study: Boolean(study),
+      journal: Boolean(journal),
+      hardTask: Boolean(hardTask),
+      specialMission: Boolean(specialMission),
+      failureReason: typeof failureReason === 'string' ? failureReason.slice(0, 500) : null,
+      failureTime: typeof failureTime === 'string' ? failureTime.slice(0, 100) : null,
+      autopsyNotes: typeof autopsyNotes === 'string' ? autopsyNotes.slice(0, 2000) : null,
+      countermeasure: typeof countermeasure === 'string' ? countermeasure.slice(0, 2000) : null,
+      aiFeedback: typeof aiFeedback === 'string' ? aiFeedback.slice(0, 2000) : null,
+      notes: typeof notes === 'string' ? notes.slice(0, 2000) : null
+    };
+
+    const log = await upsertDailyLog(userId, sanitizedData);
     res.json({ log, success: true });
   } catch (error) {
     console.error('Upsert log error:', error);
@@ -711,7 +771,7 @@ const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Resp
 const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
     const userId = req.user!.userId;
-    const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId : undefined;
+    const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId.slice(0, 100) : undefined;
     const logs = await getUserDailyLogs(userId, cycleId);
     res.json({ logs, success: true });
   } catch (error) {
@@ -733,12 +793,15 @@ app.post('/api/daily-logs', authMiddleware, handleUpsertDailyLog);
  * DETERMINISTIC REASONING ENGINE (NO AI REQUIRED - OFFLINE / INSTANT)
  * ========================================================================= */
 
-// 2. Failure Autopsy (کالبدشکافی دقیق و بدون نیاز به هوش مصنوعی)
-app.post('/api/ai/autopsy', (req, res) => {
+// 2. Failure Autopsy (کالبدشکافی دقیق و امن)
+app.post('/api/ai/autopsy', authMiddleware, (req: AuthenticatedRequest, res) => {
   try {
     const { date, missedHabits, failureReason, failureTime, userNotes } = req.body;
+    const cleanFailureReason = typeof failureReason === 'string' ? failureReason.slice(0, 500) : '';
+    const cleanFailureTime = typeof failureTime === 'string' ? failureTime.slice(0, 100) : '';
+    const cleanUserNotes = typeof userNotes === 'string' ? userNotes.slice(0, 2000) : '';
 
-    if (failureReason === 'دلایل شخصی') {
+    if (cleanFailureReason === 'دلایل شخصی') {
       return res.json({
         analysis: 'توقف اضطراری به دلایل غیرقابل پیش‌بینی شخصی رخ داده است. طبق اصول بوشیدو، حفظ آرامش در مواجهه با شرایط اضطراری عین دیسیپلین است.',
         psychologicalTrap: 'تله سرزنش بیهوده خود در شرایط اضطراری بیرونی',
@@ -752,42 +815,45 @@ app.post('/api/ai/autopsy', (req, res) => {
     let countermeasure = 'قانون مقابله: مسدودسازی کلیه عوامل حواس‌پرتی تا پایان اجرای کار سخت روز.';
     let tacticalActionTomorrow = 'تعیین دقیق سنگین‌ترین وظیفه فردا روی کاغذ قبل از خواب امشب.';
 
-    if (failureTime === 'اول روز') {
+    if (cleanFailureTime === 'اول روز') {
       trap = 'تله اینرسی صبحگاهی و به تعویق انداختن نخستین ضربه (Friction Gap)';
       analysis = 'شکست در آغاز روز، زنجیره دوپامینی و اعتمادبه‌نفس بقیه روزکاری را مختل کرده است. شروع روز بدون برنامه مکتوب باعث فرار ذهن به فعالیت‌های آسان شد.';
       countermeasure = 'قانون ۳۰ دقیقه اول: ورود مستقیم به روتین فونداسیون بدون لمس تلفن همراه.';
       tacticalActionTomorrow = 'قرار دادن لباس ورزشی و دفترچه ژورنال کنار تخت قبل از خواب.';
-    } else if (failureTime === 'وسط روز') {
+    } else if (cleanFailureTime === 'وسط روز') {
       trap = 'تله افت دوپامین پس از ظهر و پذیرش وقفه‌های کاذب (Midday Slump)';
       analysis = 'در میانه روز به دلیل خستگی ذهنی، آستانه مقاومت در برابر حواس‌پرتی کاهش یافته و انجام وظایف سخت نیمه‌کاره رها شده است.';
       countermeasure = 'قانون بلوک عمیق ۹۰ دقیقه‌ای: تقسیم کار سخت به دو بازه متمرکز همراه با ۵ دقیقه استراحت فیزیکی.';
       tacticalActionTomorrow = 'انجام مهم‌ترین بخش کار سخت پیش از ساعت ۱۲ ظهر.';
-    } else if (failureTime === 'آخر روز') {
+    } else if (cleanFailureTime === 'آخر روز') {
       trap = 'تله تخلیه مخزن اراده و اهمال‌کاری تا ساعات پایانی شب (Revenge Procrastination)';
       analysis = 'انتقال دادن عادت‌ها (نظیر مطالعه یا ژورنال) به ساعات پایانی شب که مغز در کمترین سطح بازدهی قرار دارد، علت اصلی ثبت شکست بوده است.';
       countermeasure = 'قانون خط قرمز ساعت ۲۱: هیچ عادت پایه‌ای نباید پس از ساعت ۹ شب بدون تیک بماند.';
       tacticalActionTomorrow = 'جابجایی زمان مطالعه و ژورنال به عصر یا بلافاصله پس از اتمام کار روزانه.';
     }
 
-    if (failureReason === 'نیمه‌کاره رها کردم') {
+    if (cleanFailureReason === 'نیمه‌کاره رها کردم') {
       trap = 'تله کمال‌گرایی منفی یا خستگی زودهنگام در مواجهه با ابهام وظیفه';
       analysis = 'عدم خرد کردن وظیفه به گام‌های کوچک و شفاف، اصطکاک شناختی ایجاد کرده و منجر به توقف در نیمه راه شد.';
       countermeasure = 'قانون ۵ دقیقه اول: فقط ۵ دقیقه متوالی روی کار تمرکز کن؛ سپس مغز وارد جریان کار می‌شود.';
-    } else if (failureReason === 'بی‌برنامه بودم') {
+    } else if (cleanFailureReason === 'بی‌برنامه بودم') {
       trap = 'تله تصمیم‌گیری لحظه‌ای زیر فشار خستگی روزانه';
       analysis = 'وقتی برای روز برنامه‌ریزی قبلی وجود نداشته باشد، ناخودآگاه کوتاه‌ترین مسیر به سمت راحتی و مصرف محتوای سطحی را انتخاب می‌کند.';
       countermeasure = 'قانون شامگاه: ۵ تسک فردا باید شب قبل با زمان‌بندی دقیق ثبت شوند.';
-    } else if (failureReason === 'وقتم رو به خوبی مدیریت نکردم') {
+    } else if (cleanFailureReason === 'وقتم رو به خوبی مدیریت نکردم') {
       trap = 'تله نشت زمان در حباب شبکه‌های اجتماعی و کارهای کم‌ارزش';
       analysis = 'ریز‌فعالیت‌های بی‌ثمر زمان ارزشمند کار عمیق را بلعیده‌اند و در پایان روز زمانی برای اجرای تعهدات اصلی باقی نماند.';
       countermeasure = 'قانون حالت هواپیما: تلفن همراه در طول کار سخت در اتاقی دیگر قرار می‌گیرد.';
     }
 
     if (Array.isArray(missedHabits) && missedHabits.length > 0) {
-      analysis += ` عدم اجرای «${missedHabits.join('، ')}» مستقیماً ساختار روز را تضعیف کرده است.`;
+      const cleanHabits = missedHabits.filter(h => typeof h === 'string').map(h => h.slice(0, 100));
+      if (cleanHabits.length > 0) {
+        analysis += ` عدم اجرای «${cleanHabits.join('، ')}» مستقیماً ساختار روز را تضعیف کرده است.`;
+      }
     }
 
-    if (userNotes && userNotes.trim()) {
+    if (cleanUserNotes && cleanUserNotes.trim()) {
       analysis += ` نکته مهم: اصطکاک ثبت‌شده در یادداشت باید به عنوان تجربه راهبردی در دستور کار فردا لحاظ شود.`;
     }
 
@@ -1023,7 +1089,7 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
     }
 
     // Protection for root admin: Prevent demotion or revocation of root admin account
-    const isTargetRootAdmin = targetUser.email === 'admin@bushido.app' || targetUser.phoneNumber === '09120000000';
+    const isTargetRootAdmin = targetUser.email === SUPER_ADMIN_EMAIL || targetUser.phoneNumber === SUPER_ADMIN_PHONE;
     if (isTargetRootAdmin && (isAdmin === false || isVip === false)) {
       return res.status(403).json({ error: 'حساب مالک ارشد سیستم غیرقابل عزل یا تنزل می‌باشد.' });
     }

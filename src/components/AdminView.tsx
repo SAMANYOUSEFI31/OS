@@ -612,7 +612,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                           <td className="py-3.5 px-4 text-center">
                             <div className="flex items-center justify-center gap-1.5">
                               {/* Toggle Admin Privilege Button */}
-                              {(!isCurrentUser && user.email !== 'admin@bushido.app' && user.phoneNumber !== '09120000000') && (
+                              {(!isCurrentUser && user.email !== 'admin@bushido.app' && user.phoneNumber !== '09375454050') && (
                                 <button
                                   type="button"
                                   onClick={() => handleToggleAdminStatus(user.id, !!user.isAdmin)}

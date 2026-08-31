@@ -116,9 +116,13 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
       }
 
       // Sync with server if online
+      const token = localStorage.getItem('bushido_auth_token');
       fetch('/api/ai/autopsy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           date: log.date,
           missedHabits,

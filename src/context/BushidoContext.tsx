@@ -648,7 +648,7 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         id: 'admin-master-001',
         name: 'فرمانده ارشد سامورایی (مدیر)',
         email: 'admin@bushido.app',
-        phoneNumber: '09120000000',
+        phoneNumber: '09375454050',
         tier: 'vip_samurai',
         isVip: true,
         isAdmin: true,
