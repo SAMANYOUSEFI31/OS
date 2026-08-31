@@ -17,7 +17,7 @@ const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
  */
 export const registerSchema = z.object({
   identifier: z.string().min(3, { message: 'شماره موبایل یا ایمیل باید حداقل ۳ کاراکتر باشد.' }),
-  password: z.string().min(4, { message: 'رمز عبور باید حداقل ۴ کاراکتر باشد.' }),
+  password: z.string().min(8, { message: 'رمز عبور باید حداقل ۸ کاراکتر باشد.' }),
   name: z.string().max(80, { message: 'نام کاربری حداکثر می‌تواند ۸۰ کاراکتر باشد.' }).optional(),
   email: z.string().email({ message: 'فرمت ایمیل وارد شده نامعتبر است.' }).optional().or(z.literal('')),
   phoneNumber: z.string().optional(),
@@ -44,7 +44,7 @@ export const otpRequestSchema = z.object({
 export const resetPasswordSchema = z.object({
   identifier: z.string().min(1, { message: 'شناسه کاربری الزامی است.' }),
   code: z.string().min(4, { message: 'کد تایید ۵ رقمی الزامی است.' }),
-  newPassword: z.string().min(4, { message: 'رمز عبور جدید باید حداقل ۴ کاراکتر باشد.' }),
+  newPassword: z.string().min(8, { message: 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.' }),
 });
 
 /**
