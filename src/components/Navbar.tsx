@@ -187,13 +187,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {isCycleDropdownOpen && (
                   <>
                     <div 
-                      className="fixed inset-0 z-40" 
+                      className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] cursor-pointer" 
                       onClick={() => {
                         setIsCycleDropdownOpen(false);
                         setConfirmDeleteCycleId(null);
                       }}
+                      onTouchStart={() => {
+                        setIsCycleDropdownOpen(false);
+                        setConfirmDeleteCycleId(null);
+                      }}
                     />
-                    <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
                       <div className="px-3 py-1.5 text-[10px] text-zinc-400 font-bold border-b border-zinc-800 flex items-center justify-between">
                         <span>انتخاب و مدیریت چرخه‌های ۹۰ روزه:</span>
                         <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>
