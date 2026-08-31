@@ -1,5 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertOctagon, RefreshCw, Trash2, ShieldAlert } from 'lucide-react';
+import { ShieldAlert, RotateCcw, RefreshCw, AlertTriangle, Home } from 'lucide-react';
 
 interface Props {
   children: ReactNode;
@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error in Bushido OS:', error, errorInfo);
+    console.error('Uncaught runtime error caught by Bushido ErrorBoundary:', error, errorInfo);
     this.setState({ errorInfo });
   }
 
@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
       localStorage.removeItem('bushido_system_state_v1');
       sessionStorage.clear();
     } catch (e) {
-      console.warn('Could not clear storage:', e);
+      console.warn('Failed to clear storage:', e);
     }
     window.location.reload();
   };
@@ -45,45 +45,65 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#09090b] text-zinc-100 flex items-center justify-center p-4 dir-rtl" dir="rtl">
-          <div className="max-w-md w-full bg-[#121215] border border-rose-500/30 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
-            <div className="flex items-center gap-3 text-rose-500">
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center shrink-0">
-                <AlertOctagon className="w-6 h-6" />
+        <div 
+          className="min-h-screen bg-[#09090b] text-zinc-100 flex items-center justify-center p-4 font-sans selection:bg-rose-500/30"
+          dir="rtl"
+        >
+          <div className="w-full max-w-lg bg-[#121215] border border-zinc-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl shadow-black/80">
+            
+            {/* Header Icon & Title */}
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0 shadow-lg">
+                <ShieldAlert className="w-6 h-6" />
               </div>
-              <div>
-                <h2 className="text-lg font-bold">مهار خطای غیرمنتظره سامانه</h2>
-                <p className="text-xs text-zinc-400">سیستم محافظت بوشیدو خطای رندرینگ را کنترل کرده است.</p>
+              <div className="space-y-1">
+                <h1 className="text-lg sm:text-xl font-black text-zinc-100 tracking-tight">
+                  مهار خطای غیرمنتظره سامانه
+                </h1>
+                <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
+                  سیستم محافظت بوشیدو خطای رندرینگ را کنترل کرده تا یکپارچگی داده‌های شما حفظ شود.
+                </p>
               </div>
             </div>
 
-            <div className="bg-[#09090b] border border-zinc-800 rounded-2xl p-4 text-xs font-mono text-zinc-300 break-all space-y-2">
-              <div className="text-rose-400 font-bold">پیام خطا:</div>
-              <div>{this.state.error?.message || 'خطای ناشناخته در فرانت‌اند.'}</div>
+            {/* Error detail banner */}
+            <div className="bg-[#09090b] border border-red-500/30 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-red-300">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>پیام خطا:</span>
+              </div>
+              <p className="text-xs font-mono text-zinc-300 break-words leading-relaxed">
+                {this.state.error?.message || 'یک خطای نامشخص در رابط کاربری رخ داده است.'}
+              </p>
             </div>
 
-            <div className="space-y-3 pt-2">
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
               <button
+                type="button"
                 onClick={this.handleReload}
-                className="w-full h-12 bg-rose-600 hover:bg-rose-500 active:scale-[0.98] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-[0.98] touch-manipulation"
+                title="بارگذاری مجدد بدون دستکاری و حذف داده‌های ثبت‌شده"
               >
                 <RefreshCw className="w-4 h-4" />
-                تلاش مجدد و بارگذاری
+                <span>بارگذاری مجدد (حفظ تمام داده‌ها)</span>
               </button>
 
               <button
+                type="button"
                 onClick={this.handleResetLocal}
-                className="w-full h-11 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-zinc-400 hover:text-zinc-200 border border-zinc-800 rounded-xl flex items-center justify-center gap-2 text-xs transition-all cursor-pointer whitespace-nowrap"
+                className="w-full sm:w-auto py-3 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] touch-manipulation"
+                title="پاکسازی کش محلی مرورگر و بازنشانی وضعیت اولیه"
               >
-                <Trash2 className="w-3.5 h-3.5 text-zinc-500" />
-                بازنشانی کش اضطراری
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>بازنشانی کامل حافظه موقت</span>
               </button>
             </div>
 
-            <div className="flex items-center gap-2 text-[11px] text-zinc-500 justify-center pt-2">
-              <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-              <span>داده‌های ذخیره‌شده شما در دیتابیس ابری محفوظ هستند.</span>
-            </div>
+            {/* Footer notice */}
+            <p className="text-[11px] text-zinc-400 text-center leading-relaxed border-t border-zinc-800/80 pt-4">
+              داده‌های ثبت‌شده و گزارش‌های روزانه شما کاملاً امن هستند؛ دکمه «بارگذاری مجدد» صفحه را بدون پاکسازی داده‌ها بازیابی می‌کند.
+            </p>
           </div>
         </div>
       );
