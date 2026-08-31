@@ -89,11 +89,11 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(async () => {
-          const cached = await caches.match(request);
+          const cached = await caches.match(request, { ignoreSearch: true });
           if (cached) return cached;
-          const indexCached = await caches.match('/index.html');
+          const indexCached = await caches.match('/index.html', { ignoreSearch: true });
           if (indexCached) return indexCached;
-          return caches.match('/');
+          return caches.match('/', { ignoreSearch: true });
         })
     );
     return;

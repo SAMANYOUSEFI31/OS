@@ -73,10 +73,11 @@ export const Toast: React.FC<ToastProps> = ({ toasts, onDismiss }) => {
               <button
                 type="button"
                 onClick={() => onDismiss(toast.id)}
-                className="w-6 h-6 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 flex items-center justify-center shrink-0 transition cursor-pointer"
+                className="w-8 h-8 sm:w-11 sm:h-11 min-w-[36px] min-h-[36px] rounded-lg bg-zinc-800/80 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 flex items-center justify-center shrink-0 transition cursor-pointer touch-manipulation"
                 title="بستن اعلان"
+                aria-label="بستن اعلان"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             </motion.div>
           );

@@ -253,7 +253,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-zinc-800 transition cursor-pointer shrink-0"
+                className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition cursor-pointer shrink-0 touch-manipulation"
+                aria-label="بستن"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -334,7 +335,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-zinc-400 hover:text-white text-xs font-semibold"
+                  className="px-4 py-2.5 sm:px-5 sm:py-2.5 min-h-[44px] rounded-xl text-zinc-400 hover:text-white text-xs font-semibold cursor-pointer touch-manipulation"
                 >
                   انصراف
                 </button>
@@ -385,10 +386,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setStep('plans')}
-                  className="text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition cursor-pointer"
-                  title="بستن درگاه"
+                  className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-white rounded-lg hover:bg-zinc-800 transition cursor-pointer touch-manipulation"
+                  title="بازگشت به پلن‌ها"
+                  aria-label="بازگشت به پلن‌ها"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>

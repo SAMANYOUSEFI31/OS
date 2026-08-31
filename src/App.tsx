@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem } from './types';
 import { createInitialSystemState, GUEST_USER_PROFILE, DEFAULT_ADMIN_USER_PROFILE } from './data/initialData';

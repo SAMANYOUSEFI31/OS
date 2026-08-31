@@ -80,7 +80,7 @@ export const CreateCycleModal: React.FC<CreateCycleModalProps> = ({
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-4 left-4 p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition cursor-pointer"
+          className="absolute top-3 sm:top-4 left-3 sm:left-4 w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition cursor-pointer touch-manipulation"
           title="بستن"
           aria-label="بستن"
         >
@@ -186,13 +186,13 @@ export const CreateCycleModal: React.FC<CreateCycleModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer active:scale-95"
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition cursor-pointer active:scale-95 touch-manipulation"
             >
               انصراف
             </button>
             <button
               type="submit"
-              className="bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black px-6 py-2.5 rounded-xl text-xs font-black shadow-lg shadow-amber-500/25 transition cursor-pointer active:scale-95 flex items-center gap-1.5"
+              className="bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-black px-6 py-2.5 min-h-[44px] rounded-xl text-xs font-black shadow-lg shadow-amber-500/25 transition cursor-pointer active:scale-95 flex items-center gap-1.5 touch-manipulation"
             >
               <Sparkles className="w-4 h-4" />
               <span>آغاز چرخه نبرد</span>
