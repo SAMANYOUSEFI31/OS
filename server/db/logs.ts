@@ -30,6 +30,7 @@ export async function getUserDailyLogs(userId: string, cycleId?: string): Promis
   return logs.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// Atomic Upsert Implementation using Prisma Native Upsert
 export async function upsertDailyLog(
   userId: string,
   data: {
@@ -50,6 +51,18 @@ export async function upsertDailyLog(
   }
 ): Promise<DBDailyLog> {
   const now = new Date().toISOString();
+  const logId = `log-${userId}-${data.date}`;
+
+  // Sanitize text bounds (Max 2000 chars)
+  const sanitizedData = {
+    ...data,
+    failureReason: data.failureReason ? data.failureReason.slice(0, 500) : null,
+    failureTime: data.failureTime ? data.failureTime.slice(0, 100) : null,
+    autopsyNotes: data.autopsyNotes ? data.autopsyNotes.slice(0, 2000) : null,
+    countermeasure: data.countermeasure ? data.countermeasure.slice(0, 2000) : null,
+    aiFeedback: data.aiFeedback ? data.aiFeedback.slice(0, 2000) : null,
+    notes: data.notes ? data.notes.slice(0, 2000) : null
+  };
 
   if (isPrismaAvailable && prisma) {
     try {
@@ -61,38 +74,13 @@ export async function upsertDailyLog(
           }
         },
         update: {
-          cycleId: data.cycleId,
-          wakeUp: data.wakeUp,
-          workout: data.workout,
-          study: data.study,
-          journal: data.journal,
-          hardTask: data.hardTask,
-          specialMission: data.specialMission,
-          failureReason: data.failureReason,
-          failureTime: data.failureTime,
-          autopsyNotes: data.autopsyNotes,
-          countermeasure: data.countermeasure,
-          aiFeedback: data.aiFeedback,
-          notes: data.notes,
+          ...sanitizedData,
           updatedAt: now
         },
         create: {
-          id: `log-${userId}-${data.date}`,
+          id: logId,
           userId,
-          cycleId: data.cycleId,
-          date: data.date,
-          wakeUp: data.wakeUp,
-          workout: data.workout,
-          study: data.study,
-          journal: data.journal,
-          hardTask: data.hardTask,
-          specialMission: data.specialMission,
-          failureReason: data.failureReason,
-          failureTime: data.failureTime,
-          autopsyNotes: data.autopsyNotes,
-          countermeasure: data.countermeasure,
-          aiFeedback: data.aiFeedback,
-          notes: data.notes,
+          ...sanitizedData,
           createdAt: now,
           updatedAt: now
         }
@@ -110,16 +98,16 @@ export async function upsertDailyLog(
   if (existingIdx >= 0) {
     memoryStore.dailyLogs[existingIdx] = {
       ...memoryStore.dailyLogs[existingIdx],
-      ...data,
+      ...sanitizedData,
       updatedAt: now
     };
     saveLocalStore();
     return memoryStore.dailyLogs[existingIdx];
   } else {
     const newLog: DBDailyLog = {
-      id: `log-${userId}-${data.date}`,
+      id: logId,
       userId,
-      ...data,
+      ...sanitizedData,
       createdAt: now,
       updatedAt: now
     };
