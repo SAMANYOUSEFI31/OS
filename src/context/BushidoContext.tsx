@@ -1,643 +1,855 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import {
-  SystemState,
-  Cycle,
-  DailyLog,
-  User,
-  HabitKey,
-  DayStatusType,
-  AutopsyData
-} from '../types';
-import {
-  loadStoredSystemState,
-  saveStoredSystemState,
-  getAuthToken,
-  setAuthToken,
-  removeAuthToken,
-  getStoredUser,
-  setStoredUser
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react';
+import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem, CycleMetrics } from '../types';
+import { createInitialSystemState, GUEST_USER_PROFILE } from '../data/initialData';
+import { computeCycleMetrics } from '../engine/bushidoCalculations';
+import { getLogicalTodayDate, addDaysToDate } from '../utils/dateUtils';
+import { applyAccentTheme } from '../utils/themeUtils';
+import { toPersianDigits } from '../utils/numberUtils';
+import { 
+  loadStoredSystemState, 
+  saveSystemStateDebounced, 
+  flushPendingStorageSave, 
+  STORAGE_KEY, 
+  TOKEN_KEY 
 } from '../utils/storageUtils';
-import {
-  getTodayISOString,
-  getShiftedISOString
-} from '../utils/dateUtils';
-import { soundFX } from '../utils/audioEffects';
-import { haptics } from '../utils/haptics';
-
-interface ToastMessage {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  message: string;
-}
 
 interface BushidoContextType {
-  state: SystemState;
-  user: User | null;
-  activeCycle: Cycle | null;
-  todayLog: DailyLog | null;
+  authToken: string | null;
+  systemState: {
+    cycles: Cycle[];
+    logs: DailyLog[];
+    settings: SystemSettings;
+    userProfile: UserProfile;
+  };
+  activeCycleId: string;
   selectedDate: string;
-  setSelectedDate: (date: string) => void;
-  toast: ToastMessage | null;
-  showToast: (type: ToastMessage['type'], message: string) => void;
-  toggleHabit: (habitKey: HabitKey) => void;
-  toggleSpecialMission: () => void;
-  saveDayNotes: (notes: string) => void;
-  submitAutopsy: (autopsy: AutopsyData) => void;
-  freezeDay: () => void;
-  createNewCycle: (title: string, startDate: string, targetTheme?: string, inheritedStreak?: number) => void;
-  archiveCycle: (cycleId: string) => void;
-  loginUser: (token: string, user: User) => void;
-  logoutUser: () => void;
-  updateUserProfile: (updates: Partial<User>) => void;
-  importData: (jsonData: string) => boolean;
-  exportData: () => string;
-  resetAllData: () => void;
-  syncWithServer: () => Promise<void>;
-  isOnline: boolean;
+  activeTab: string;
+  currentCycle: Cycle | null;
+  cycleMetrics: CycleMetrics | null;
+  impersonatingUser: AdminUserItem | null;
+  autopsyTargetLog: DailyLog | null;
+  isPaymentModalOpen: boolean;
+  isAuthModalOpen: boolean;
+  isResetConfirmOpen: boolean;
+  appToastMessage: string | null;
+
+  // Navigation & Date
+  selectDate: (date: string) => void;
+  setActiveTab: (tab: string) => void;
+  setActiveCycleId: (id: string) => void;
+
+  // Actions
+  updateLog: (log: DailyLog) => Promise<void>;
+  updateCycle: (cycle: Cycle) => Promise<void>;
+  deleteCycle: (cycleId: string) => Promise<void>;
+  createNewCycle: (title: string, startDate: string, targetTheme: string) => Promise<void>;
+  updateUserProfile: (profile: UserProfile) => Promise<void>;
+  updateSettings: (settings: SystemSettings) => Promise<void>;
+  syncOfflineDataToServer: () => Promise<void>;
+  exportData: () => void;
+  confirmResetData: () => void;
+  importData: (jsonStr: string) => void;
+
+  // Auth & Admin
+  handleAuthSuccess: (token: string, user: UserProfile) => void;
+  handleQuickLogin: (role: 'admin' | 'test_user') => Promise<void>;
+  handleImpersonateUser: (user: AdminUserItem) => Promise<void>;
+  handleExitImpersonation: () => Promise<void>;
+  handleLogout: () => void;
+  refreshUserProfile: () => Promise<void>;
+
+  // Modal & Toast Controls
+  openAutopsy: (log: DailyLog) => void;
+  closeAutopsy: () => void;
+  openPaymentModal: () => void;
+  closePaymentModal: () => void;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
+  openResetConfirm: () => void;
+  closeResetConfirm: () => void;
+  showAppToast: (message: string) => void;
+  closeAppToast: () => void;
 }
 
-const BushidoContext = createContext<BushidoContextType | undefined>(undefined);
+const BushidoContext = createContext<BushidoContextType | null>(null);
 
-export const BushidoProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<SystemState>(() => loadStoredSystemState());
-  const [user, setUser] = useState<User | null>(() => getStoredUser());
-  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayISOString());
-  const [toast, setToast] = useState<ToastMessage | null>(null);
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Sync state to local storage whenever state changes
-  useEffect(() => {
-    saveStoredSystemState(state);
-  }, [state]);
-
-  // Monitor online/offline status
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      showToast('info', 'اتصال اینترنت برقرار شد. همگام‌سازی با سرور...');
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-      showToast('warning', 'حالت آفلاین فعال شد. داده‌ها روی دستگاه ذخیره می‌شوند.');
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  const showToast = useCallback((type: ToastMessage['type'], message: string) => {
-    if (toastTimerRef.current) {
-      clearTimeout(toastTimerRef.current);
-    }
-    const id = Math.random().toString(36).substring(2, 9);
-    setToast({ id, type, message });
-
-    toastTimerRef.current = setTimeout(() => {
-      setToast(null);
-    }, 4000);
-  }, []);
-
-  const activeCycle = state.cycles.find(c => c.id === state.activeCycleId) || state.cycles[0] || null;
-
-  const getLogForDate = useCallback((dateStr: string): DailyLog | null => {
-    return state.dailyLogs.find(l => l.date === dateStr && l.cycleId === activeCycle?.id) || null;
-  }, [state.dailyLogs, activeCycle?.id]);
-
-  const todayLog = getLogForDate(selectedDate);
-
-  // Server Synchronization Function (Dual-Engine Sync)
-  const syncWithServer = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token || !navigator.onLine) return;
-
+export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [authToken, setAuthToken] = useState<string | null>(() => {
     try {
-      // 1. Fetch user cycles from server
-      const cyclesRes = await fetch('/api/cycles', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (cyclesRes.ok) {
-        const data = await cyclesRes.json();
-        if (Array.isArray(data.cycles) && data.cycles.length > 0) {
-          setState(prev => {
-            const serverCycles = data.cycles.map((c: any) => ({ ...c, isSynced: true }));
-            return {
-              ...prev,
-              cycles: serverCycles,
-              activeCycleId: prev.activeCycleId || serverCycles[0]?.id
-            };
+      return localStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  const [impersonatingUser, setImpersonatingUser] = useState<AdminUserItem | null>(null);
+  const [impersonatorAdminToken, setImpersonatorAdminToken] = useState<string | null>(null);
+
+  const [systemState, setSystemState] = useState<{
+    cycles: Cycle[];
+    logs: DailyLog[];
+    settings: SystemSettings;
+    userProfile: UserProfile;
+  }>(() => loadStoredSystemState());
+
+  const [activeCycleId, setActiveCycleId] = useState<string>(() => {
+    return systemState.cycles[0]?.id || 'cycle-1';
+  });
+
+  const [selectedDate, setSelectedDate] = useState<string>(() => getLogicalTodayDate());
+  const [activeTab, setActiveTab] = useState<string>('battlefield');
+  const [autopsyTargetLog, setAutopsyTargetLog] = useState<DailyLog | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
+
+  const showAppToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
+    setAppToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setAppToastMessage(null);
+      toastTimeoutRef.current = null;
+    }, 2500);
+  }, []);
+
+  const closeAppToast = useCallback(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
+    setAppToastMessage(null);
+  }, []);
+
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+        toastTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const selectDate = useCallback((newDate: string) => {
+    setSelectedDate(newDate);
+
+    const matchedCycle = systemState.cycles.find(c => {
+      const end = c.endDate || addDaysToDate(c.startDate, 89);
+      return newDate >= c.startDate && newDate <= end;
+    });
+
+    if (matchedCycle && matchedCycle.id !== activeCycleId) {
+      setActiveCycleId(matchedCycle.id);
+    }
+  }, [systemState.cycles, activeCycleId]);
+
+  // Debounced non-blocking async persistence to eliminate main thread freeze on mobile
+  useEffect(() => {
+    saveSystemStateDebounced(systemState, 350);
+    const theme = systemState.userProfile?.accentTheme || systemState.settings?.accentTheme || 'amber';
+    applyAccentTheme(theme);
+  }, [systemState]);
+
+  // Auto-login to Admin on first fresh session if no token and not explicitly logged out
+  useEffect(() => {
+    const initDefaultAdminIfNeeded = async () => {
+      const currentToken = localStorage.getItem(TOKEN_KEY);
+      const isExplicitLogout = sessionStorage.getItem('bushido_explicit_logout') === 'true';
+      if (!currentToken && !isExplicitLogout) {
+        try {
+          const res = await fetch('/api/auth/quick-login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: 'admin' })
           });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.token && data.user) {
+              localStorage.setItem(TOKEN_KEY, data.token);
+              setAuthToken(data.token);
+              setSystemState(prev => ({
+                ...prev,
+                userProfile: {
+                  ...prev.userProfile,
+                  ...data.user,
+                  isVip: Boolean(data.user.isVip),
+                  isAdmin: Boolean(data.user.isAdmin)
+                }
+              }));
+            }
+          }
+        } catch (err) {
+          console.warn('Auto admin login fallback:', err);
         }
       }
+    };
 
-      // 2. Fetch daily logs from server
-      const logsRes = await fetch('/api/logs', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (logsRes.ok) {
-        const data = await logsRes.json();
-        if (Array.isArray(data.logs)) {
-          setState(prev => {
-            const serverLogs = data.logs.map((l: any) => ({ ...l, isSynced: true }));
-            // Merge local unsynced logs with server logs
-            const unsyncedLocal = prev.dailyLogs.filter(l => l.isSynced === false);
-            const mergedMap = new Map();
-            
-            serverLogs.forEach((l: DailyLog) => mergedMap.set(`${l.cycleId}-${l.date}`, l));
-            unsyncedLocal.forEach((l: DailyLog) => mergedMap.set(`${l.cycleId}-${l.date}`, l));
+    initDefaultAdminIfNeeded();
+  }, []);
 
-            return {
-              ...prev,
-              dailyLogs: Array.from(mergedMap.values())
-            };
-          });
+  // Fetch user profile and backend data on mount or token change
+  const refreshUserProfile = useCallback(async () => {
+    if (!authToken) return;
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
         }
-      }
-
-      // 3. Push unsynced local logs to server
-      const unsyncedLogs = state.dailyLogs.filter(l => l.isSynced === false);
-      for (const log of unsyncedLogs) {
-        const pushRes = await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(log)
-        });
-        if (pushRes.ok) {
-          setState(prev => ({
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.user) {
+          setSystemState(prev => ({
             ...prev,
-            dailyLogs: prev.dailyLogs.map(l => l.id === log.id ? { ...l, isSynced: true } : l)
+            userProfile: {
+              ...prev.userProfile,
+              ...data.user,
+              isVip: Boolean(data.user.isVip),
+              isAdmin: Boolean(data.user.isAdmin)
+            }
           }));
         }
       }
     } catch (err) {
-      console.warn('[Sync] Background sync failed:', err);
+      console.warn('Refresh user profile error:', err);
     }
-  }, [state.dailyLogs]);
+  }, [authToken]);
 
-  // Auto Sync on User Change or Network Reconnect
   useEffect(() => {
-    if (user && isOnline) {
-      syncWithServer();
-    }
-  }, [user, isOnline]);
-
-  // Core Interactive Actions
-  const toggleHabit = useCallback(async (habitKey: HabitKey) => {
-    if (!activeCycle) return;
-
-    const todayISO = getTodayISOString();
-    if (selectedDate > todayISO) {
-      showToast('warning', 'ثبت وضعیت برای روزهای آینده امکان‌پذیر نیست.');
-      return;
-    }
-
-    const currentLog = getLogForDate(selectedDate) || {
-      id: `log-${Date.now()}`,
-      cycleId: activeCycle.id,
-      date: selectedDate,
-      wakeUp: false,
-      workout: false,
-      study: false,
-      journal: false,
-      hardTask: false,
-      specialMission: false,
-      isSynced: false
-    };
-
-    const nextVal = !currentLog[habitKey];
-    const updatedLog: DailyLog = {
-      ...currentLog,
-      [habitKey]: nextVal,
-      isSynced: false
-    };
-
-    if (nextVal) {
-      soundFX.playCheck();
-      haptics.lightTap();
-    } else {
-      haptics.uncheckTap();
-    }
-
-    // Update Local State immediately (Zero Latency)
-    setState(prev => {
-      const idx = prev.dailyLogs.findIndex(l => l.date === selectedDate && l.cycleId === activeCycle.id);
-      let newLogs = [...prev.dailyLogs];
-      if (idx >= 0) newLogs[idx] = updatedLog;
-      else newLogs.push(updatedLog);
-      return { ...prev, dailyLogs: newLogs };
-    });
-
-    // Send to Server API if online
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
+    const fetchBackendData = async () => {
       try {
-        const res = await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedLog)
-        });
-        if (res.ok) {
-          setState(prev => ({
-            ...prev,
-            dailyLogs: prev.dailyLogs.map(l => (l.date === selectedDate && l.cycleId === activeCycle.id) ? { ...l, isSynced: true } : l)
-          }));
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (authToken) {
+          headers['Authorization'] = `Bearer ${authToken}`;
         }
-      } catch (err) {
-        console.warn('[API] Log sync deferred to offline queue.');
-      }
-    }
-  }, [activeCycle, selectedDate, getLogForDate, showToast]);
 
-  const toggleSpecialMission = useCallback(async () => {
-    if (!activeCycle) return;
-    const currentLog = getLogForDate(selectedDate) || {
-      id: `log-${Date.now()}`,
-      cycleId: activeCycle.id,
-      date: selectedDate,
-      wakeUp: false,
-      workout: false,
-      study: false,
-      journal: false,
-      hardTask: false,
-      specialMission: false,
-      isSynced: false
-    };
-
-    const updatedLog: DailyLog = {
-      ...currentLog,
-      specialMission: !currentLog.specialMission,
-      isSynced: false
-    };
-
-    soundFX.playCheck();
-    haptics.lightTap();
-
-    setState(prev => {
-      const idx = prev.dailyLogs.findIndex(l => l.date === selectedDate && l.cycleId === activeCycle.id);
-      let newLogs = [...prev.dailyLogs];
-      if (idx >= 0) newLogs[idx] = updatedLog;
-      else newLogs.push(updatedLog);
-      return { ...prev, dailyLogs: newLogs };
-    });
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        const res = await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedLog)
-        });
-        if (res.ok) {
-          setState(prev => ({
-            ...prev,
-            dailyLogs: prev.dailyLogs.map(l => (l.date === selectedDate && l.cycleId === activeCycle.id) ? { ...l, isSynced: true } : l)
-          }));
+        if (authToken) {
+          const userRes = await fetch('/api/auth/me', { headers });
+          if (userRes.ok) {
+            const userData = await userRes.json();
+            if (userData.user) {
+              setSystemState(prev => ({
+                ...prev,
+                userProfile: {
+                  ...prev.userProfile,
+                  ...userData.user,
+                  isVip: !!userData.user.isVip,
+                  isAdmin: !!userData.user.isAdmin
+                }
+              }));
+            }
+          } else {
+            localStorage.removeItem(TOKEN_KEY);
+            setAuthToken(null);
+          }
         }
-      } catch (err) {
-        console.warn('[API] Special mission sync deferred.');
-      }
-    }
-  }, [activeCycle, selectedDate, getLogForDate]);
 
-  const saveDayNotes = useCallback(async (notes: string) => {
-    if (!activeCycle) return;
-    const currentLog = getLogForDate(selectedDate) || {
-      id: `log-${Date.now()}`,
-      cycleId: activeCycle.id,
-      date: selectedDate,
-      wakeUp: false,
-      workout: false,
-      study: false,
-      journal: false,
-      hardTask: false,
-      specialMission: false,
-      isSynced: false
-    };
-
-    const updatedLog: DailyLog = { ...currentLog, notes, isSynced: false };
-
-    setState(prev => {
-      const idx = prev.dailyLogs.findIndex(l => l.date === selectedDate && l.cycleId === activeCycle.id);
-      let newLogs = [...prev.dailyLogs];
-      if (idx >= 0) newLogs[idx] = updatedLog;
-      else newLogs.push(updatedLog);
-      return { ...prev, dailyLogs: newLogs };
-    });
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedLog)
-        });
-      } catch (err) {
-        console.warn('[API] Notes sync deferred.');
-      }
-    }
-  }, [activeCycle, selectedDate, getLogForDate]);
-
-  const submitAutopsy = useCallback(async (autopsy: AutopsyData) => {
-    if (!activeCycle) return;
-    const currentLog = getLogForDate(selectedDate) || {
-      id: `log-${Date.now()}`,
-      cycleId: activeCycle.id,
-      date: selectedDate,
-      wakeUp: false,
-      workout: false,
-      study: false,
-      journal: false,
-      hardTask: false,
-      specialMission: false,
-      isSynced: false
-    };
-
-    const updatedLog: DailyLog = {
-      ...currentLog,
-      statusType: 'burned_resolved',
-      failureReason: autopsy.failureReason,
-      failureTime: autopsy.failureTime,
-      autopsyNotes: autopsy.autopsyNotes,
-      countermeasure: autopsy.countermeasure,
-      aiFeedback: autopsy.aiFeedback,
-      isSynced: false
-    };
-
-    soundFX.playAutopsySave();
-    haptics.debtResolved();
-    showToast('success', 'کالبدشکافی با موفقیت ثبت شد و پرونده بدهی بسته شد.');
-
-    setState(prev => {
-      const idx = prev.dailyLogs.findIndex(l => l.date === selectedDate && l.cycleId === activeCycle.id);
-      let newLogs = [...prev.dailyLogs];
-      if (idx >= 0) newLogs[idx] = updatedLog;
-      else newLogs.push(updatedLog);
-      return { ...prev, dailyLogs: newLogs };
-    });
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedLog)
-        });
-      } catch (err) {
-        console.warn('[API] Autopsy sync deferred.');
-      }
-    }
-  }, [activeCycle, selectedDate, getLogForDate, showToast]);
-
-  const freezeDay = useCallback(async () => {
-    if (!activeCycle) return;
-    const currentLog = getLogForDate(selectedDate) || {
-      id: `log-${Date.now()}`,
-      cycleId: activeCycle.id,
-      date: selectedDate,
-      wakeUp: false,
-      workout: false,
-      study: false,
-      journal: false,
-      hardTask: false,
-      specialMission: false,
-      isSynced: false
-    };
-
-    const updatedLog: DailyLog = {
-      ...currentLog,
-      statusType: 'personal_frozen',
-      failureReason: 'دلایل شخصی',
-      isSynced: false
-    };
-
-    soundFX.playWarning();
-    haptics.warningAlert();
-    showToast('info', 'روز با موفقیت به عنوان توقف موجه (فریز) ثبت گردید.');
-
-    setState(prev => {
-      const idx = prev.dailyLogs.findIndex(l => l.date === selectedDate && l.cycleId === activeCycle.id);
-      let newLogs = [...prev.dailyLogs];
-      if (idx >= 0) newLogs[idx] = updatedLog;
-      else newLogs.push(updatedLog);
-      return { ...prev, dailyLogs: newLogs };
-    });
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        await fetch('/api/logs', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedLog)
-        });
-      } catch (err) {
-        console.warn('[API] Freeze day sync deferred.');
-      }
-    }
-  }, [activeCycle, selectedDate, getLogForDate, showToast]);
-
-  const createNewCycle = useCallback(async (title: string, startDate: string, targetTheme?: string, inheritedStreak: number = 0) => {
-    const end = getShiftedISOString(startDate, 89);
-    const newCycle: Cycle = {
-      id: `cycle-${Date.now()}`,
-      title,
-      startDate,
-      endDate: end,
-      targetTheme,
-      inheritedStreak,
-      status: 'active',
-      isSynced: false
-    };
-
-    setState(prev => ({
-      ...prev,
-      cycles: [...prev.cycles, newCycle],
-      activeCycleId: newCycle.id
-    }));
-
-    showToast('success', `چرخه ۹۰ روزه «${title}» با موفقیت آغاز شد.`);
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        const res = await fetch('/api/cycles', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(newCycle)
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.cycle) {
-            setState(prev => ({
+        const cyclesRes = await fetch('/api/cycles', { headers });
+        if (cyclesRes.ok) {
+          const cyclesData = await cyclesRes.json();
+          const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
+          if (Array.isArray(cyclesList) && cyclesList.length > 0) {
+            setSystemState(prev => ({
               ...prev,
-              cycles: prev.cycles.map(c => c.id === newCycle.id ? { ...data.cycle, isSynced: true } : c),
-              activeCycleId: data.cycle.id
+              cycles: cyclesList
+            }));
+          }
+        }
+
+        const logsRes = await fetch('/api/logs', { headers });
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          const logsList = Array.isArray(logsData) ? logsData : (logsData?.logs || []);
+          if (Array.isArray(logsList) && logsList.length > 0) {
+            setSystemState(prev => ({
+              ...prev,
+              logs: logsList
             }));
           }
         }
       } catch (err) {
-        console.warn('[API] Create cycle sync deferred.');
+        console.warn('Backend sync warning (running in offline/local fallback):', err);
       }
-    }
-  }, [showToast]);
+    };
 
-  const archiveCycle = useCallback(async (cycleId: string) => {
-    setState(prev => {
-      const updatedCycles = prev.cycles.map(c =>
-        c.id === cycleId ? { ...c, status: 'archived' as const, isSynced: false } : c
-      );
-      return { ...prev, cycles: updatedCycles };
+    fetchBackendData();
+  }, [authToken]);
+
+  const currentCycle = useMemo(() => {
+    return systemState.cycles.find(c => c.id === activeCycleId) || systemState.cycles[0] || null;
+  }, [systemState.cycles, activeCycleId]);
+
+  const logicalToday = getLogicalTodayDate();
+
+  const cycleMetrics = useMemo(() => {
+    if (!currentCycle) return null;
+    return computeCycleMetrics(currentCycle, systemState.logs, systemState.cycles, logicalToday);
+  }, [currentCycle, systemState.logs, systemState.cycles, logicalToday]);
+
+  const updateLog = useCallback(async (updatedLog: DailyLog) => {
+    // 1. Optimistic Local Update with initial offline tag
+    const optimisticLog: DailyLog = { ...updatedLog, isSynced: false };
+    setSystemState(prev => {
+      const existingIdx = prev.logs.findIndex(l => l.date === updatedLog.date);
+      let newLogs: DailyLog[];
+      if (existingIdx >= 0) {
+        newLogs = [...prev.logs];
+        newLogs[existingIdx] = optimisticLog;
+      } else {
+        newLogs = [...prev.logs, optimisticLog];
+      }
+      return {
+        ...prev,
+        logs: newLogs
+      };
     });
 
-    showToast('info', 'چرخه به آرشیو منتقل گردید.');
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        await fetch(`/api/cycles/${cycleId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ status: 'archived' })
-        });
-      } catch (err) {
-        console.warn('[API] Archive cycle sync deferred.');
-      }
-    }
-  }, [showToast]);
-
-  const loginUser = useCallback((token: string, userData: User) => {
-    setAuthToken(token);
-    setStoredUser(userData);
-    setUser(userData);
-    showToast('success', `خوش آمدید فرمانده ${userData.name}`);
-    syncWithServer();
-  }, [showToast, syncWithServer]);
-
-  const logoutUser = useCallback(() => {
-    soundFX.playSlash();
-    removeAuthToken();
-    setStoredUser(null);
-    setUser(null);
-    showToast('info', 'از حساب کاربری خارج شدید.');
-  }, [showToast]);
-
-  const updateUserProfile = useCallback(async (updates: Partial<User>) => {
-    if (!user) return;
-    const updated = { ...user, ...updates };
-    setStoredUser(updated);
-    setUser(updated);
-
-    showToast('success', 'پروفایل به‌روزرسانی شد.');
-
-    const token = getAuthToken();
-    if (token && navigator.onLine) {
-      try {
-        await fetch('/api/auth/profile', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updates)
-        });
-      } catch (err) {
-        console.warn('[API] Profile update sync deferred.');
-      }
-    }
-  }, [user, showToast]);
-
-  const exportData = useCallback(() => {
-    return JSON.stringify(state, null, 2);
-  }, [state]);
-
-  const importData = useCallback((jsonData: string): boolean => {
+    // 2. Attempt Network Cloud Sync
     try {
-      const parsed = JSON.parse(jsonData);
-      if (parsed && Array.isArray(parsed.cycles) && Array.isArray(parsed.dailyLogs)) {
-        setState(parsed);
-        saveStoredSystemState(parsed);
-        showToast('success', 'بازیابی داده‌ها با موفقیت انجام شد.');
-        return true;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
       }
-      throw new Error('فرمت فایل معتبر نیست.');
-    } catch {
-      showToast('error', 'خطا در بارگذاری فایل پشتیبان.');
-      return false;
-    }
-  }, [showToast]);
 
-  const resetAllData = useCallback(() => {
-    soundFX.playSlash();
-    localStorage.clear();
-    window.location.reload();
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          ...updatedLog,
+          cycleId: updatedLog.cycleId || activeCycleId
+        })
+      });
+
+      if (res.ok) {
+        // Tag as successfully synced to cloud
+        setSystemState(prev => ({
+          ...prev,
+          logs: prev.logs.map(l => l.date === updatedLog.date ? { ...l, isSynced: true } : l)
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to sync log to server backend (saved locally as isSynced: false):', e);
+    }
+  }, [authToken, activeCycleId]);
+
+  const updateCycle = useCallback(async (updatedCycle: Cycle) => {
+    const optimisticCycle: Cycle = { ...updatedCycle, isSynced: false };
+    setSystemState(prev => ({
+      ...prev,
+      cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? optimisticCycle : c))
+    }));
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const res = await fetch(`/api/cycles/${updatedCycle.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updatedCycle)
+      });
+
+      if (res.ok) {
+        setSystemState(prev => ({
+          ...prev,
+          cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? { ...c, isSynced: true } : c))
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to sync cycle update to server (saved locally as isSynced: false):', e);
+    }
+  }, [authToken]);
+
+  const deleteCycle = useCallback(async (cycleId: string) => {
+    const remainingCycles = systemState.cycles.filter(c => c.id !== cycleId);
+    const remainingLogs = systemState.logs.filter(l => l.cycleId !== cycleId);
+
+    setSystemState(prev => ({
+      ...prev,
+      cycles: prev.cycles.filter(c => c.id !== cycleId),
+      logs: prev.logs.filter(l => l.cycleId !== cycleId)
+    }));
+
+    if (activeCycleId === cycleId && remainingCycles.length > 0) {
+      setActiveCycleId(remainingCycles[0].id);
+      setSelectedDate(remainingCycles[0].startDate);
+    }
+
+    try {
+      const headers: Record<string, string> = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+      await fetch(`/api/cycles/${cycleId}`, {
+        method: 'DELETE',
+        headers
+      });
+    } catch (e) {
+      console.warn('Failed to sync cycle deletion to server:', e);
+    }
+  }, [authToken, activeCycleId, systemState.cycles, systemState.logs]);
+
+  const createNewCycle = useCallback(async (title: string, startDate: string, targetTheme: string) => {
+    const newCycle: Cycle = {
+      id: `cycle-${Date.now()}`,
+      title,
+      startDate,
+      endDate: addDaysToDate(startDate, 89),
+      targetTheme,
+      inheritedStreak: cycleMetrics?.pureStreak || 0,
+      isArchived: false,
+      reportRead: false,
+      isSynced: false
+    };
+
+    setSystemState(prev => ({
+      ...prev,
+      cycles: [...prev.cycles, newCycle]
+    }));
+    setActiveCycleId(newCycle.id);
+    setSelectedDate(startDate);
+    setActiveTab('battlefield');
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const res = await fetch('/api/cycles', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(newCycle)
+      });
+
+      if (res.ok) {
+        setSystemState(prev => ({
+          ...prev,
+          cycles: prev.cycles.map(c => (c.id === newCycle.id ? { ...c, isSynced: true } : c))
+        }));
+      }
+    } catch (e) {
+      console.warn('Failed to save cycle to server (saved locally as isSynced: false):', e);
+    }
+  }, [authToken, cycleMetrics?.pureStreak]);
+
+  // Offline-to-Online Sync Queue Handler
+  const syncOfflineDataToServer = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return;
+    }
+
+    const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    let syncedItemsCount = 0;
+
+    // 1. Process unsynced logs queue
+    const unsyncedLogs = systemState.logs.filter(l => l.isSynced === false);
+    if (unsyncedLogs.length > 0) {
+      for (const log of unsyncedLogs) {
+        try {
+          const res = await fetch('/api/logs', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              ...log,
+              cycleId: log.cycleId || activeCycleId
+            })
+          });
+          if (res.ok) {
+            syncedItemsCount++;
+            setSystemState(prev => ({
+              ...prev,
+              logs: prev.logs.map(l => l.date === log.date ? { ...l, isSynced: true } : l)
+            }));
+          }
+        } catch (err) {
+          console.warn('[Sync Queue] Failed to push offline log:', log.date, err);
+        }
+      }
+    }
+
+    // 2. Process unsynced cycles queue
+    const unsyncedCycles = systemState.cycles.filter(c => c.isSynced === false);
+    if (unsyncedCycles.length > 0) {
+      for (const cycle of unsyncedCycles) {
+        try {
+          const res = await fetch(`/api/cycles/${cycle.id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify(cycle)
+          });
+          if (res.ok) {
+            syncedItemsCount++;
+            setSystemState(prev => ({
+              ...prev,
+              cycles: prev.cycles.map(c => c.id === cycle.id ? { ...c, isSynced: true } : c)
+            }));
+          }
+        } catch (err) {
+          console.warn('[Sync Queue] Failed to push offline cycle:', cycle.id, err);
+        }
+      }
+    }
+
+    if (syncedItemsCount > 0) {
+      showAppToast(`همگام‌سازی ابری با موفقیت انجام شد (${toPersianDigits(syncedItemsCount)} تغییر ذخیره شد).`);
+    }
+  }, [authToken, systemState.logs, systemState.cycles, activeCycleId, showAppToast]);
+
+  // Listen to browser 'online' event to immediately flush offline changes
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[Bushido Sync] Device is back online. Syncing pending offline queues...');
+      syncOfflineDataToServer();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [syncOfflineDataToServer]);
+
+  const updateUserProfile = useCallback(async (updatedProfile: UserProfile) => {
+    setSystemState(prev => ({
+      ...prev,
+      userProfile: updatedProfile
+    }));
+
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updatedProfile)
+      });
+    } catch (e) {
+      console.warn('Failed to sync user profile:', e);
+    }
+  }, [authToken]);
+
+  const updateSettings = useCallback(async (updatedSettings: SystemSettings) => {
+    setSystemState(prev => ({
+      ...prev,
+      settings: updatedSettings
+    }));
   }, []);
 
-  return (
-    <BushidoContext.Provider
-      value={{
-        state,
-        user,
-        activeCycle,
-        todayLog,
-        selectedDate,
-        setSelectedDate,
-        toast,
-        showToast,
-        toggleHabit,
-        toggleSpecialMission,
-        saveDayNotes,
-        submitAutopsy,
-        freezeDay,
-        createNewCycle,
-        archiveCycle,
-        loginUser,
-        logoutUser,
-        updateUserProfile,
-        importData,
-        exportData,
-        resetAllData,
-        syncWithServer,
-        isOnline
-      }}
-    >
-      {children}
-    </BushidoContext.Provider>
-  );
+  const exportData = useCallback(() => {
+    const data = {
+      cycles: systemState.cycles,
+      logs: systemState.logs,
+      settings: systemState.settings,
+      userProfile: systemState.userProfile,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bushido-discipline-backup-${logicalToday}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [systemState, logicalToday]);
+
+  const confirmResetData = useCallback(() => {
+    flushPendingStorageSave();
+    const fresh = createInitialSystemState();
+    setSystemState(fresh);
+    setActiveCycleId(fresh.cycles[0].id);
+    setSelectedDate(getLogicalTodayDate());
+    setIsResetConfirmOpen(false);
+    showAppToast('داده‌های سامانه با موفقیت به مقادیر اولیه بوشیدو بازنشانی شد.');
+  }, [showAppToast]);
+
+  const importData = useCallback((dataStr: string) => {
+    try {
+      const parsed = JSON.parse(dataStr);
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray(parsed.cycles) &&
+        Array.isArray(parsed.logs) &&
+        parsed.settings &&
+        typeof parsed.settings === 'object'
+      ) {
+        if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
+          parsed.userProfile = createInitialSystemState().userProfile;
+        }
+
+        // Sanitize imported cycles and logs to guarantee structural integrity
+        parsed.cycles = parsed.cycles.filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string' && typeof c.startDate === 'string');
+        parsed.logs = parsed.logs.filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string');
+
+        if (parsed.cycles.length === 0) {
+          showAppToast('فایل پشتیبان باید حداقل دارای یک چرخه معتبر باشد.');
+          return;
+        }
+
+        flushPendingStorageSave();
+        setSystemState(parsed);
+        setActiveCycleId(parsed.cycles[0].id);
+        showAppToast('اطلاعات پشتیبان با موفقیت بازیابی شد.');
+      } else {
+        showAppToast('فرمت ساختار فایل پشتیبان نامعتبر است.');
+      }
+    } catch {
+      showAppToast('خطا در تجزیه فایل JSON.');
+    }
+  }, [showAppToast]);
+
+  const handleAuthSuccess = useCallback((token: string, user: UserProfile) => {
+    sessionStorage.removeItem('bushido_explicit_logout');
+    localStorage.setItem(TOKEN_KEY, token);
+    setAuthToken(token);
+    setSystemState(prev => ({
+      ...prev,
+      userProfile: user
+    }));
+    showAppToast(`با موفقیت وارد حساب «${user.name || 'کاربر'}» شدید.`);
+  }, [showAppToast]);
+
+  const handleQuickLogin = useCallback(async (role: 'admin' | 'test_user') => {
+    try {
+      sessionStorage.removeItem('bushido_explicit_logout');
+      let data: any = null;
+      try {
+        const res = await fetch('/api/auth/quick-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ role })
+        });
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          data = await res.json();
+        }
+      } catch (err) {
+        console.warn('Backend quick-login fetch warning:', err);
+      }
+
+      if (data && data.token && data.user) {
+        localStorage.setItem(TOKEN_KEY, data.token);
+        setAuthToken(data.token);
+        setSystemState(prev => ({
+          ...prev,
+          userProfile: {
+            ...prev.userProfile,
+            ...data.user,
+            isVip: Boolean(data.user.isVip),
+            isAdmin: Boolean(data.user.isAdmin)
+          }
+        }));
+        showAppToast(role === 'admin' ? 'به عنوان مدیر ارشد سیستم وارد شدید.' : 'به عنوان کاربر تستی وارد شدید.');
+        return;
+      }
+
+      // Offline instant fallback
+      const fallbackToken = `mock-token-${role}-${Date.now()}`;
+      const fallbackUser: UserProfile = role === 'admin' ? {
+        id: 'admin-master-001',
+        name: 'فرمانده ارشد سامورایی (مدیر)',
+        email: 'admin@bushido.app',
+        phoneNumber: '09375454050',
+        tier: 'vip_samurai',
+        isVip: true,
+        isAdmin: true,
+        vipSince: new Date().toISOString(),
+        vipExpiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
+        paymentRefId: 'REF-ADMIN-MASTER-001',
+        activeCycleLimit: 999
+      } : {
+        id: 'test-user-001',
+        name: 'کاربر آزمایشی بوشیدو (دید کاربر)',
+        email: 'test@bushido.app',
+        phoneNumber: '09121111111',
+        tier: 'free',
+        isVip: false,
+        isAdmin: false,
+        vipSince: undefined,
+        vipExpiresAt: undefined,
+        paymentRefId: undefined,
+        activeCycleLimit: 1
+      };
+
+      localStorage.setItem(TOKEN_KEY, fallbackToken);
+      setAuthToken(fallbackToken);
+      setSystemState(prev => ({
+        ...prev,
+        userProfile: fallbackUser
+      }));
+      showAppToast(role === 'admin' ? 'به عنوان مدیر ارشد سیستم وارد شدید.' : 'به عنوان کاربر تستی وارد شدید.');
+    } catch (e) {
+      console.error('Quick login error:', e);
+      showAppToast('ورود با تنظیمات پیش‌فرض انجام شد.');
+    }
+  }, [showAppToast]);
+
+  const handleImpersonateUser = useCallback(async (targetUser: AdminUserItem) => {
+    try {
+      const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
+      if (!currentToken) return;
+
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentToken}`
+        },
+        body: JSON.stringify({ targetUserId: targetUser.id })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.token && data.user) {
+        setImpersonatorAdminToken(currentToken);
+        setImpersonatingUser(targetUser);
+        localStorage.setItem(TOKEN_KEY, data.token);
+        setAuthToken(data.token);
+        setSystemState(prev => ({
+          ...prev,
+          userProfile: {
+            ...prev.userProfile,
+            ...data.user,
+            isVip: Boolean(data.user.isVip),
+            isAdmin: Boolean(data.user.isAdmin)
+          }
+        }));
+        setActiveTab('battlefield');
+        showAppToast(`در حال شبیه‌سازی و مشاهده سامانه از دید: «${data.user.name}»`);
+      } else {
+        showAppToast(data.error || 'خطا در سوییچ به کاربر');
+      }
+    } catch (e) {
+      console.error('Impersonate user error:', e);
+      showAppToast('خطا در برقراری ارتباط با سرور');
+    }
+  }, [authToken, showAppToast]);
+
+  const handleExitImpersonation = useCallback(async () => {
+    if (!impersonatorAdminToken) return;
+    try {
+      localStorage.setItem(TOKEN_KEY, impersonatorAdminToken);
+      setAuthToken(impersonatorAdminToken);
+      setImpersonatingUser(null);
+      const res = await fetch('/api/auth/me', {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${impersonatorAdminToken}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setSystemState(prev => ({
+            ...prev,
+            userProfile: {
+              ...prev.userProfile,
+              ...data.user,
+              isVip: Boolean(data.user.isVip),
+              isAdmin: Boolean(data.user.isAdmin)
+            }
+          }));
+        }
+      }
+      setImpersonatorAdminToken(null);
+      setActiveTab('admin');
+      showAppToast('به حساب مدیریت بازگشتید.');
+    } catch (e) {
+      console.error('Exit impersonation error:', e);
+    }
+  }, [impersonatorAdminToken, showAppToast]);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.setItem('bushido_explicit_logout', 'true');
+    setAuthToken(null);
+    setImpersonatingUser(null);
+    setImpersonatorAdminToken(null);
+    setSystemState(prev => ({
+      ...prev,
+      userProfile: GUEST_USER_PROFILE
+    }));
+    setIsAuthModalOpen(false);
+    showAppToast('با موفقیت از حساب کاربری خارج شدید.');
+  }, [showAppToast]);
+
+  const openAutopsy = useCallback((log: DailyLog) => setAutopsyTargetLog(log), []);
+  const closeAutopsy = useCallback(() => setAutopsyTargetLog(null), []);
+  const openPaymentModal = useCallback(() => setIsPaymentModalOpen(true), []);
+  const closePaymentModal = useCallback(() => setIsPaymentModalOpen(false), []);
+  const openAuthModal = useCallback(() => setIsAuthModalOpen(true), []);
+  const closeAuthModal = useCallback(() => setIsAuthModalOpen(false), []);
+  const openResetConfirm = useCallback(() => setIsResetConfirmOpen(true), []);
+  const closeResetConfirm = useCallback(() => setIsResetConfirmOpen(false), []);
+
+  const value: BushidoContextType = {
+    authToken,
+    systemState,
+    activeCycleId,
+    selectedDate,
+    activeTab,
+    currentCycle,
+    cycleMetrics,
+    impersonatingUser,
+    autopsyTargetLog,
+    isPaymentModalOpen,
+    isAuthModalOpen,
+    isResetConfirmOpen,
+    appToastMessage,
+
+    selectDate,
+    setActiveTab,
+    setActiveCycleId,
+
+    updateLog,
+    updateCycle,
+    deleteCycle,
+    createNewCycle,
+    updateUserProfile,
+    updateSettings,
+    syncOfflineDataToServer,
+    exportData,
+    confirmResetData,
+    importData,
+
+    handleAuthSuccess,
+    handleQuickLogin,
+    handleImpersonateUser,
+    handleExitImpersonation,
+    handleLogout,
+    refreshUserProfile,
+
+    openAutopsy,
+    closeAutopsy,
+    openPaymentModal,
+    closePaymentModal,
+    openAuthModal,
+    closeAuthModal,
+    openResetConfirm,
+    closeResetConfirm,
+    showAppToast,
+    closeAppToast
+  };
+
+  return <BushidoContext.Provider value={value}>{children}</BushidoContext.Provider>;
 };
 
-export const useBushido = () => {
+export const useBushido = (): BushidoContextType => {
   const context = useContext(BushidoContext);
   if (!context) {
     throw new Error('useBushido must be used within a BushidoProvider');
