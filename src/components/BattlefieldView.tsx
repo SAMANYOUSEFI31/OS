@@ -288,6 +288,13 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     }
   }, [notesValue]);
 
+  // Ensure any unsaved pending notes are always flushed on unmount
+  useEffect(() => {
+    return () => {
+      flushPendingNotes();
+    };
+  }, [flushPendingNotes]);
+
   // Debounced auto-save to global store
   useEffect(() => {
     if (isCycleArchived || isFuture || isSaved) return;

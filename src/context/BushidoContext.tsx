@@ -103,15 +103,37 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
 
   const showAppToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
     setAppToastMessage(msg);
-    setTimeout(() => {
-      setAppToastMessage(prev => (prev === msg ? null : prev));
+    toastTimeoutRef.current = setTimeout(() => {
+      setAppToastMessage(null);
+      toastTimeoutRef.current = null;
     }, 2500);
   }, []);
 
-  const closeAppToast = useCallback(() => setAppToastMessage(null), []);
+  const closeAppToast = useCallback(() => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
+    setAppToastMessage(null);
+  }, []);
+
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+        toastTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const selectDate = useCallback((newDate: string) => {
     setSelectedDate(newDate);

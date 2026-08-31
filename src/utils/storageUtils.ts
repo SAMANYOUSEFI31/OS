@@ -94,32 +94,58 @@ export function saveSystemStateDebounced(state: SystemState, delayMs: number = D
  * Loads system state from localStorage with fallback and schema migration checks
  */
 export function loadStoredSystemState(): SystemState {
+  const initial = createInitialSystemState();
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (!parsed.userProfile) {
-        const initial = createInitialSystemState();
+      if (!parsed || typeof parsed !== 'object') {
+        return initial;
+      }
+
+      // 1. User Profile Protection
+      if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
         parsed.userProfile = initial.userProfile;
       }
-      if (Array.isArray(parsed.cycles)) {
-        parsed.cycles = parsed.cycles.map((c: any) => {
-          if (c.id === 'cycle-1' && c.isArchived) {
-            return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : true };
-          }
-          return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : true };
-        });
+
+      // 2. Cycles Array Protection (Strict Array.isArray check)
+      if (!Array.isArray(parsed.cycles)) {
+        parsed.cycles = initial.cycles;
+      } else {
+        parsed.cycles = parsed.cycles
+          .filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string')
+          .map((c: any) => {
+            if (c.id === 'cycle-1' && c.isArchived) {
+              return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : true };
+            }
+            return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : true };
+          });
+        if (parsed.cycles.length === 0) {
+          parsed.cycles = initial.cycles;
+        }
       }
-      if (Array.isArray(parsed.logs)) {
-        parsed.logs = parsed.logs.map((l: any) => ({
-          ...l,
-          isSynced: l.isSynced !== undefined ? l.isSynced : true
-        }));
+
+      // 3. Logs Array Protection (Strict Array.isArray check)
+      if (!Array.isArray(parsed.logs)) {
+        parsed.logs = initial.logs;
+      } else {
+        parsed.logs = parsed.logs
+          .filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string')
+          .map((l: any) => ({
+            ...l,
+            isSynced: l.isSynced !== undefined ? l.isSynced : true
+          }));
       }
-      return parsed;
+
+      // 4. Settings Protection
+      if (!parsed.settings || typeof parsed.settings !== 'object') {
+        parsed.settings = initial.settings;
+      }
+
+      return parsed as SystemState;
     }
   } catch (e) {
     console.warn('[Bushido Storage] Failed to load from localStorage, initializing fresh:', e);
   }
-  return createInitialSystemState();
+  return initial;
 }

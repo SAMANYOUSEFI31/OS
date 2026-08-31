@@ -60,6 +60,8 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
   const [countermeasure, setCountermeasure] = useState(log.countermeasure || '');
   const [aiFeedback, setAiFeedback] = useState(log.aiFeedback || '');
   const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const currentLogIdRef = useRef(log.id);
+  currentLogIdRef.current = log.id;
 
   // Sync state when log changes (e.g. when user clicks next/prev debt day or saves current debt)
   useEffect(() => {
@@ -71,6 +73,13 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
     setIsLoadingAi(false);
   }, [log.id, log.date, log.failureReason, log.failureTime, log.autopsyNotes, log.countermeasure, log.aiFeedback]);
 
+  // Clean up loading state on unmount
+  useEffect(() => {
+    return () => {
+      setIsLoadingAi(false);
+    };
+  }, []);
+
   const missedHabits = FOUNDATION_HABITS
     .filter(h => !log[h.key])
     .map(h => h.titleFa);
@@ -81,6 +90,7 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
   const hasMultipleDebts = totalDebts > 1 && onSelectLog;
 
   const handleAiAutopsy = async () => {
+    const targetLogId = log.id;
     setIsLoadingAi(true);
     try {
       // Direct local deterministic engine call with backend sync
@@ -93,14 +103,16 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
         cycleTheme
       });
 
-      if (localResult.analysis) {
-        setAiFeedback(localResult.analysis);
-      }
-      if (localResult.countermeasure && !countermeasure) {
-        setCountermeasure(localResult.countermeasure);
-      }
-      if (localResult.psychologicalTrap) {
-        setNotes(prev => prev ? `${prev}\n\n[تله شناختی]: ${localResult.psychologicalTrap}` : `[تله شناختی]: ${localResult.psychologicalTrap}`);
+      if (currentLogIdRef.current === targetLogId) {
+        if (localResult.analysis) {
+          setAiFeedback(localResult.analysis);
+        }
+        if (localResult.countermeasure && !countermeasure) {
+          setCountermeasure(localResult.countermeasure);
+        }
+        if (localResult.psychologicalTrap) {
+          setNotes(prev => prev ? `${prev}\n\n[تله شناختی]: ${localResult.psychologicalTrap}` : `[تله شناختی]: ${localResult.psychologicalTrap}`);
+        }
       }
 
       // Sync with server if online
@@ -121,7 +133,9 @@ export const AutopsyModal: React.FC<AutopsyModalProps> = ({
     } catch (err) {
       console.error('Autopsy error:', err);
     } finally {
-      setIsLoadingAi(false);
+      if (currentLogIdRef.current === targetLogId) {
+        setIsLoadingAi(false);
+      }
     }
   };
 

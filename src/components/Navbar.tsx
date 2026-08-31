@@ -175,7 +175,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button 
                   type="button"
                   onClick={() => setIsCycleDropdownOpen(!isCycleDropdownOpen)}
-                  className="h-8 sm:h-9 bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2 sm:px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1 sm:gap-1.5 transition cursor-pointer shrink-0"
+                  className="h-8 sm:h-9 min-w-[44px] bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2 sm:px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1 sm:gap-1.5 transition cursor-pointer shrink-0 touch-manipulation"
                 >
                   <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${currentCycle ? 'bg-emerald-400' : 'bg-amber-400'}`}></span>
                   <span className="font-bold whitespace-nowrap text-[11px] sm:text-xs">
@@ -211,7 +211,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             return (
                               <div
                                 key={c.id}
-                                className={`w-full px-3 py-2 text-xs hover:bg-zinc-800/80 transition flex items-center justify-between gap-2 cursor-pointer border-b border-zinc-850 last:border-0 ${
+                                className={`w-full px-3 py-2.5 min-h-[44px] text-xs hover:bg-zinc-800/80 transition flex items-center justify-between gap-2 cursor-pointer border-b border-zinc-850 last:border-0 touch-manipulation ${
                                   isCurrent ? 'text-emerald-400 font-bold bg-zinc-800/50' : 'text-zinc-300'
                                 }`}
                                 onClick={() => {
@@ -235,7 +235,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                                   <button
                                     type="button"
                                     onClick={(e) => handleDeleteCycleClick(e, c.id)}
-                                    className={`p-1.5 rounded-lg text-xs transition shrink-0 cursor-pointer flex items-center justify-center ${
+                                    className={`p-2 min-h-[36px] min-w-[36px] rounded-lg text-xs transition shrink-0 cursor-pointer flex items-center justify-center touch-manipulation ${
                                       isConfirming 
                                         ? 'bg-red-500 hover:bg-red-600 text-white font-black px-2 py-1 shadow-md animate-pulse' 
                                         : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
@@ -264,7 +264,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                               setConfirmDeleteCycleId(null);
                               onOpenNewCycleModal();
                             }}
-                            className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10 active:scale-[0.98]"
+                            className="w-full py-2.5 min-h-[44px] px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10 active:scale-[0.98] touch-manipulation"
                           >
                             <Plus className="w-4 h-4" />
                             <span>+ تعریف چرخه جدید ۹۰ روزه</span>
@@ -277,7 +277,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                             setConfirmDeleteCycleId(null);
                             onSelectTab('archives');
                           }}
-                          className="w-full py-1.5 px-3 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          className="w-full py-2.5 min-h-[44px] px-3 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation"
                         >
                           <Archive className="w-3.5 h-3.5 text-zinc-400" />
                           <span>کارنامه و بایگانی چرخه‌ها</span>
@@ -301,7 +301,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     key={tab.id}
                     type="button"
                     onClick={() => handleTabClick(tab.id)}
-                    className={`h-9 px-3.5 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer relative z-10 select-none ${
+                    className={`h-9 px-3.5 rounded-xl text-xs xl:text-sm font-semibold flex items-center gap-2 transition-colors cursor-pointer relative z-10 select-none touch-manipulation ${
                       isActive
                         ? 'text-white font-bold'
                         : 'text-zinc-400 hover:text-zinc-200'
@@ -347,7 +347,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onSelectTab('battlefield');
                     }
                   }}
-                  className="h-8 sm:h-9 bg-red-950/80 border border-red-500/60 hover:bg-red-900/90 text-red-300 px-2 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer animate-pulse shrink-0 shadow-md transition"
+                  className="h-8 sm:h-9 min-w-[44px] bg-red-950/80 border border-red-500/60 hover:bg-red-900/90 text-red-300 px-2 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer animate-pulse shrink-0 shadow-md transition touch-manipulation"
                   title="کلیک برای کالبدشکافی و تسویه فوری بدهی"
                 >
                   <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
@@ -370,7 +370,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenPaymentModal}
-                  className="h-8 sm:h-9 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 hover:border-amber-500/50 text-amber-300 px-2 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs shrink-0 transition active:scale-95"
+                  className="h-8 sm:h-9 min-w-[44px] bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 hover:border-amber-500/50 text-amber-300 px-2 sm:px-2.5 rounded-xl text-[11px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 sm:gap-1.5 cursor-pointer shadow-xs shrink-0 transition active:scale-95 touch-manipulation"
                   title="حساب سامورایی ویژه فعال است - کلیک برای مدیریت"
                 >
                   <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -383,7 +383,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={() => onSelectTab('admin')}
-                  className={`h-8 sm:h-9 bg-red-950/60 border border-red-500/50 hover:bg-red-900/80 text-red-300 px-2 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition shrink-0 ${
+                  className={`h-8 sm:h-9 min-w-[44px] bg-red-950/60 border border-red-500/50 hover:bg-red-900/80 text-red-300 px-2 sm:px-2.5 rounded-xl text-[10px] sm:text-xs font-bold inline-flex items-center justify-center gap-1 cursor-pointer transition shrink-0 touch-manipulation ${
                     activeTab === 'admin' ? 'ring-2 ring-red-500 bg-red-900/80 text-white' : ''
                   }`}
                   title="ورود به پنل مدیریت"
@@ -417,7 +417,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => handleTabClick(tab.id)}
-                className={`h-full flex flex-col items-center justify-center relative cursor-pointer z-10 transition-colors ${
+                className={`h-full min-h-[44px] min-w-[44px] w-full flex flex-col items-center justify-center relative cursor-pointer z-10 transition-colors touch-manipulation ${
                   isActive
                     ? 'font-bold text-white'
                     : 'text-zinc-400 hover:text-zinc-200'
