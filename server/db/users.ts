@@ -6,6 +6,24 @@ import {
   DBUser,
   seedUserData
 } from './base';
+import {
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  isSuperAdminIdentifier
+} from '../security';
+
+export function normalizeIdentifier(val: string): string {
+  if (!val) return '';
+  // Convert Persian/Arabic digits to English digits
+  const persianDigits = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  let res = val.trim().toLowerCase();
+  for (let i = 0; i < 10; i++) {
+    res = res.replace(new RegExp(persianDigits[i], 'g'), String(i));
+    res = res.replace(new RegExp(arabicDigits[i], 'g'), String(i));
+  }
+  return res;
+}
 
 export async function findUserById(id: string): Promise<DBUser | null> {
   if (isPrismaAvailable && prisma) {
@@ -24,7 +42,7 @@ export async function findUserById(id: string): Promise<DBUser | null> {
 }
 
 export async function findUserByIdentifier(identifier: string): Promise<DBUser | null> {
-  const normalized = identifier.trim().toLowerCase();
+  const normalized = normalizeIdentifier(identifier);
   
   if (isPrismaAvailable && prisma) {
     try {
@@ -60,18 +78,21 @@ export async function createUser(data: {
   const now = new Date().toISOString();
   const id = `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
+  const cleanEmail = data.email ? normalizeIdentifier(data.email) : undefined;
+  const cleanPhone = data.phoneNumber ? normalizeIdentifier(data.phoneNumber) : undefined;
+
+  const isMasterAccount = isSuperAdminIdentifier(cleanEmail) || isSuperAdminIdentifier(cleanPhone);
   const isFirstUser = memoryStore.users.length === 0;
-  const isMasterAccount = data.email === 'admin@bushido.app' || data.phoneNumber === '09120000000';
-  const isAdmin = data.isAdmin !== undefined ? data.isAdmin : (isFirstUser || isMasterAccount);
-  const isVip = Boolean(data.isVip || (isMasterAccount ? true : false));
+  const isAdmin = isMasterAccount ? true : (data.isAdmin !== undefined ? data.isAdmin : isFirstUser);
+  const isVip = isMasterAccount ? true : Boolean(data.isVip);
 
   const newUser: DBUser = {
-    id,
-    email: data.email ? data.email.toLowerCase().trim() : null,
-    phoneNumber: data.phoneNumber ? data.phoneNumber.trim() : null,
-    name: data.name || (data.phoneNumber ? `کاربر ${data.phoneNumber.slice(-4)}` : (data.email ? data.email.split('@')[0] : 'سامورایی دیسیپلین')),
+    id: isMasterAccount ? 'admin-master-001' : id,
+    email: cleanEmail || null,
+    phoneNumber: cleanPhone || null,
+    name: data.name || (cleanPhone ? `کاربر ${cleanPhone.slice(-4)}` : (cleanEmail ? cleanEmail.split('@')[0] : 'سامورایی دیسیپلین')),
     passwordHash: data.passwordHash || null,
-    tier: data.tier || (isVip ? 'vip_samurai' : 'free'),
+    tier: isMasterAccount ? 'vip_samurai' : (data.tier || (isVip ? 'vip_samurai' : 'free')),
     isVip,
     isAdmin,
     nightOwlCutoffHour: 4,
@@ -110,13 +131,24 @@ export async function updateUser(
   data: Partial<Omit<DBUser, 'id' | 'createdAt'>>
 ): Promise<DBUser | null> {
   const now = new Date().toISOString();
+  const idx = memoryStore.users.findIndex(u => u.id === id);
+  const existingUser = idx !== -1 ? memoryStore.users[idx] : null;
+
+  // Super Admin security shield: prevent revoking admin or VIP status
+  const isMaster = existingUser && (isSuperAdminIdentifier(existingUser.phoneNumber) || isSuperAdminIdentifier(existingUser.email));
+  const safeData = { ...data };
+  if (isMaster) {
+    safeData.isAdmin = true;
+    safeData.isVip = true;
+    safeData.tier = 'vip_samurai';
+  }
 
   if (isPrismaAvailable && prisma) {
     try {
       const updated = await prisma.user.update({
         where: { id },
         data: {
-          ...data,
+          ...safeData,
           updatedAt: now
         }
       });
@@ -126,12 +158,11 @@ export async function updateUser(
     }
   }
 
-  const idx = memoryStore.users.findIndex(u => u.id === id);
-  if (idx === -1) return null;
+  if (!existingUser) return null;
 
   memoryStore.users[idx] = {
     ...memoryStore.users[idx],
-    ...data,
+    ...safeData,
     updatedAt: now
   };
 
@@ -172,29 +203,41 @@ export async function adminUpdateUser(
   const targetUser = await findUserById(userId);
   if (!targetUser) return null;
 
+  // Super Admin security shield
+  const isMaster = isSuperAdminIdentifier(targetUser.phoneNumber) || isSuperAdminIdentifier(targetUser.email);
+  if (isMaster && (data.isAdmin === false || data.isVip === false)) {
+    throw new Error('حساب مالک و فرمانده ارشد سیستم غیرقابل تنزل یا لغو دسترسی است.');
+  }
+
   const nowStr = new Date().toISOString();
   const updatePayload: Partial<DBUser> = {
     ...data,
     updatedAt: nowStr
   };
 
-  if (data.isAdmin !== undefined) {
-    updatePayload.isAdmin = data.isAdmin;
-  }
+  if (isMaster) {
+    updatePayload.isAdmin = true;
+    updatePayload.isVip = true;
+    updatePayload.tier = 'vip_samurai';
+  } else {
+    if (data.isAdmin !== undefined) {
+      updatePayload.isAdmin = data.isAdmin;
+    }
 
-  if (data.isVip !== undefined) {
-    updatePayload.isVip = data.isVip;
-    if (data.isVip) {
-      updatePayload.tier = data.tier || 'vip_samurai';
-      updatePayload.vipSince = targetUser.vipSince || nowStr;
-      
-      const currentExpiry = targetUser.vipExpiresAt ? new Date(targetUser.vipExpiresAt).getTime() : Date.now();
-      const baseTime = currentExpiry > Date.now() ? currentExpiry : Date.now();
-      const extDays = typeof data.daysExtension === 'number' && data.daysExtension > 0 ? data.daysExtension : 365;
-      updatePayload.vipExpiresAt = new Date(baseTime + extDays * 86400000).toISOString();
-    } else {
-      updatePayload.tier = 'free';
-      updatePayload.vipExpiresAt = null;
+    if (data.isVip !== undefined) {
+      updatePayload.isVip = data.isVip;
+      if (data.isVip) {
+        updatePayload.tier = data.tier || 'vip_samurai';
+        updatePayload.vipSince = targetUser.vipSince || nowStr;
+        
+        const currentExpiry = targetUser.vipExpiresAt ? new Date(targetUser.vipExpiresAt).getTime() : Date.now();
+        const baseTime = currentExpiry > Date.now() ? currentExpiry : Date.now();
+        const extDays = typeof data.daysExtension === 'number' && data.daysExtension > 0 ? data.daysExtension : 365;
+        updatePayload.vipExpiresAt = new Date(baseTime + extDays * 86400000).toISOString();
+      } else {
+        updatePayload.tier = 'free';
+        updatePayload.vipExpiresAt = null;
+      }
     }
   }
 
@@ -210,13 +253,14 @@ export async function adminCreateTestUser(data: {
   tier?: string;
   isAdmin?: boolean;
 }): Promise<DBUser> {
-  const identifier = data.email || data.phoneNumber || data.identifier || '';
-  const isEmail = identifier.includes('@');
+  const rawId = data.email || data.phoneNumber || data.identifier || '';
+  const cleanId = normalizeIdentifier(rawId);
+  const isEmail = cleanId.includes('@');
 
   const user = await createUser({
     name: data.name,
-    email: data.email || (isEmail ? identifier : undefined),
-    phoneNumber: data.phoneNumber || (!isEmail && identifier ? identifier : undefined),
+    email: data.email ? normalizeIdentifier(data.email) : (isEmail ? cleanId : undefined),
+    phoneNumber: data.phoneNumber ? normalizeIdentifier(data.phoneNumber) : (!isEmail && cleanId ? cleanId : undefined),
     isVip: data.isVip,
     isAdmin: data.isAdmin,
     tier: data.tier || (data.isVip ? 'vip_samurai' : 'free')

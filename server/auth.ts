@@ -1,8 +1,25 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { findUserById } from './db';
+import {
+  JWT_SECRET,
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  SUPER_ADMIN_PASS,
+  isSuperAdminIdentifier,
+  hashPassword,
+  verifyPassword
+} from './security';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'bushido_samurai_jwt_secret_key_2026_discipline_os';
+export {
+  JWT_SECRET,
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  SUPER_ADMIN_PASS,
+  isSuperAdminIdentifier,
+  hashPassword,
+  verifyPassword
+};
 
 export interface AuthUserPayload {
   userId: string;
@@ -29,7 +46,16 @@ function base64UrlDecode(str: string): string {
 export function generateToken(payload: AuthUserPayload): string {
   const header = { alg: 'HS256', typ: 'JWT' };
   const exp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days validity
-  const fullPayload = { ...payload, exp };
+  
+  // Super Admin token is always reinforced with Admin and VIP privileges
+  const isMaster = isSuperAdminIdentifier(payload.phoneNumber) || isSuperAdminIdentifier(payload.email);
+  const fullPayload = {
+    ...payload,
+    isVip: isMaster ? true : payload.isVip,
+    isAdmin: isMaster ? true : Boolean(payload.isAdmin),
+    tier: isMaster ? 'vip_samurai' : payload.tier,
+    exp
+  };
 
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
@@ -89,13 +115,16 @@ export async function authMiddleware(
       return res.status(401).json({ error: 'کاربر در دیتابیس یافت نشد.' });
     }
 
+    // Hardened Super Admin Security Guard
+    const isMaster = isSuperAdminIdentifier(user.phoneNumber) || isSuperAdminIdentifier(user.email);
+
     req.user = {
       userId: user.id,
       email: user.email,
       phoneNumber: user.phoneNumber,
-      isVip: user.isVip,
-      tier: user.tier,
-      isAdmin: Boolean(user.isAdmin)
+      isVip: isMaster ? true : user.isVip,
+      tier: isMaster ? 'vip_samurai' : user.tier,
+      isAdmin: isMaster ? true : Boolean(user.isAdmin)
     };
 
     next();
@@ -128,7 +157,9 @@ export async function adminMiddleware(
       return res.status(401).json({ error: 'حساب کاربری در دیتابیس یافت نشد.' });
     }
 
-    if (!user.isAdmin) {
+    const isMaster = isSuperAdminIdentifier(user.phoneNumber) || isSuperAdminIdentifier(user.email);
+
+    if (!user.isAdmin && !isMaster) {
       return res.status(403).json({ error: 'خطای ۴۰۳: دسترسی به بخش مدیریت سامانه فقط برای مدیران بوشیدو مجاز است.' });
     }
 
@@ -136,8 +167,8 @@ export async function adminMiddleware(
       userId: user.id,
       email: user.email,
       phoneNumber: user.phoneNumber,
-      isVip: user.isVip,
-      tier: user.tier,
+      isVip: true,
+      tier: 'vip_samurai',
       isAdmin: true
     };
 
@@ -162,13 +193,14 @@ export async function optionalAuthMiddleware(
       if (decoded && decoded.userId) {
         const user = await findUserById(decoded.userId);
         if (user) {
+          const isMaster = isSuperAdminIdentifier(user.phoneNumber) || isSuperAdminIdentifier(user.email);
           req.user = {
             userId: user.id,
             email: user.email,
             phoneNumber: user.phoneNumber,
-            isVip: user.isVip,
-            tier: user.tier,
-            isAdmin: Boolean(user.isAdmin)
+            isVip: isMaster ? true : user.isVip,
+            tier: isMaster ? 'vip_samurai' : user.tier,
+            isAdmin: isMaster ? true : Boolean(user.isAdmin)
           };
         }
       }

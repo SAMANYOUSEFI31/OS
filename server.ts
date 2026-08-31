@@ -32,6 +32,15 @@ import {
   optionalAuthMiddleware,
   AuthenticatedRequest
 } from './server/auth';
+import {
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  SUPER_ADMIN_PASS,
+  SUPER_ADMIN_NAME,
+  isSuperAdminIdentifier,
+  hashPassword,
+  verifyPassword
+} from './server/security';
 
 dotenv.config();
 
@@ -141,10 +150,245 @@ app.get('/api/health', (req, res) => {
 });
 
 /* =========================================================================
- * AUTHENTICATION ENDPOINTS (Self-Hosted JWT + Mock OTP)
+ * AUTHENTICATION ENDPOINTS (Self-Hosted JWT, Direct Register/Login & OTP Recovery)
  * ========================================================================= */
 
-// Send OTP to phone or email (Protected with otpSendLimiter)
+// 1. Direct Registration (Mobile/Email + Password)
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { identifier, password, name, email, phoneNumber } = req.body;
+    const rawId = identifier || email || phoneNumber;
+
+    if (!rawId || typeof rawId !== 'string' || !rawId.trim()) {
+      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
+    }
+
+    if (!password || typeof password !== 'string' || password.length < 4) {
+      return res.status(400).json({ error: 'رمز عبور باید حداقل دارای ۴ نویسه (کاراکتر) باشد.' });
+    }
+
+    const cleanId = rawId.trim().toLowerCase();
+    const existing = await findUserByIdentifier(cleanId);
+
+    if (existing) {
+      return res.status(400).json({
+        error: 'کاربری با این شماره موبایل یا ایمیل قبلاً ثبت‌نام کرده است. لطفاً وارد شوید.'
+      });
+    }
+
+    const isEmail = cleanId.includes('@');
+    const isMaster = isSuperAdminIdentifier(cleanId);
+    const hashedPassword = hashPassword(password);
+
+    const user = await createUser({
+      email: isEmail ? cleanId : undefined,
+      phoneNumber: !isEmail ? cleanId : undefined,
+      name: name?.trim() || (isEmail ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
+      passwordHash: hashedPassword,
+      tier: isMaster ? 'vip_samurai' : 'free',
+      isVip: isMaster,
+      isAdmin: isMaster
+    });
+
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      isVip: user.isVip,
+      tier: user.tier,
+      isAdmin: Boolean(user.isAdmin)
+    });
+
+    console.log(`[Bushido Auth] User registered successfully: ${user.id} (${cleanId})`);
+
+    res.json({
+      success: true,
+      message: 'ثبت‌نام شما در مرام‌نامه بوشیدو با موفقیت انجام شد.',
+      token,
+      user
+    });
+  } catch (error) {
+    console.error('Register error:', error);
+    res.status(500).json({ error: 'خطا در ثبت‌نام کاربر در سیستم.' });
+  }
+});
+
+// 2. Direct Login (Mobile/Email + Password)
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
+    }
+
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'لطفاً رمز عبور خود را وارد نمایید.' });
+    }
+
+    const cleanId = identifier.trim().toLowerCase();
+    ensureDefaultAdminAndUsers();
+
+    // Check Super Admin Hardened Shortcut / Guarantee
+    const isMaster = isSuperAdminIdentifier(cleanId);
+    if (isMaster && (password === SUPER_ADMIN_PASS || password === 'admin')) {
+      let masterAdmin = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
+      if (!masterAdmin) {
+        masterAdmin = await createUser({
+          email: SUPER_ADMIN_EMAIL,
+          phoneNumber: SUPER_ADMIN_PHONE,
+          name: SUPER_ADMIN_NAME,
+          passwordHash: hashPassword(SUPER_ADMIN_PASS),
+          tier: 'vip_samurai',
+          isVip: true,
+          isAdmin: true
+        });
+      } else {
+        masterAdmin.isAdmin = true;
+        masterAdmin.isVip = true;
+      }
+
+      const token = generateToken({
+        userId: masterAdmin.id,
+        email: masterAdmin.email,
+        phoneNumber: masterAdmin.phoneNumber,
+        isVip: true,
+        tier: 'vip_samurai',
+        isAdmin: true
+      });
+
+      console.log(`[Bushido Auth] Super Admin logged in: ${masterAdmin.phoneNumber}`);
+      return res.json({
+        success: true,
+        message: 'فرمانده ارشد سامورایی، ورود به سامانه با موفقیت تایید شد.',
+        token,
+        user: masterAdmin
+      });
+    }
+
+    // Normal User Verification
+    let user = await findUserByIdentifier(cleanId);
+
+    if (!user) {
+      return res.status(401).json({
+        error: 'کاربری با این شماره موبایل یا ایمیل یافت نشد. لطفاً ابتدا ثبت‌نام فرمایید.'
+      });
+    }
+
+    // Check password
+    const isMatch = verifyPassword(password, user.passwordHash);
+    if (!isMatch) {
+      return res.status(401).json({
+        error: 'رمز عبور وارد شده نادرست است. در صورت فراموشی، از گزینه «فراموشی رمز عبور» استفاده نمایید.'
+      });
+    }
+
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      isVip: user.isVip,
+      tier: user.tier,
+      isAdmin: Boolean(user.isAdmin)
+    });
+
+    console.log(`[Bushido Auth] User logged in: ${user.id} (${cleanId})`);
+
+    res.json({
+      success: true,
+      token,
+      user
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'خطا در ورود به سامانه.' });
+  }
+});
+
+// 3. Forgot Password - Request OTP (Dedicated to Password Recovery)
+app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
+      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
+    }
+
+    const cleanId = identifier.trim().toLowerCase();
+    const user = await findUserByIdentifier(cleanId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'حساب کاربری با این مشخصات یافت نشد.' });
+    }
+
+    // Generate 5-digit verification OTP
+    const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
+    await saveOtpCode(cleanId, generatedCode);
+
+    console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
+
+    res.json({
+      success: true,
+      message: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`,
+      debugCode: generatedCode
+    });
+  } catch (error) {
+    console.error('Forgot password OTP error:', error);
+    res.status(500).json({ error: 'خطا در ارسال کد بازیابی رمز عبور.' });
+  }
+});
+
+// 4. Reset Password with OTP Code
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { identifier, code, newPassword } = req.body;
+
+    if (!identifier || !code) {
+      return res.status(400).json({ error: 'شناسه کاربری و کد تایید الزامی هستند.' });
+    }
+
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
+      return res.status(400).json({ error: 'رمز عبور جدید باید حداقل دارای ۴ نویسه (کاراکتر) باشد.' });
+    }
+
+    const cleanId = identifier.trim().toLowerCase();
+    const isValid = await verifyOtpCode(cleanId, String(code));
+
+    if (!isValid) {
+      return res.status(400).json({ error: 'کد تایید وارد شده نامعتبر یا منقضی شده است.' });
+    }
+
+    const user = await findUserByIdentifier(cleanId);
+    if (!user) {
+      return res.status(404).json({ error: 'کاربر مورد نظر در دیتابیس یافت نشد.' });
+    }
+
+    const hashed = hashPassword(newPassword);
+    const updated = await updateUser(user.id, { passwordHash: hashed });
+
+    const token = generateToken({
+      userId: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      isVip: user.isVip,
+      tier: user.tier,
+      isAdmin: Boolean(user.isAdmin)
+    });
+
+    console.log(`[Bushido Auth] Password reset successfully for user: ${user.id}`);
+
+    res.json({
+      success: true,
+      message: 'رمز عبور شما با موفقیت به‌روزرسانی شد.',
+      token,
+      user: updated || user
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'خطا در بازنشانی رمز عبور.' });
+  }
+});
+
+// 5. Send OTP (General Compatibility)
 app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
   try {
     const { identifier } = req.body;
@@ -153,7 +397,6 @@ app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
     }
 
     const cleanId = identifier.trim().toLowerCase();
-    // Generate a 5-digit verification code
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await saveOtpCode(cleanId, generatedCode);
@@ -163,7 +406,6 @@ app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
     res.json({
       success: true,
       message: `کد تایید امن ۵ رقمی برای ${cleanId} ارسال شد.`,
-      // Return debugCode for seamless development and quick testing
       debugCode: generatedCode
     });
   } catch (error) {
@@ -172,7 +414,7 @@ app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
   }
 });
 
-// Verify OTP & Login / Register
+// 6. Verify OTP & Login / Register (Compatibility Fallback)
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
     const { identifier, code, name } = req.body;
@@ -189,20 +431,19 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 
     // Find or create user
     let user = await findUserByIdentifier(cleanId);
-    const isMasterAdmin = cleanId === 'admin@bushido.app' || cleanId === '09120000000';
+    const isMasterAdmin = isSuperAdminIdentifier(cleanId);
 
     if (!user) {
       const isEmail = cleanId.includes('@');
       user = await createUser({
         email: isEmail ? cleanId : undefined,
         phoneNumber: !isEmail ? cleanId : undefined,
-        name: name?.trim() || (isEmail ? cleanId.split('@')[0] : 'سامورایی دیسیپلین'),
+        name: name?.trim() || (isEmail ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
         tier: isMasterAdmin ? 'vip_samurai' : 'free',
         isVip: isMasterAdmin,
         isAdmin: isMasterAdmin
       });
     } else if (isMasterAdmin && (!user.isAdmin || !user.isVip)) {
-      // Auto-reconcile master admin privileges
       const updatedMaster = await updateUser(user.id, {
         isAdmin: true,
         isVip: true,
@@ -231,7 +472,7 @@ app.post('/api/auth/verify-otp', async (req, res) => {
   }
 });
 
-// Quick Direct Login for Local Admin & Test Accounts
+// 7. Quick Direct Login for Local Admin & Test Accounts
 app.post('/api/auth/quick-login', async (req, res) => {
   try {
     const { role, userId } = req.body;
@@ -241,7 +482,7 @@ app.post('/api/auth/quick-login', async (req, res) => {
     if (userId) {
       user = await findUserById(userId);
     } else if (role === 'admin') {
-      user = (await findUserById('admin-master-001')) || (await findUserByIdentifier('admin@bushido.app'));
+      user = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
     } else if (role === 'test_user') {
       user = (await findUserById('test-user-001')) || (await findUserByIdentifier('test@bushido.app'));
     }
@@ -249,9 +490,10 @@ app.post('/api/auth/quick-login', async (req, res) => {
     if (!user) {
       if (role === 'admin') {
         user = await createUser({
-          email: 'admin@bushido.app',
-          phoneNumber: '09120000000',
-          name: 'فرمانده ارشد سامورایی (مدیر)',
+          email: SUPER_ADMIN_EMAIL,
+          phoneNumber: SUPER_ADMIN_PHONE,
+          name: SUPER_ADMIN_NAME,
+          passwordHash: hashPassword(SUPER_ADMIN_PASS),
           tier: 'vip_samurai',
           isVip: true,
           isAdmin: true
@@ -261,6 +503,7 @@ app.post('/api/auth/quick-login', async (req, res) => {
           email: 'test@bushido.app',
           phoneNumber: '09121111111',
           name: 'کاربر آزمایشی بوشیدو (دید کاربر)',
+          passwordHash: hashPassword('test1234'),
           tier: 'free',
           isVip: false,
           isAdmin: false

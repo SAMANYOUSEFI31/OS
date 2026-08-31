@@ -1,5 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import {
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  SUPER_ADMIN_PASS,
+  SUPER_ADMIN_NAME,
+  isSuperAdminIdentifier,
+  hashPassword
+} from '../security';
 
 // Instantiate Prisma client safely
 export let prisma: any = null;
@@ -277,16 +285,23 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
 export function ensureDefaultAdminAndUsers() {
   const nowStr = new Date().toISOString();
   const nextYearStr = new Date(Date.now() + 365 * 86400000).toISOString();
+  const adminHashedPass = hashPassword(SUPER_ADMIN_PASS);
 
-  // 1. Ensure Master Admin Account
-  const existingAdmin = memoryStore.users.find(u => u.isAdmin || u.email === 'admin@bushido.app' || u.id === 'admin-master-001');
+  // 1. Ensure Master Admin Account (Immutable Super Admin)
+  const existingAdmin = memoryStore.users.find(
+    u => u.id === 'admin-master-001' || 
+         u.phoneNumber === SUPER_ADMIN_PHONE || 
+         u.email === SUPER_ADMIN_EMAIL ||
+         u.phoneNumber === '09120000000'
+  );
+
   if (!existingAdmin) {
     const adminUser: DBUser = {
       id: 'admin-master-001',
-      email: 'admin@bushido.app',
-      phoneNumber: '09120000000',
-      name: 'فرمانده ارشد سامورایی (مدیر)',
-      passwordHash: 'admin',
+      email: SUPER_ADMIN_EMAIL,
+      phoneNumber: SUPER_ADMIN_PHONE,
+      name: SUPER_ADMIN_NAME,
+      passwordHash: adminHashedPass,
       tier: 'vip_samurai',
       isVip: true,
       isAdmin: true,
@@ -303,13 +318,20 @@ export function ensureDefaultAdminAndUsers() {
     memoryStore.cycles.push(seed.cycle);
     memoryStore.dailyLogs.push(...seed.logs);
   } else {
+    // Immutable reinforcement of Super Admin attributes
+    existingAdmin.id = 'admin-master-001';
+    existingAdmin.phoneNumber = SUPER_ADMIN_PHONE;
+    existingAdmin.email = SUPER_ADMIN_EMAIL;
+    existingAdmin.name = SUPER_ADMIN_NAME;
+    existingAdmin.passwordHash = adminHashedPass;
     existingAdmin.isAdmin = true;
     existingAdmin.isVip = true;
     existingAdmin.tier = 'vip_samurai';
-    if (!existingAdmin.name) existingAdmin.name = 'فرمانده ارشد سامورایی (مدیر)';
+    if (!existingAdmin.vipExpiresAt) existingAdmin.vipExpiresAt = nextYearStr;
   }
 
   // 2. Ensure Default Test User Account
+  const testHashedPass = hashPassword('test1234');
   const existingTestUser = memoryStore.users.find(u => u.id === 'test-user-001' || u.email === 'test@bushido.app');
   if (!existingTestUser) {
     const testUser: DBUser = {
@@ -317,7 +339,7 @@ export function ensureDefaultAdminAndUsers() {
       email: 'test@bushido.app',
       phoneNumber: '09121111111',
       name: 'کاربر آزمایشی بوشیدو (دید کاربر)',
-      passwordHash: 'test1234',
+      passwordHash: testHashedPass,
       tier: 'free',
       isVip: false,
       isAdmin: false,
@@ -333,6 +355,10 @@ export function ensureDefaultAdminAndUsers() {
     const testSeed = seedUserData(testUser.id);
     memoryStore.cycles.push(testSeed.cycle);
     memoryStore.dailyLogs.push(...testSeed.logs);
+  } else {
+    if (!existingTestUser.passwordHash) {
+      existingTestUser.passwordHash = testHashedPass;
+    }
   }
 
   saveLocalStore();

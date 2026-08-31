@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile } from '../types';
-import { toPersianDigits, formatPersianNumber } from '../utils/numberUtils';
+import { toPersianDigits } from '../utils/numberUtils';
 import { haptics } from '../utils/haptics';
 import { 
   ShieldCheck, 
@@ -15,9 +15,13 @@ import {
   CheckCircle2, 
   AlertCircle,
   ArrowRight,
-  Sparkles,
   Database,
-  Lock
+  Lock,
+  Eye,
+  EyeOff,
+  UserPlus,
+  LogIn,
+  RotateCcw
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -28,6 +32,8 @@ interface AuthModalProps {
   onLogout: () => void;
 }
 
+type AuthTab = 'login' | 'register' | 'forgot';
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
@@ -35,14 +41,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onAuthSuccess,
   onLogout
 }) => {
+  const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  
+  // Form fields
   const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Forgot password OTP fields
+  const [forgotStep, setForgotStep] = useState<'request' | 'reset'>('request');
   const [otpCode, setOtpCode] = useState('');
-  const [step, setStep] = useState<'input' | 'otp'>('input');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [debugOtp, setDebugOtp] = useState<string | null>(null);
+
+  // Status state
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [serverMessage, setServerMessage] = useState('');
-  const [debugOtp, setDebugOtp] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState('');
 
   // Hidden secret dev/admin mode state (hidden from public users)
   const [showSecretDev, setShowSecretDev] = useState(false);
@@ -51,10 +68,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
+      setErrorMessage('');
+      setSuccessMessage('');
       try {
         const isSecretUnlocked = localStorage.getItem('bushido_secret_dev_mode') === 'true';
         setShowSecretDev(isSecretUnlocked);
-      } catch (e) {
+      } catch {
         setShowSecretDev(false);
       }
     }
@@ -72,7 +91,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setShowSecretDev(nextVal);
       try {
         localStorage.setItem('bushido_secret_dev_mode', nextVal.toString());
-      } catch (e) {}
+      } catch {}
       return;
     }
 
@@ -81,59 +100,167 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }, 2000);
   };
 
-  const handleSendOtp = async (e: React.FormEvent) => {
+  // 1. Direct Login Handler
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
-    setServerMessage('');
-    setDebugOtp(null);
+    setSuccessMessage('');
 
-    const clean = identifier.trim();
-    if (!clean) {
+    const cleanId = identifier.trim();
+    if (!cleanId) {
       setErrorMessage('لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.');
+      haptics.warningAlert();
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage('لطفاً رمز عبور خود را وارد نمایید.');
+      haptics.warningAlert();
       return;
     }
 
     setIsLoading(true);
     try {
-      let data: any = null;
-      try {
-        const res = await fetch('/api/auth/send-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: clean })
-        });
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          data = await res.json();
-        }
-      } catch (e) {
-        console.warn('Send OTP backend fetch failed, using local offline fallback');
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId, password })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'ورود به سامانه با خطا مواجه شد.');
       }
 
-      if (data && data.success) {
-        setServerMessage(data.message || 'کد تایید ۵ رقمی ارسال شد.');
-        if (data.debugCode) {
-          setDebugOtp(data.debugCode);
-          setOtpCode(data.debugCode);
-        }
-        setStep('otp');
-        return;
-      }
+      const userProfile: UserProfile = {
+        id: data.user.id,
+        name: data.user.name || 'سامورایی دیسیپلین',
+        email: data.user.email || undefined,
+        phoneNumber: data.user.phoneNumber || undefined,
+        tier: data.user.tier || (data.user.isVip ? 'vip_samurai' : 'free'),
+        isVip: Boolean(data.user.isVip),
+        isAdmin: Boolean(data.user.isAdmin),
+        vipSince: data.user.vipSince,
+        vipExpiresAt: data.user.vipExpiresAt,
+        paymentRefId: data.user.paymentRefId,
+        activeCycleLimit: data.user.isVip ? 999 : 1
+      };
 
-      // Offline instant OTP code generation
-      const localCode = String(Math.floor(10000 + Math.random() * 90000));
-      setServerMessage(`کد تایید ۵ رقمی برای ${clean} ایجاد شد.`);
-      setDebugOtp(localCode);
-      setOtpCode(localCode);
-      setStep('otp');
+      haptics.standardDaySuccess();
+      onAuthSuccess(data.token, userProfile);
+      onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'ارتباط با سرور برقرار نشد.');
+      haptics.warningAlert();
+      setErrorMessage(err.message || 'خطا در ورود به حساب.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  // 2. Direct Register Handler
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const cleanId = identifier.trim();
+    if (!cleanId) {
+      setErrorMessage('لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.');
+      haptics.warningAlert();
+      return;
+    }
+
+    if (!password || password.length < 4) {
+      setErrorMessage('رمز عبور باید حداقل دارای ۴ نویسه (کاراکتر) باشد.');
+      haptics.warningAlert();
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: cleanId,
+          password,
+          name: name.trim() || undefined
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'ثبت‌نام با خطا مواجه شد.');
+      }
+
+      const userProfile: UserProfile = {
+        id: data.user.id,
+        name: data.user.name || 'سامورایی دیسیپلین',
+        email: data.user.email || undefined,
+        phoneNumber: data.user.phoneNumber || undefined,
+        tier: data.user.tier || (data.user.isVip ? 'vip_samurai' : 'free'),
+        isVip: Boolean(data.user.isVip),
+        isAdmin: Boolean(data.user.isAdmin),
+        vipSince: data.user.vipSince,
+        vipExpiresAt: data.user.vipExpiresAt,
+        paymentRefId: data.user.paymentRefId,
+        activeCycleLimit: data.user.isVip ? 999 : 1
+      };
+
+      haptics.standardDaySuccess();
+      onAuthSuccess(data.token, userProfile);
+      onClose();
+    } catch (err: any) {
+      haptics.warningAlert();
+      setErrorMessage(err.message || 'خطا در ثبت‌نام کاربر.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 3. Forgot Password - Request OTP
+  const handleForgotRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setDebugOtp(null);
+
+    const cleanId = identifier.trim();
+    if (!cleanId) {
+      setErrorMessage('لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.');
+      haptics.warningAlert();
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'ارسال کد بازیابی با خطا مواجه شد.');
+      }
+
+      setSuccessMessage(data.message || 'کد تایید بازیابی رمز عبور ارسال شد.');
+      if (data.debugCode) {
+        setDebugOtp(data.debugCode);
+        setOtpCode(data.debugCode);
+      }
+      setForgotStep('reset');
+    } catch (err: any) {
+      haptics.warningAlert();
+      setErrorMessage(err.message || 'خطا در ارسال کد تایید.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 4. Forgot Password - Reset with OTP
+  const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -143,101 +270,70 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
+    if (!newPassword || newPassword.length < 4) {
+      setErrorMessage('رمز عبور جدید باید حداقل دارای ۴ نویسه باشد.');
+      haptics.warningAlert();
+      return;
+    }
+
     setIsLoading(true);
     try {
-      let data: any = null;
-      try {
-        const res = await fetch('/api/auth/verify-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            identifier: identifier.trim(),
-            code: otpCode.trim(),
-            name: name.trim() || undefined
-          })
-        });
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          data = await res.json();
-        }
-      } catch (e) {
-        console.warn('Verify OTP backend fetch failed, using local offline verification');
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: identifier.trim(),
+          code: otpCode.trim(),
+          newPassword
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'بازنشانی رمز عبور با خطا مواجه شد.');
       }
 
-      if (data && data.token && data.user) {
-        const userProfile: UserProfile = {
-          id: data.user.id,
-          name: data.user.name || 'سامورایی دیسیپلین',
-          email: data.user.email || undefined,
-          phoneNumber: data.user.phoneNumber || undefined,
-          tier: data.user.tier || 'free',
-          isVip: !!data.user.isVip,
-          isAdmin: !!data.user.isAdmin,
-          vipSince: data.user.vipSince,
-          vipExpiresAt: data.user.vipExpiresAt,
-          paymentRefId: data.user.paymentRefId,
-          activeCycleLimit: data.user.isVip ? 999 : 1
-        };
-
-        haptics.standardDaySuccess();
-        onAuthSuccess(data.token, userProfile);
-        onClose();
-        return;
-      }
-
-      // Offline instant verification fallback
-      const cleanId = identifier.trim().toLowerCase();
-      const isEmail = cleanId.includes('@');
-      const fallbackUser: UserProfile = {
-        id: `usr-${Date.now()}`,
-        name: name.trim() || (isEmail ? cleanId.split('@')[0] : 'سامورایی دیسیپلین'),
-        email: isEmail ? cleanId : undefined,
-        phoneNumber: !isEmail ? cleanId : undefined,
-        tier: 'free',
-        isVip: false,
-        isAdmin: false,
-        vipSince: undefined,
-        vipExpiresAt: undefined,
-        paymentRefId: undefined,
-        activeCycleLimit: 1
+      const userProfile: UserProfile = {
+        id: data.user.id,
+        name: data.user.name || 'سامورایی دیسیپلین',
+        email: data.user.email || undefined,
+        phoneNumber: data.user.phoneNumber || undefined,
+        tier: data.user.tier || (data.user.isVip ? 'vip_samurai' : 'free'),
+        isVip: Boolean(data.user.isVip),
+        isAdmin: Boolean(data.user.isAdmin),
+        vipSince: data.user.vipSince,
+        vipExpiresAt: data.user.vipExpiresAt,
+        paymentRefId: data.user.paymentRefId,
+        activeCycleLimit: data.user.isVip ? 999 : 1
       };
-      const fallbackToken = `mock-token-${Date.now()}`;
 
       haptics.standardDaySuccess();
-      onAuthSuccess(fallbackToken, fallbackUser);
+      onAuthSuccess(data.token, userProfile);
       onClose();
     } catch (err: any) {
       haptics.warningAlert();
-      setErrorMessage(err.message || 'خطا در تایید کد');
+      setErrorMessage(err.message || 'خطا در تغییر رمز عبور.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Quick Login for Dev/Admin
   const handleQuickLogin = async (role: 'admin' | 'test_user') => {
     setIsLoading(true);
     setErrorMessage('');
     try {
-      let data: any = null;
-      try {
-        const res = await fetch('/api/auth/quick-login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ role })
-        });
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          data = await res.json();
-        }
-      } catch (networkErr) {
-        console.warn('Backend quick-login fetch failed, using local offline fallback:', networkErr);
-      }
+      const res = await fetch('/api/auth/quick-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+      });
 
-      // If server responded with data
-      if (data && data.user && data.token) {
+      const data = await res.json();
+      if (res.ok && data.user && data.token) {
         const userProfile: UserProfile = {
           id: data.user.id,
-          name: data.user.name || (role === 'admin' ? 'فرمانده ارشد سامورایی (مدیر)' : 'کاربر آزمایشی'),
+          name: data.user.name || (role === 'admin' ? 'فرمانده ارشد سامورایی (مدیر ارشد)' : 'کاربر آزمایشی'),
           email: data.user.email,
           phoneNumber: data.user.phoneNumber,
           tier: data.user.tier || (data.user.isVip ? 'vip_samurai' : 'free'),
@@ -251,41 +347,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         onAuthSuccess(data.token, userProfile);
         onClose();
-        return;
       }
-
-      // Robust Instant Offline Fallback
-      const fallbackToken = `mock-token-${role}-${Date.now()}`;
-      const fallbackUser: UserProfile = role === 'admin' ? {
-        id: 'admin-master-001',
-        name: 'فرمانده ارشد سامورایی (مدیر)',
-        email: 'admin@bushido.app',
-        phoneNumber: '09120000000',
-        tier: 'vip_samurai',
-        isVip: true,
-        isAdmin: true,
-        vipSince: new Date().toISOString(),
-        vipExpiresAt: new Date(Date.now() + 365 * 86400000).toISOString(),
-        paymentRefId: 'REF-ADMIN-MASTER-001',
-        activeCycleLimit: 999
-      } : {
-        id: 'test-user-001',
-        name: 'کاربر آزمایشی بوشیدو (دید کاربر)',
-        email: 'test@bushido.app',
-        phoneNumber: '09121111111',
-        tier: 'free',
-        isVip: false,
-        isAdmin: false,
-        vipSince: undefined,
-        vipExpiresAt: undefined,
-        paymentRefId: undefined,
-        activeCycleLimit: 1
-      };
-
-      onAuthSuccess(fallbackToken, fallbackUser);
-      onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'خطا در ورود به حساب.');
+      setErrorMessage(err.message || 'خطا در ورود سریع.');
     } finally {
       setIsLoading(false);
     }
@@ -317,10 +381,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-base font-black text-white truncate">
-                {currentUser?.id ? 'پروفایل و حساب کاربری' : 'ورود / عضویت سامورایی'}
+                {currentUser?.id ? 'پروفایل و حساب کاربری' : 'مرام‌نامه رزمندگان بوشیدو'}
               </h2>
               <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
-                سیستم احراز هویت مستقل و ذخیره‌سازی ابری
+                احراز هویت مستقل، ورود مستقیم با رمز عبور و دیتابیس ابری
               </p>
             </div>
           </div>
@@ -332,6 +396,63 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Navigation Tabs (Only when not logged in) */}
+        {!currentUser?.id && (
+          <div className="px-5 sm:px-6 pt-4 pb-2 bg-[#09090b]/50 border-b border-zinc-800/50 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('login');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === 'login'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                  : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>ورود با رمز</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('register');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === 'register'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                  : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>ثبت‌نام مستقیم</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('forgot');
+                setForgotStep('request');
+                setErrorMessage('');
+                setSuccessMessage('');
+              }}
+              className={`flex-1 py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                activeTab === 'forgot'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                  : 'bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>بازیابی رمز</span>
+            </button>
+          </div>
+        )}
 
         {/* Scrollable Content Body */}
         <div className="p-5 sm:p-6 overflow-y-auto overscroll-contain flex-1 min-h-0">
@@ -375,7 +496,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="bg-[#121215]/90 rounded-xl p-2.5 text-center">
                     <span className="text-[10px] text-zinc-400 block mb-0.5">سطح دسترسی</span>
                     <span className="text-amber-400 font-bold">
-                      {currentUser.isVip ? 'سامورایی ویژه VIP' : 'کاربر عادی'}
+                      {currentUser.isAdmin ? 'فرمانده ارشد (مدیر)' : (currentUser.isVip ? 'سامورایی ویژه VIP' : 'کاربر عادی')}
                     </span>
                   </div>
                 </div>
@@ -393,10 +514,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
             </div>
           ) : (
-            /* Auth Forms */
-            <div>
-              {step === 'input' ? (
-                <form onSubmit={handleSendOtp} className="space-y-4">
+            /* Auth Forms by Tab */
+            <div className="space-y-4">
+              {/* TAB 1: DIRECT LOGIN */}
+              {activeTab === 'login' && (
+                <form onSubmit={handleLogin} className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-zinc-300 mb-1.5">
                       شماره موبایل یا ایمیل
@@ -406,8 +528,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                         type="text"
                         value={identifier}
                         onChange={e => setIdentifier(e.target.value)}
-                        placeholder="مثال: 09121234567 یا user@example.com"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition"
+                        placeholder="مثال: 09375454050 یا admin@bushido.app"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
                         dir="ltr"
                         autoFocus
                       />
@@ -415,16 +537,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-zinc-300 mb-1.5">
-                      نام یا لقب سامورایی (اختیاری)
-                    </label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={e => setName(e.target.value)}
-                      placeholder="مثال: رستم، سهراب، یا نام شما"
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-amber-500 transition"
-                    />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-zinc-300">
+                        رمز عبور
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('forgot');
+                          setForgotStep('request');
+                          setErrorMessage('');
+                        }}
+                        className="text-[11px] text-amber-400/90 hover:text-amber-300 hover:underline cursor-pointer"
+                      >
+                        فراموشی رمز عبور؟
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="رمز عبور خود را وارد نمایید"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                        dir="ltr"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition p-1"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   {errorMessage && (
@@ -443,103 +588,79 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                     ) : (
                       <>
-                        <span>دریافت کد تایید امن</span>
+                        <span>ورود به میدان نبرد بوشیدو</span>
                         <ArrowRight className="w-4 h-4 rotate-180" />
                       </>
                     )}
                   </button>
 
-                  <p className="text-[11px] text-zinc-500 text-center leading-relaxed">
-                    با ورود به سیستم، داده‌های میدان نبرد و چرخه‌های ۹۰ روزه شما به‌صورت کاملاً ایزوله در دیتابیس امن ذخیره خواهند شد.
-                  </p>
-
-                  {/* Secret Admin/Dev Mode: Only visible if unlocked via 5-click easter egg & passcode */}
-                  {showSecretDev && (
-                    <div className="pt-4 border-t border-amber-500/30 space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                      <div className="text-[11px] text-amber-300 font-bold flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <Lock className="w-3.5 h-3.5 text-amber-400" />
-                          دسترسی مدیریت و توسعه:
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowSecretDev(false);
-                            try {
-                              localStorage.setItem('bushido_secret_dev_mode', 'false');
-                            } catch (e) {}
-                          }}
-                          className="text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded cursor-pointer"
-                        >
-                          مخفی‌سازی
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleQuickLogin('admin')}
-                          disabled={isLoading}
-                          className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 rounded-xl p-2.5 text-right transition cursor-pointer text-xs"
-                        >
-                          <div className="flex items-center gap-1.5 font-bold text-red-300">
-                            <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
-                            <span>ورود به عنوان مدیر</span>
-                          </div>
-                          <span className="text-[10px] text-zinc-400 block mt-0.5">فرمانده ارشد (VIP + Admin)</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleQuickLogin('test_user')}
-                          disabled={isLoading}
-                          className="bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 rounded-xl p-2.5 text-right transition cursor-pointer text-xs"
-                        >
-                          <div className="flex items-center gap-1.5 font-bold text-zinc-200">
-                            <User className="w-3.5 h-3.5 text-amber-400" />
-                            <span>ورود کاربر تستی</span>
-                          </div>
-                          <span className="text-[10px] text-zinc-400 block mt-0.5">مشاهده از دید کاربر</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <div className="text-center pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTab('register');
+                        setErrorMessage('');
+                      }}
+                      className="text-xs text-zinc-400 hover:text-amber-400 transition cursor-pointer"
+                    >
+                      حساب کاربری ندارید؟ <span className="font-bold text-amber-400 underline">ثبت‌نام مستقیم کنید</span>
+                    </button>
+                  </div>
                 </form>
-              ) : (
-                /* OTP Verification Step */
-                <form onSubmit={handleVerifyOtp} className="space-y-4">
-                  <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-200">
-                    <div className="flex items-center gap-2 mb-1">
-                      <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
-                      <span className="font-bold">کد تایید ارسال شد به:</span>
-                    </div>
-                    <span className="font-mono text-amber-300 block text-left" dir="ltr">
-                      {identifier}
-                    </span>
-                    {debugOtp && (
-                      <div className="mt-2 pt-2 border-t border-amber-500/20 flex items-center justify-between text-[11px]">
-                        <span className="text-amber-400/80">کد تایید تستی:</span>
-                        <span className="font-mono font-black text-amber-300 bg-amber-900/60 px-2 py-0.5 rounded-md">
-                          {toPersianDigits(debugOtp)}
-                        </span>
-                      </div>
-                    )}
+              )}
+
+              {/* TAB 2: DIRECT REGISTER */}
+              {activeTab === 'register' && (
+                <form onSubmit={handleRegister} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                      شماره موبایل یا ایمیل
+                    </label>
+                    <input
+                      type="text"
+                      value={identifier}
+                      onChange={e => setIdentifier(e.target.value)}
+                      placeholder="مثال: 09121234567 یا user@example.com"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                      dir="ltr"
+                      autoFocus
+                    />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-300 mb-1.5">
-                      کد تایید ۵ رقمی را وارد کنید
+                      نام یا لقب سامورایی (اختیاری)
                     </label>
                     <input
                       type="text"
-                      maxLength={6}
-                      value={otpCode}
-                      onChange={e => setOtpCode(e.target.value)}
-                      placeholder="_____ "
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3.5 text-center text-xl tracking-[0.5em] font-mono text-amber-400 placeholder:text-zinc-700 focus:outline-none focus:border-amber-500 transition"
-                      dir="ltr"
-                      autoFocus
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="مثال: رستم، سهراب، یا نام شما"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                      تعیین رمز عبور (حداقل ۴ نویسه)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="رمز عبور دلخواه خود را تعیین کنید"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                        dir="ltr"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition p-1"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   {errorMessage && (
@@ -549,27 +670,236 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   )}
 
-                  <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isLoading ? (
+                      <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                    ) : (
+                      <>
+                        <span>ثبت‌نام و ورود مستقیم</span>
+                        <ArrowRight className="w-4 h-4 rotate-180" />
+                      </>
+                    )}
+                  </button>
+
+                  <div className="text-center pt-2">
                     <button
                       type="button"
-                      onClick={() => setStep('input')}
-                      className="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold py-3.5 rounded-2xl transition cursor-pointer"
+                      onClick={() => {
+                        setActiveTab('login');
+                        setErrorMessage('');
+                      }}
+                      className="text-xs text-zinc-400 hover:text-amber-400 transition cursor-pointer"
                     >
-                      تغییر شماره
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isLoading}
-                      className="w-2/3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
-                    >
-                      {isLoading ? (
-                        <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                      ) : (
-                        <span>تایید و ورود به سیستم</span>
-                      )}
+                      قبلاً ثبت‌نام کرده‌اید؟ <span className="font-bold text-amber-400 underline">وارد شوید</span>
                     </button>
                   </div>
                 </form>
+              )}
+
+              {/* TAB 3: FORGOT PASSWORD (OTP-BASED RECOVERY) */}
+              {activeTab === 'forgot' && (
+                <div>
+                  {forgotStep === 'request' ? (
+                    <form onSubmit={handleForgotRequestOtp} className="space-y-4">
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        جهت بازیابی رمز عبور، شماره موبایل یا ایمیل حساب کاربری خود را وارد کنید تا کد تایید امن برای شما ارسال شود.
+                      </p>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                          شماره موبایل یا ایمیل
+                        </label>
+                        <input
+                          type="text"
+                          value={identifier}
+                          onChange={e => setIdentifier(e.target.value)}
+                          placeholder="مثال: 09121234567 یا user@example.com"
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                          dir="ltr"
+                          autoFocus
+                        />
+                      </div>
+
+                      {errorMessage && (
+                        <div className="bg-red-950/60 border border-red-800/50 rounded-xl p-3 text-xs text-red-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                          <span>{errorMessage}</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={isLoading}
+                        className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                      >
+                        {isLoading ? (
+                          <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                        ) : (
+                          <>
+                            <span>ارسال کد تایید بازیابی</span>
+                            <ArrowRight className="w-4 h-4 rotate-180" />
+                          </>
+                        )}
+                      </button>
+
+                      <div className="text-center pt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('login');
+                            setErrorMessage('');
+                          }}
+                          className="text-xs text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                        >
+                          بازگشت به <span className="font-bold text-amber-400 underline">صفحه ورود</span>
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleResetPassword} className="space-y-4">
+                      <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-3.5 text-xs text-amber-200">
+                        <div className="flex items-center gap-2 mb-1">
+                          <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span className="font-bold">کد بازیابی ارسال شد به:</span>
+                        </div>
+                        <span className="font-mono text-amber-300 block text-left" dir="ltr">
+                          {identifier}
+                        </span>
+                        {debugOtp && (
+                          <div className="mt-2 pt-2 border-t border-amber-500/20 flex items-center justify-between text-[11px]">
+                            <span className="text-amber-400/80">کد تایید آزمایشی:</span>
+                            <span className="font-mono font-black text-amber-300 bg-amber-900/60 px-2 py-0.5 rounded-md">
+                              {toPersianDigits(debugOtp)}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                          کد تایید ۵ رقمی
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={6}
+                          value={otpCode}
+                          onChange={e => setOtpCode(e.target.value)}
+                          placeholder="_____ "
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 text-center text-lg tracking-[0.4em] font-mono text-amber-400 placeholder:text-zinc-700 focus:outline-none focus:border-amber-500 transition"
+                          dir="ltr"
+                          autoFocus
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-zinc-300 mb-1.5">
+                          رمز عبور جدید
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? 'text' : 'password'}
+                            value={newPassword}
+                            onChange={e => setNewPassword(e.target.value)}
+                            placeholder="رمز عبور جدید را وارد کنید"
+                            className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-amber-500 transition"
+                            dir="ltr"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition p-1"
+                          >
+                            {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {errorMessage && (
+                        <div className="bg-red-950/60 border border-red-800/50 rounded-xl p-3 text-xs text-red-300 flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                          <span>{errorMessage}</span>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setForgotStep('request')}
+                          className="w-1/3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold py-3.5 rounded-2xl transition cursor-pointer"
+                        >
+                          تغییر شماره
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isLoading}
+                          className="w-2/3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black text-sm py-3.5 rounded-2xl shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition cursor-pointer disabled:opacity-50"
+                        >
+                          {isLoading ? (
+                            <span className="w-5 h-5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                          ) : (
+                            <span>تغییر رمز و ورود</span>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Secret Admin/Dev Mode: Only visible if unlocked via 5-click easter egg & passcode */}
+              {showSecretDev && (
+                <div className="pt-4 border-t border-amber-500/30 space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="text-[11px] text-amber-300 font-bold flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      دسترسی مدیریت و توسعه:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSecretDev(false);
+                        try {
+                          localStorage.setItem('bushido_secret_dev_mode', 'false');
+                        } catch {}
+                      }}
+                      className="text-[10px] text-zinc-400 hover:text-zinc-200 bg-zinc-800 px-2 py-0.5 rounded cursor-pointer"
+                    >
+                      مخفی‌سازی
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('admin')}
+                      disabled={isLoading}
+                      className="bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 hover:border-red-500/60 text-red-300 rounded-xl p-2.5 text-right transition cursor-pointer text-xs"
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-red-300">
+                        <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                        <span>ورود به عنوان مدیر</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 block mt-0.5">فرمانده ارشد (09375454050)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuickLogin('test_user')}
+                      disabled={isLoading}
+                      className="bg-zinc-800/80 hover:bg-zinc-750 border border-zinc-700 text-zinc-200 rounded-xl p-2.5 text-right transition cursor-pointer text-xs"
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-zinc-200">
+                        <User className="w-3.5 h-3.5 text-amber-400" />
+                        <span>ورود کاربر تستی</span>
+                      </div>
+                      <span className="text-[10px] text-zinc-400 block mt-0.5">مشاهده از دید کاربر</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}
