@@ -29,7 +29,7 @@ import { AuthModal } from './components/AuthModal';
 import { CreateCycleModal } from './components/CreateCycleModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
 import { RotateCcw, AlertTriangle, Eye, ShieldCheck, RefreshCw } from 'lucide-react';
-import './tokens.css';
+import './styles/tokens.css';
 
 // Lazy loading heavy views for optimized initial load (LCP & Code Splitting)
 const BattlefieldView = lazy(() => import('./components/BattlefieldView').then(m => ({ default: m.BattlefieldView })));
