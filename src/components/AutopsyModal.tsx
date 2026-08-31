@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyLog, FailureReason, FailureTime } from '../types';
 import { formatPersianDate } from '../utils/dateUtils';
