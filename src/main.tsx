@@ -2,9 +2,9 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import './styles/tokens.css';
 import './index.css';
 
-// Register PWA Service Worker for offline resilience (Standard PWA Production Lifecycle)
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && (import.meta.env.PROD || !window.location.hostname.includes('localhost'))) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
@@ -25,5 +25,3 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
-
-
