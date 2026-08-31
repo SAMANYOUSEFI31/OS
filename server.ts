@@ -3,6 +3,7 @@ import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import {
   findUserById,
   findUserByIdentifier,
@@ -45,7 +46,8 @@ import {
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Trust proxy required for Cloud Run / reverse proxies and express-rate-limit
 app.set('trust proxy', 1);
@@ -61,6 +63,91 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 /* =========================================================================
+ * ZOD SCHEMA VALIDATIONS (Item B5: Request Body Sanitization)
+ * ========================================================================= */
+const RegisterSchema = z.object({
+  identifier: z.string().optional(),
+  password: z.string().min(4, 'رمز عبور باید حداقل دارای ۴ کاراکتر باشد.'),
+  name: z.string().optional(),
+  email: z.string().email('فرمت ایمیل نامعتبر است').optional(),
+  phoneNumber: z.string().optional(),
+});
+
+const LoginSchema = z.object({
+  identifier: z.string().min(1, 'لطفاً شناسه را وارد کنید.'),
+  password: z.string().min(1, 'لطفاً رمز عبور را وارد کنید.'),
+});
+
+const IdentifierSchema = z.object({
+  identifier: z.string().min(1, 'لطفاً شناسه کاربری را وارد کنید.'),
+});
+
+const ResetPasswordSchema = z.object({
+  identifier: z.string().min(1, 'شناسه کاربری الزامی است.'),
+  code: z.string().min(1, 'کد تایید الزامی است.'),
+  newPassword: z.string().min(4, 'رمز عبور جدید باید حداقل دارای ۴ کاراکتر باشد.'),
+});
+
+const VerifyOtpSchema = z.object({
+  identifier: z.string().min(1, 'شناسه کاربری الزامی است.'),
+  code: z.string().min(1, 'کد تایید الزامی است.'),
+  name: z.string().optional(),
+});
+
+const ProfileUpdateSchema = z.object({
+  name: z.string().optional(),
+  nightOwlCutoffHour: z.number().min(0).max(23).optional(),
+  accentTheme: z.enum(['amber', 'emerald', 'rose', 'blue', 'violet', 'crimson', 'cyan']).optional(),
+});
+
+const CycleCreateSchema = z.object({
+  title: z.string().min(1, 'عنوان الزامی است').max(120),
+  startDate: z.string().min(1, 'تاریخ شروع الزامی است').max(20),
+  endDate: z.string().min(1, 'تاریخ پایان الزامی است').max(20),
+  targetTheme: z.string().max(200).optional().nullable(),
+  inheritedStreak: z.number().optional(),
+  rules: z.array(z.string()).optional(),
+});
+
+const CycleUpdateSchema = z.object({
+  title: z.string().max(120).optional(),
+  targetTheme: z.string().max(200).optional().nullable(),
+  rules: z.array(z.string()).optional(),
+  isArchived: z.boolean().optional(),
+  reportRead: z.boolean().optional(),
+  verdict: z.any().optional(),
+});
+
+const DailyLogSchema = z.object({
+  cycleId: z.string().max(100),
+  date: z.string().max(20),
+  wakeUp: z.boolean().optional().default(false),
+  workout: z.boolean().optional().default(false),
+  study: z.boolean().optional().default(false),
+  journal: z.boolean().optional().default(false),
+  hardTask: z.boolean().optional().default(false),
+  specialMission: z.boolean().optional().default(false),
+  failureReason: z.string().max(500).optional().nullable(),
+  failureTime: z.string().max(100).optional().nullable(),
+  autopsyNotes: z.string().max(2000).optional().nullable(),
+  countermeasure: z.string().max(2000).optional().nullable(),
+  aiFeedback: z.string().max(2000).optional().nullable(),
+  notes: z.string().max(2000).optional().nullable(),
+});
+
+const PaymentRequestSchema = z.object({
+  planId: z.string().optional(),
+  amount: z.number().optional(),
+  description: z.string().optional(),
+  userEmail: z.string().optional(),
+});
+
+const PaymentVerifySchema = z.object({
+  authority: z.string().min(1, 'شناسه مرجع تراکنش الزامی است.'),
+  amount: z.number().optional(),
+});
+
+/* =========================================================================
  * SECURITY & RATE LIMITING LAYER (Brute-Force & Anti-Spam Protection)
  * ========================================================================= */
 
@@ -70,10 +157,7 @@ const generalApiLimiter = rateLimit({
   max: 300, // Limit each IP to 300 requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
-  validate: {
-    xForwardedForHeader: false,
-    forwardedHeader: false
-  },
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     error: 'تعداد درخواست‌ها به سرور بیش از حد مجاز است. لطفاً چند دقیقه بعد تلاش فرمایید.',
     code: 'RATE_LIMIT_EXCEEDED'
@@ -86,10 +170,7 @@ const authLimiter = rateLimit({
   max: 25, // Limit each IP to 25 auth requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
-  validate: {
-    xForwardedForHeader: false,
-    forwardedHeader: false
-  },
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     error: 'تعداد تلاش‌های احراز هویت بیش از حد مجاز است. لطفاً پس از ۱۵ دقیقه دوباره امتحان کنید.',
     code: 'AUTH_RATE_LIMIT_EXCEEDED'
@@ -102,10 +183,7 @@ const otpSendLimiter = rateLimit({
   max: 8, // Max 8 OTP sends per 10 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
-  validate: {
-    xForwardedForHeader: false,
-    forwardedHeader: false
-  },
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     error: 'تعداد دفعات ارسال کد تایید بیش از حد مجاز است. لطفاً دقایقی دیگر امتحان کنید.',
     code: 'OTP_RATE_LIMIT_EXCEEDED'
@@ -118,10 +196,7 @@ const adminLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  validate: {
-    xForwardedForHeader: false,
-    forwardedHeader: false
-  },
+  validate: { xForwardedForHeader: false, forwardedHeader: false },
   message: {
     error: 'محدودیت دسترسی امنیتی به پنل مدیریت فعال گردید.',
     code: 'ADMIN_RATE_LIMIT_EXCEEDED'
@@ -156,15 +231,16 @@ app.get('/api/health', (req, res) => {
 // 1. Direct Registration (Mobile/Email + Password)
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { identifier, password, name, email, phoneNumber } = req.body;
+    const parsed = RegisterSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات ارسالی نامعتبر است.', details: parsed.error.format() });
+    }
+
+    const { identifier, password, name, email, phoneNumber } = parsed.data;
     const rawId = identifier || email || phoneNumber;
 
     if (!rawId || typeof rawId !== 'string' || !rawId.trim()) {
       return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
-    }
-
-    if (!password || typeof password !== 'string' || password.length < 4) {
-      return res.status(400).json({ error: 'رمز عبور باید حداقل دارای ۴ نویسه (کاراکتر) باشد.' });
     }
 
     const cleanId = rawId.trim().toLowerCase();
@@ -216,16 +292,12 @@ app.post('/api/auth/register', async (req, res) => {
 // 2. Direct Login (Mobile/Email + Password)
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { identifier, password } = req.body;
-
-    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
-      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
+    const parsed = LoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'لطفاً شناسه و رمز عبور را به درستی وارد کنید.', details: parsed.error.format() });
     }
 
-    if (!password || typeof password !== 'string') {
-      return res.status(400).json({ error: 'لطفاً رمز عبور خود را وارد نمایید.' });
-    }
-
+    const { identifier, password } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
     ensureDefaultAdminAndUsers();
 
@@ -308,11 +380,12 @@ app.post('/api/auth/login', async (req, res) => {
 // 3. Forgot Password - Request OTP (Dedicated to Password Recovery)
 app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
   try {
-    const { identifier } = req.body;
-    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
-      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
+    const parsed = IdentifierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه کاربری نامعتبر است.', details: parsed.error.format() });
     }
 
+    const { identifier } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
     const user = await findUserByIdentifier(cleanId);
 
@@ -324,14 +397,20 @@ app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
     await saveOtpCode(cleanId, generatedCode);
 
-    console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
+    if (!IS_PROD) {
+      console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
+    } else {
+      // TODO: Integrate actual SMS gateway (Kavenegar, FarazSMS, etc.) here
+      console.log(`[Bushido Auth] OTP generated for ${cleanId}. Dispatching to SMS provider...`);
+    }
 
     const responsePayload: Record<string, any> = {
       success: true,
       message: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`
     };
 
-    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_OTP_DEBUG === 'true') {
+    // Item A5: Never expose debug code in production
+    if (!IS_PROD && process.env.ENABLE_OTP_DEBUG === 'true') {
       responsePayload.debugCode = generatedCode;
     }
 
@@ -345,19 +424,15 @@ app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
 // 4. Reset Password with OTP Code
 app.post('/api/auth/reset-password', async (req, res) => {
   try {
-    const { identifier, code, newPassword } = req.body;
-
-    if (!identifier || !code) {
-      return res.status(400).json({ error: 'شناسه کاربری و کد تایید الزامی هستند.' });
+    const parsed = ResetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات وارد شده برای بازیابی نامعتبر است.', details: parsed.error.format() });
     }
 
-    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 4) {
-      return res.status(400).json({ error: 'رمز عبور جدید باید حداقل دارای ۴ نویسه (کاراکتر) باشد.' });
-    }
-
+    const { identifier, code, newPassword } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
+    
     const isValid = await verifyOtpCode(cleanId, String(code));
-
     if (!isValid) {
       return res.status(400).json({ error: 'کد تایید وارد شده نامعتبر یا منقضی شده است.' });
     }
@@ -396,24 +471,30 @@ app.post('/api/auth/reset-password', async (req, res) => {
 // 5. Send OTP (General Compatibility)
 app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
   try {
-    const { identifier } = req.body;
-    if (!identifier || typeof identifier !== 'string' || !identifier.trim()) {
-      return res.status(400).json({ error: 'شماره موبایل یا ایمیل را وارد نمایید.' });
+    const parsed = IdentifierSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شماره موبایل یا ایمیل را وارد نمایید.', details: parsed.error.format() });
     }
 
+    const { identifier } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await saveOtpCode(cleanId, generatedCode);
 
-    console.log(`[Bushido Auth] Generated OTP for ${cleanId}: [ ${generatedCode} ]`);
+    if (!IS_PROD) {
+      console.log(`[Bushido Auth] Generated OTP for ${cleanId}: [ ${generatedCode} ]`);
+    } else {
+      // TODO: Integrate actual SMS gateway
+      console.log(`[Bushido Auth] OTP generated for ${cleanId}. Dispatching to SMS provider...`);
+    }
 
     const responsePayload: Record<string, any> = {
       success: true,
       message: `کد تایید امن ۵ رقمی برای ${cleanId} ارسال شد.`
     };
 
-    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_OTP_DEBUG === 'true') {
+    if (!IS_PROD && process.env.ENABLE_OTP_DEBUG === 'true') {
       responsePayload.debugCode = generatedCode;
     }
 
@@ -427,11 +508,12 @@ app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
 // 6. Verify OTP & Login / Register (Compatibility Fallback)
 app.post('/api/auth/verify-otp', async (req, res) => {
   try {
-    const { identifier, code, name } = req.body;
-    if (!identifier || !code) {
-      return res.status(400).json({ error: 'شناسه کاربری و کد تایید الزامی است.' });
+    const parsed = VerifyOtpSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات وارد شده نامعتبر است.', details: parsed.error.format() });
     }
 
+    const { identifier, code, name } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
     const isValid = await verifyOtpCode(cleanId, String(code));
 
@@ -483,8 +565,16 @@ app.post('/api/auth/verify-otp', async (req, res) => {
 });
 
 // 7. Quick Direct Login for Local Admin & Test Accounts
+// Item A4: Locked strictly in Production
 app.post('/api/auth/quick-login', async (req, res) => {
   try {
+    if (IS_PROD) {
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        error: 'دسترسی به مسیر Quick-Login در محیط پروداکشن به دلایل امنیتی اکیداً مسدود است.'
+      });
+    }
+
     const { role, userId } = req.body;
     ensureDefaultAdminAndUsers();
 
@@ -558,20 +648,19 @@ app.get('/api/auth/me', authMiddleware, async (req: AuthenticatedRequest, res) =
 // Update user profile - Protected & Hardened against Unauthorized Privilege Escalation
 app.put('/api/auth/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
+    const parsed = ProfileUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی‌های نامعتبر است.', details: parsed.error.format() });
+    }
+
     const userId = req.user!.userId;
-    const { name, nightOwlCutoffHour, accentTheme } = req.body;
+    const { name, nightOwlCutoffHour, accentTheme } = parsed.data;
     
     // OWASP & Security Hardening: Never allow client injection of isVip, tier, isAdmin, or subscription fields
     const updatePayload: Record<string, any> = {};
-    if (typeof name === 'string' && name.trim()) {
-      updatePayload.name = name.trim().slice(0, 80);
-    }
-    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
-      updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
-    }
-    if (typeof accentTheme === 'string' && ['amber', 'emerald', 'rose', 'blue', 'violet'].includes(accentTheme)) {
-      updatePayload.accentTheme = accentTheme;
-    }
+    if (name) updatePayload.name = name.trim().slice(0, 80);
+    if (nightOwlCutoffHour !== undefined) updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
+    if (accentTheme) updatePayload.accentTheme = accentTheme;
 
     const updated = await updateUser(userId, updatePayload);
     res.json({ user: updated });
@@ -584,20 +673,18 @@ app.put('/api/auth/profile', authMiddleware, async (req: AuthenticatedRequest, r
 // Alias for profile update - Protected & Hardened
 app.put('/api/user/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user!.userId;
-    const { name, nightOwlCutoffHour, accentTheme } = req.body;
+    const parsed = ProfileUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی‌های نامعتبر است.', details: parsed.error.format() });
+    }
 
-    // OWASP & Security Hardening: Never allow client injection of isVip, tier, isAdmin, or subscription fields
+    const userId = req.user!.userId;
+    const { name, nightOwlCutoffHour, accentTheme } = parsed.data;
+
     const updatePayload: Record<string, any> = {};
-    if (typeof name === 'string' && name.trim()) {
-      updatePayload.name = name.trim().slice(0, 80);
-    }
-    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
-      updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
-    }
-    if (typeof accentTheme === 'string' && ['amber', 'emerald', 'rose', 'blue', 'violet'].includes(accentTheme)) {
-      updatePayload.accentTheme = accentTheme;
-    }
+    if (name) updatePayload.name = name.trim().slice(0, 80);
+    if (nightOwlCutoffHour !== undefined) updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
+    if (accentTheme) updatePayload.accentTheme = accentTheme;
 
     const updated = await updateUser(userId, updatePayload);
     res.json({ user: updated });
@@ -626,26 +713,21 @@ app.get('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) =>
 // Create new cycle for user
 app.post('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user!.userId;
-    const { title, startDate, endDate, targetTheme, inheritedStreak, rules } = req.body;
-
-    if (!title || !startDate || !endDate) {
-      return res.status(400).json({ error: 'اطلاعات عنوان و تاریخ شروع/پایان الزامی است.' });
+    const parsed = CycleCreateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات عنوان و تاریخ شروع/پایان الزامی و معتبر است.', details: parsed.error.format() });
     }
 
-    const sanitizedTitle = String(title).trim().slice(0, 120);
-    const sanitizedTheme = typeof targetTheme === 'string' ? targetTheme.trim().slice(0, 200) : null;
-    const sanitizedRules = Array.isArray(rules)
-      ? rules.filter(r => typeof r === 'string').map(r => r.trim().slice(0, 200)).slice(0, 20)
-      : [];
+    const userId = req.user!.userId;
+    const { title, startDate, endDate, targetTheme, inheritedStreak, rules } = parsed.data;
 
     const newCycle = await createCycle(userId, {
-      title: sanitizedTitle,
-      startDate: String(startDate).slice(0, 20),
-      endDate: String(endDate).slice(0, 20),
-      targetTheme: sanitizedTheme || undefined,
-      inheritedStreak: Number(inheritedStreak) || 0,
-      rules: sanitizedRules
+      title: title.trim(),
+      startDate: startDate.trim(),
+      endDate: endDate.trim(),
+      targetTheme: targetTheme?.trim(),
+      inheritedStreak: inheritedStreak || 0,
+      rules: rules ? rules.map(r => r.trim().slice(0, 200)).slice(0, 20) : []
     });
 
     res.json({ cycle: newCycle });
@@ -658,29 +740,22 @@ app.post('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) =
 // Update cycle
 app.put('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
+    const parsed = CycleUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'مقادیر به‌روزرسانی نامعتبر است.', details: parsed.error.format() });
+    }
+
     const userId = req.user!.userId;
     const cycleId = req.params.id;
-    const { title, targetTheme, rules, isArchived, reportRead, verdict } = req.body;
+    const { title, targetTheme, rules, isArchived, reportRead, verdict } = parsed.data;
 
     const sanitizedUpdate: Record<string, any> = {};
-    if (typeof title === 'string' && title.trim()) {
-      sanitizedUpdate.title = title.trim().slice(0, 120);
-    }
-    if (targetTheme !== undefined) {
-      sanitizedUpdate.targetTheme = typeof targetTheme === 'string' ? targetTheme.trim().slice(0, 200) : null;
-    }
-    if (Array.isArray(rules)) {
-      sanitizedUpdate.rules = rules.filter(r => typeof r === 'string').map(r => r.trim().slice(0, 200)).slice(0, 20);
-    }
-    if (typeof isArchived === 'boolean') {
-      sanitizedUpdate.isArchived = isArchived;
-    }
-    if (typeof reportRead === 'boolean') {
-      sanitizedUpdate.reportRead = reportRead;
-    }
-    if (verdict !== undefined) {
-      sanitizedUpdate.verdict = verdict;
-    }
+    if (title) sanitizedUpdate.title = title.trim();
+    if (targetTheme !== undefined) sanitizedUpdate.targetTheme = targetTheme?.trim() || null;
+    if (rules) sanitizedUpdate.rules = rules.map(r => r.trim().slice(0, 200)).slice(0, 20);
+    if (isArchived !== undefined) sanitizedUpdate.isArchived = isArchived;
+    if (reportRead !== undefined) sanitizedUpdate.reportRead = reportRead;
+    if (verdict !== undefined) sanitizedUpdate.verdict = verdict;
 
     const updated = await updateCycle(userId, cycleId, sanitizedUpdate);
 
@@ -720,44 +795,13 @@ app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, 
 // Handler for upserting daily logs with safe string clamping
 const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
-    const userId = req.user!.userId;
-    const {
-      cycleId,
-      date,
-      wakeUp,
-      workout,
-      study,
-      journal,
-      hardTask,
-      specialMission,
-      failureReason,
-      failureTime,
-      autopsyNotes,
-      countermeasure,
-      aiFeedback,
-      notes
-    } = req.body;
-
-    if (!cycleId || !date) {
-      return res.status(400).json({ error: 'شناسه چرخه و تاریخ روز الزامی است.' });
+    const parsed = DailyLogSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه چرخه و تاریخ روز الزامی و داده‌ها باید معتبر باشند.', details: parsed.error.format() });
     }
 
-    const sanitizedData = {
-      cycleId: String(cycleId).slice(0, 100),
-      date: String(date).slice(0, 20),
-      wakeUp: Boolean(wakeUp),
-      workout: Boolean(workout),
-      study: Boolean(study),
-      journal: Boolean(journal),
-      hardTask: Boolean(hardTask),
-      specialMission: Boolean(specialMission),
-      failureReason: typeof failureReason === 'string' ? failureReason.slice(0, 500) : null,
-      failureTime: typeof failureTime === 'string' ? failureTime.slice(0, 100) : null,
-      autopsyNotes: typeof autopsyNotes === 'string' ? autopsyNotes.slice(0, 2000) : null,
-      countermeasure: typeof countermeasure === 'string' ? countermeasure.slice(0, 2000) : null,
-      aiFeedback: typeof aiFeedback === 'string' ? aiFeedback.slice(0, 2000) : null,
-      notes: typeof notes === 'string' ? notes.slice(0, 2000) : null
-    };
+    const userId = req.user!.userId;
+    const sanitizedData = parsed.data;
 
     const log = await upsertDailyLog(userId, sanitizedData);
     res.json({ log, success: true });
@@ -793,13 +837,26 @@ app.post('/api/daily-logs', authMiddleware, handleUpsertDailyLog);
  * DETERMINISTIC REASONING ENGINE (NO AI REQUIRED - OFFLINE / INSTANT)
  * ========================================================================= */
 
+const AutopsySchema = z.object({
+  date: z.string(),
+  missedHabits: z.array(z.string()).optional(),
+  failureReason: z.string().optional(),
+  failureTime: z.string().optional(),
+  userNotes: z.string().optional(),
+});
+
 // 2. Failure Autopsy (کالبدشکافی دقیق و امن)
 app.post('/api/ai/autopsy', authMiddleware, (req: AuthenticatedRequest, res) => {
   try {
-    const { date, missedHabits, failureReason, failureTime, userNotes } = req.body;
-    const cleanFailureReason = typeof failureReason === 'string' ? failureReason.slice(0, 500) : '';
-    const cleanFailureTime = typeof failureTime === 'string' ? failureTime.slice(0, 100) : '';
-    const cleanUserNotes = typeof userNotes === 'string' ? userNotes.slice(0, 2000) : '';
+    const parsed = AutopsySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی نامعتبر', details: parsed.error.format() });
+    }
+
+    const { date, missedHabits, failureReason, failureTime, userNotes } = parsed.data;
+    const cleanFailureReason = failureReason ? failureReason.slice(0, 500) : '';
+    const cleanFailureTime = failureTime ? failureTime.slice(0, 100) : '';
+    const cleanUserNotes = userNotes ? userNotes.slice(0, 2000) : '';
 
     if (cleanFailureReason === 'دلایل شخصی') {
       return res.json({
@@ -846,7 +903,7 @@ app.post('/api/ai/autopsy', authMiddleware, (req: AuthenticatedRequest, res) => 
       countermeasure = 'قانون حالت هواپیما: تلفن همراه در طول کار سخت در اتاقی دیگر قرار می‌گیرد.';
     }
 
-    if (Array.isArray(missedHabits) && missedHabits.length > 0) {
+    if (missedHabits && missedHabits.length > 0) {
       const cleanHabits = missedHabits.filter(h => typeof h === 'string').map(h => h.slice(0, 100));
       if (cleanHabits.length > 0) {
         analysis += ` عدم اجرای «${cleanHabits.join('، ')}» مستقیماً ساختار روز را تضعیف کرده است.`;
@@ -986,7 +1043,12 @@ app.post('/api/ai/verdict', (req, res) => {
 // Start payment request
 app.post('/api/payment/request', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const { planId, amount, description } = req.body;
+    const parsed = PaymentRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات درخواست پرداخت معتبر نیست', details: parsed.error.format() });
+    }
+
+    const { planId, amount, description } = parsed.data;
     const userId = req.user?.userId || 'guest-warrior-1';
     const numericAmount = Number(amount) || 199000;
     const merchantId = process.env.ZARINPAL_MERCHANT_ID?.trim();
@@ -1018,32 +1080,87 @@ app.post('/api/payment/request', optionalAuthMiddleware, async (req: Authenticat
   }
 });
 
-// Verify payment
+// Verify payment (Items A6 & B6: Real Zarinpal Integration & Idempotency Anti-Double-Spend Check)
 app.post('/api/payment/verify', async (req, res) => {
   try {
-    const { authority, amount } = req.body;
+    const parsed = PaymentVerifySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه مرجع تراکنش (Authority) نامعتبر است.', details: parsed.error.format() });
+    }
 
-    if (!authority) {
-      return res.status(400).json({
+    const { authority, amount } = parsed.data;
+    const ZARINPAL_MERCHANT_ID = process.env.ZARINPAL_MERCHANT_ID?.trim();
+    const isLiveZarinpal = ZARINPAL_MERCHANT_ID && ZARINPAL_MERCHANT_ID.length >= 30;
+
+    // Fetch all subs (since we lack a findByAuthority method, we filter)
+    const allSubs = await adminGetAllSubscriptions();
+    const sub = allSubs.find(s => s.authority === authority);
+
+    if (!sub) {
+      return res.status(404).json({
         status: -11,
-        message: 'شناسه مرجع تراکنش (Authority) نامعتبر است.'
+        code: 'NOT_FOUND',
+        message: 'تراکنش یافت نشد.'
       });
     }
 
-    const refId = 'REF-' + Math.floor(10000000 + Math.random() * 90000000);
-    const cardPan = '6037-99**-****-' + Math.floor(1000 + Math.random() * 9000);
+    // Anti-Double Spend Idempotency Guard
+    if (sub.status === 'COMPLETED') {
+      return res.status(400).json({
+        status: -101,
+        code: 'DOUBLE_SPEND',
+        message: 'این تراکنش قبلاً با موفقیت تایید و اعمال شده است.'
+      });
+    }
 
-    const sub = await completeSubscription(authority, refId, cardPan);
+    let refId = '';
+    let cardPan = '';
+
+    if (isLiveZarinpal) {
+      // Execute Real Zarinpal Verification
+      const zpRes = await fetch('https://payment.zarinpal.com/pg/v4/payment/verify.json', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          merchant_id: ZARINPAL_MERCHANT_ID,
+          amount: amount || sub.amount,
+          authority: authority
+        })
+      });
+
+      const zpData = await zpRes.json();
+      
+      if (zpData.data && (zpData.data.code === 100 || zpData.data.code === 101)) {
+        refId = zpData.data.ref_id.toString();
+        cardPan = zpData.data.card_pan || '****';
+      } else {
+        return res.status(400).json({
+          status: zpData.errors?.code || -50,
+          code: 'VERIFY_FAILED',
+          message: 'تراکنش از سوی بانک تایید نشد.',
+          details: zpData.errors
+        });
+      }
+    } else {
+      // Execute High-Fidelity Mock Verification
+      refId = 'REF-' + Math.floor(10000000 + Math.random() * 90000000);
+      cardPan = '6037-99**-****-' + Math.floor(1000 + Math.random() * 9000);
+    }
+
+    const completedSub = await completeSubscription(authority, refId, cardPan);
 
     res.json({
       status: 100,
       refId,
       cardPan,
       authority,
-      amount: Number(amount) || 199000,
+      amount: amount || sub.amount,
       message: 'تراکنش با موفقیت تایید شد و حساب شما به «سامورایی ویژه VIP» ارتقا یافت.',
       tier: 'vip_samurai',
-      subscription: sub
+      subscription: completedSub
     });
   } catch (error) {
     console.error('Payment verify error:', error);
@@ -1180,6 +1297,7 @@ app.post('/api/admin/impersonate', adminMiddleware, async (req: AuthenticatedReq
     res.status(500).json({ error: 'خطا در جابجایی به حساب کاربر.' });
   }
 });
+
 app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
     const subscriptions = await adminGetAllSubscriptions();
@@ -1209,8 +1327,9 @@ async function startServer() {
   // Global Error Handler Middleware
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('Unhandled server error:', err);
-    res.status(500).json({
-      error: 'خطای غیرمنتظره در پردازش درخواست سرور.',
+    res.status(err.statusCode || 500).json({
+      code: err.code || 'INTERNAL_SERVER_ERROR',
+      error: err.messageFa || 'خطای غیرمنتظره در پردازش درخواست سرور.',
       message: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   });
