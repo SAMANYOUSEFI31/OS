@@ -82,25 +82,27 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={this.handleReload}
-                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-[0.98]"
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition cursor-pointer active:scale-[0.98] touch-manipulation"
+                title="بارگذاری مجدد بدون دستکاری و حذف داده‌های ثبت‌شده"
               >
                 <RefreshCw className="w-4 h-4" />
-                <span>تلاش مجدد و بارگذاری</span>
+                <span>بارگذاری مجدد (حفظ تمام داده‌ها)</span>
               </button>
 
               <button
                 type="button"
                 onClick={this.handleResetLocal}
-                className="w-full sm:w-auto py-3 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98]"
+                className="w-full sm:w-auto py-3 px-4 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.98] touch-manipulation"
+                title="پاکسازی کش محلی مرورگر و بازنشانی وضعیت اولیه"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>بازنشانی کش اضطراری</span>
+                <span>بازنشانی کامل حافظه موقت</span>
               </button>
             </div>
 
             {/* Footer notice */}
             <p className="text-[11px] text-zinc-400 text-center leading-relaxed border-t border-zinc-800/80 pt-4">
-              داده‌های ذخیره‌شده شما در سیستم امن هستند و می‌توانید با بارگذاری مجدد به میدان نبرد بازگردید.
+              داده‌های ثبت‌شده و گزارش‌های روزانه شما کاملاً امن هستند؛ دکمه «بارگذاری مجدد» صفحه را بدون پاکسازی داده‌ها بازیابی می‌کند.
             </p>
           </div>
         </div>
