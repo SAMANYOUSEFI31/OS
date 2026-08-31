@@ -116,9 +116,9 @@ export function loadStoredSystemState(): SystemState {
           .filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string')
           .map((c: any) => {
             if (c.id === 'cycle-1' && c.isArchived) {
-              return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : true };
+              return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : false };
             }
-            return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : true };
+            return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : false };
           });
         if (parsed.cycles.length === 0) {
           parsed.cycles = initial.cycles;
@@ -133,7 +133,7 @@ export function loadStoredSystemState(): SystemState {
           .filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string')
           .map((l: any) => ({
             ...l,
-            isSynced: l.isSynced !== undefined ? l.isSynced : true
+            isSynced: l.isSynced !== undefined ? l.isSynced : false
           }));
       }
 

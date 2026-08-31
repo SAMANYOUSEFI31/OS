@@ -56,6 +56,7 @@ export default function App() {
   const [isCreateCycleModalOpen, setIsCreateCycleModalOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
 
   // UX Standard: Automatically reset scroll to top when switching main tabs
   useEffect(() => {
@@ -63,15 +64,34 @@ export default function App() {
   }, [activeTab]);
 
   const showAppToast = useCallback((msg: string, type: ToastType = 'success', duration = 2500) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    setToasts(prev => [...prev.slice(-2), { id, message: msg, type, duration }]);
-    setTimeout(() => {
+    setToasts([{ id, message: msg, type, duration }]);
+    toastTimeoutRef.current = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
+      toastTimeoutRef.current = null;
     }, duration);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+      toastTimeoutRef.current = null;
+    }
     setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Cleanup toast timer on unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
+        toastTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const handleSelectDate = useCallback((newDate: string) => {
@@ -409,19 +429,36 @@ export default function App() {
   const handleImportData = (dataStr: string) => {
     try {
       const parsed = JSON.parse(dataStr);
-      if (parsed.cycles && parsed.logs && parsed.settings) {
-        if (!parsed.userProfile) {
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray(parsed.cycles) &&
+        Array.isArray(parsed.logs) &&
+        parsed.settings &&
+        typeof parsed.settings === 'object'
+      ) {
+        if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
           parsed.userProfile = createInitialSystemState().userProfile;
         }
+
+        // Sanitize imported cycles and logs to guarantee structural integrity
+        parsed.cycles = parsed.cycles.filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string' && typeof c.startDate === 'string');
+        parsed.logs = parsed.logs.filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string');
+
+        if (parsed.cycles.length === 0) {
+          showAppToast('فایل پشتیبان باید حداقل دارای یک چرخه معتبر باشد.', 'error');
+          return;
+        }
+
         flushPendingStorageSave();
         setSystemState(parsed);
-        setActiveCycleId(parsed.cycles[0]?.id || 'cycle-1');
+        setActiveCycleId(parsed.cycles[0].id);
         showAppToast('اطلاعات پشتیبان با موفقیت بازیابی شد.');
       } else {
-        showAppToast('فرمت فایل پشتیبان نامعتبر است.');
+        showAppToast('فرمت ساختار فایل پشتیبان نامعتبر است.', 'error');
       }
     } catch {
-      showAppToast('خطا در خواندن فایل JSON.');
+      showAppToast('خطا در تجزیه فایل JSON.', 'error');
     }
   };
 

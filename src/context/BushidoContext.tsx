@@ -581,19 +581,36 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   const importData = useCallback((dataStr: string) => {
     try {
       const parsed = JSON.parse(dataStr);
-      if (parsed.cycles && parsed.logs && parsed.settings) {
-        if (!parsed.userProfile) {
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        Array.isArray(parsed.cycles) &&
+        Array.isArray(parsed.logs) &&
+        parsed.settings &&
+        typeof parsed.settings === 'object'
+      ) {
+        if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
           parsed.userProfile = createInitialSystemState().userProfile;
         }
+
+        // Sanitize imported cycles and logs to guarantee structural integrity
+        parsed.cycles = parsed.cycles.filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string' && typeof c.startDate === 'string');
+        parsed.logs = parsed.logs.filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string');
+
+        if (parsed.cycles.length === 0) {
+          showAppToast('فایل پشتیبان باید حداقل دارای یک چرخه معتبر باشد.');
+          return;
+        }
+
         flushPendingStorageSave();
         setSystemState(parsed);
-        setActiveCycleId(parsed.cycles[0]?.id || 'cycle-1');
+        setActiveCycleId(parsed.cycles[0].id);
         showAppToast('اطلاعات پشتیبان با موفقیت بازیابی شد.');
       } else {
-        showAppToast('فرمت فایل پشتیبان نامعتبر است.');
+        showAppToast('فرمت ساختار فایل پشتیبان نامعتبر است.');
       }
     } catch {
-      showAppToast('خطا در خواندن فایل JSON.');
+      showAppToast('خطا در تجزیه فایل JSON.');
     }
   }, [showAppToast]);
 
