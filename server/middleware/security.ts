@@ -27,10 +27,9 @@ export function createRateLimiter(options: { windowMs: number; max: number; mess
 
   return (req: Request, res: Response, next: NextFunction): void => {
     const ip = req.ip || req.socket.remoteAddress || 'unknown-ip';
-    const identifier =
-      (req.body && req.body.username) ||
-      (req.body && req.body.phone) ||
-      (req.user && (req.user as any).id) ||
+        const identifier =
+      (req.body && (req.body.identifier || req.body.username || req.body.phone || req.body.email)) ||
+      (req.user && ((req.user as any).userId || (req.user as any).id)) ||
       '';
 
     const key = `${req.path}:${ip}:${identifier}`;
@@ -90,9 +89,9 @@ export function setSecurityHeaders(req: Request, res: Response, next: NextFuncti
   }
 
   // Content Security Policy (CSP)
-  res.setHeader(
+    res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none';"
   );
 
   // Prevent MIME-type sniffing
