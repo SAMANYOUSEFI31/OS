@@ -1,7 +1,18 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { 
+  useState, 
+  useEffect, 
+  useMemo, 
+  useCallback, 
+  useRef, 
+  Suspense, 
+  lazy, 
+  Component, 
+  ErrorInfo, 
+  ReactNode 
+} from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem } from './types';
-import { createInitialSystemState, GUEST_USER_PROFILE, DEFAULT_ADMIN_USER_PROFILE } from './data/initialData';
+import { createInitialSystemState, GUEST_USER_PROFILE } from './data/initialData';
 import { computeCycleMetrics, createEmptyCycleMetrics } from './engine/bushidoCalculations';
 import { getLogicalTodayDate, addDaysToDate } from './utils/dateUtils';
 import { applyAccentTheme } from './utils/themeUtils';
@@ -9,21 +20,91 @@ import {
   loadStoredSystemState, 
   saveSystemStateDebounced, 
   flushPendingStorageSave, 
-  STORAGE_KEY, 
   TOKEN_KEY 
 } from './utils/storageUtils';
 import { Navbar } from './components/Navbar';
-import { BattlefieldView } from './components/BattlefieldView';
-import { CycleDashboardView } from './components/CycleDashboardView';
-import { ArchivesView } from './components/ArchivesView';
-import { ProfileSettingsView } from './components/ProfileSettingsView';
-import { AdminView } from './components/AdminView';
 import { AutopsyModal } from './components/AutopsyModal';
 import { PaymentModal } from './components/PaymentModal';
 import { AuthModal } from './components/AuthModal';
 import { CreateCycleModal } from './components/CreateCycleModal';
 import { Toast, ToastItem, ToastType } from './components/Toast';
-import { RotateCcw, CheckCircle2, AlertTriangle, X, Eye, ShieldCheck } from 'lucide-react';
+import { RotateCcw, AlertTriangle, Eye, ShieldCheck, RefreshCw } from 'lucide-react';
+import './tokens.css';
+
+// Lazy loading heavy views for optimized initial load (LCP & Code Splitting)
+const BattlefieldView = lazy(() => import('./components/BattlefieldView').then(m => ({ default: m.BattlefieldView })));
+const CycleDashboardView = lazy(() => import('./components/CycleDashboardView').then(m => ({ default: m.CycleDashboardView })));
+const ArchivesView = lazy(() => import('./components/ArchivesView').then(m => ({ default: m.ArchivesView })));
+const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then(m => ({ default: m.ProfileSettingsView })));
+const AdminView = lazy(() => import('./components/AdminView').then(m => ({ default: m.AdminView })));
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+  };
+
+  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    console.error('[Bushido ErrorBoundary] Uncaught runtime error:', error, errorInfo);
+  }
+
+  private handleReload = (): void => {
+    this.setState({ hasError: false, error: null });
+    window.location.reload();
+  };
+
+  public render(): ReactNode {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-[#09090b] text-zinc-100 flex items-center justify-center p-4 dir-rtl">
+          <div className="max-w-md w-full bg-[#121215] border border-red-500/30 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+            <h2 className="text-lg font-bold text-zinc-100">خطایی در اجرای برنامه رخ داد</h2>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              سامانه بوشیدو با یک خطای غیرمنتظره رندرینگ مواجه شده است. برای جلوگیری از بازگشت به حالت ناپایدار، می‌توانید صفحه را مجدداً بارگذاری کنید.
+            </p>
+            {this.state.error && (
+              <div className="text-[11px] font-mono dir-ltr bg-black/60 p-3 rounded-xl text-red-300 overflow-x-auto text-left border border-zinc-800">
+                {this.state.error.toString()}
+              </div>
+            )}
+            <button
+              onClick={this.handleReload}
+              className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-red-600/20"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>بارگذاری مجدد سامانه</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const TabLoadingFallback: React.FC = () => (
+  <div className="flex-1 flex flex-col items-center justify-center min-h-[350px] w-full gap-3">
+    <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+    <span className="text-xs text-zinc-400 font-medium">در حال بارگذاری بخش بوشیدو...</span>
+  </div>
+);
 
 export default function App() {
   const [authToken, setAuthToken] = useState<string | null>(() => {
@@ -612,299 +693,301 @@ export default function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col w-full max-w-full selection:bg-amber-500 selection:text-black pb-20 lg:pb-8">
-      {/* Top Banner when Admin is Impersonating a User */}
-      {impersonatingUser && (
-        <div className="bg-sky-950 border-b border-sky-500/50 py-2.5 px-4 sticky top-0 z-50 shadow-2xl backdrop-blur-md">
-          <div className="max-w-7xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2 text-sky-200 font-bold">
-              <Eye className="w-4 h-4 text-sky-400 animate-pulse shrink-0" />
-              <span>
-                حالت شبیه‌سازی کاربر: در حال بررسی سامانه از دید «{impersonatingUser.name}»
-              </span>
-              <span className="text-[10px] bg-sky-900/80 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded-md font-mono hidden md:inline-block">
-                {impersonatingUser.id}
-              </span>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col w-full max-w-full selection:bg-amber-500 selection:text-black pt-safe pb-20 lg:pb-8">
+        {/* Top Banner when Admin is Impersonating a User */}
+        {impersonatingUser && (
+          <div className="bg-sky-950 border-b border-sky-500/50 py-2.5 px-4 sticky top-0 z-50 shadow-2xl backdrop-blur-md">
+            <div className="max-w-7xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2 text-sky-200 font-bold">
+                <Eye className="w-4 h-4 text-sky-400 animate-pulse shrink-0" />
+                <span>
+                  حالت شبیه‌سازی کاربر: در حال بررسی سامانه از دید «{impersonatingUser.name}»
+                </span>
+                <span className="text-[10px] bg-sky-900/80 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded-md font-mono hidden md:inline-block">
+                  {impersonatingUser.id}
+                </span>
+              </div>
+              <button
+                onClick={handleExitImpersonation}
+                className="bg-sky-500 hover:bg-sky-400 text-zinc-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-md shrink-0 active:scale-95"
+              >
+                <ShieldCheck className="w-4 h-4 text-zinc-950" />
+                <span>بازگشت به حساب مدیریت</span>
+              </button>
             </div>
-            <button
-              onClick={handleExitImpersonation}
-              className="bg-sky-500 hover:bg-sky-400 text-zinc-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-md shrink-0 active:scale-95"
-            >
-              <ShieldCheck className="w-4 h-4 text-zinc-950" />
-              <span>بازگشت به حساب مدیریت</span>
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Top Hub Bar */}
-      <Navbar
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        cycles={systemState.cycles}
-        currentCycle={currentCycle}
-        onSelectCycle={c => setActiveCycleId(c.id)}
-        metrics={cycleMetrics}
-        settings={systemState.settings}
-        userProfile={systemState.userProfile}
-        onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
-        onOpenAuthModal={() => setIsAuthModalOpen(true)}
-        onOpenNewCycleModal={() => setIsCreateCycleModalOpen(true)}
-        onDeleteCycle={handleDeleteCycle}
-        onOpenDebtAutopsy={() => {
-          // Find first unresolved debt log
-          const firstDebt = systemState.logs.find(l => {
-            if (l.date >= logicalToday) return false;
-            const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
-            const isStd = habitKeys.every(k => l[k]);
-            const isFrozen = l.failureReason === 'دلایل شخصی';
-            const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
-            return !isStd && !isResolved;
-          });
-          if (firstDebt) {
-            setAutopsyTargetLog(firstDebt);
-          } else {
-            setActiveTab('battlefield');
-          }
-        }}
-      />
+        {/* Top Hub Bar */}
+        <Navbar
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
+          cycles={systemState.cycles}
+          currentCycle={currentCycle}
+          onSelectCycle={c => setActiveCycleId(c.id)}
+          metrics={cycleMetrics}
+          settings={systemState.settings}
+          userProfile={systemState.userProfile}
+          onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onOpenNewCycleModal={() => setIsCreateCycleModalOpen(true)}
+          onDeleteCycle={handleDeleteCycle}
+          onOpenDebtAutopsy={() => {
+            const firstDebt = systemState.logs.find(l => {
+              if (l.date >= logicalToday) return false;
+              const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
+              const isStd = habitKeys.every(k => l[k]);
+              const isFrozen = l.failureReason === 'دلایل شخصی';
+              const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
+              return !isStd && !isResolved;
+            });
+            if (firstDebt) {
+              setAutopsyTargetLog(firstDebt);
+            } else {
+              setActiveTab('battlefield');
+            }
+          }}
+        />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0 flex flex-col">
-        <AnimatePresence mode="wait">
-            {activeTab === 'battlefield' && (
-              <motion.div
-                key="battlefield"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="flex-1 flex flex-col w-full min-h-full"
-              >
-                <BattlefieldView
-                  currentCycle={currentCycle}
-                  metrics={cycleMetrics}
-                  logs={systemState.logs}
-                  selectedDate={selectedDate}
-                  nightOwlCutoffHour={systemState.userProfile?.nightOwlCutoffHour ?? systemState.settings?.nightOwlCutoffHour ?? 4}
-                  onSelectDate={handleSelectDate}
-                  onUpdateLog={handleUpdateLog}
-                  onOpenAutopsy={log => setAutopsyTargetLog(log)}
-                  onNavigateToArchives={() => setActiveTab('archives')}
-                  onOpenCreateCycle={() => setIsCreateCycleModalOpen(true)}
-                  onNavigateToHabitsGuide={() => setActiveTab('profile')}
-                />
-              </motion.div>
-            )}
+        {/* Main Content Area */}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0 flex flex-col">
+          <Suspense fallback={<TabLoadingFallback />}>
+            <AnimatePresence mode="wait">
+              {activeTab === 'battlefield' && (
+                <motion.div
+                  key="battlefield"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex-1 flex flex-col w-full min-h-full"
+                >
+                  <BattlefieldView
+                    currentCycle={currentCycle}
+                    metrics={cycleMetrics}
+                    logs={systemState.logs}
+                    selectedDate={selectedDate}
+                    nightOwlCutoffHour={systemState.userProfile?.nightOwlCutoffHour ?? systemState.settings?.nightOwlCutoffHour ?? 4}
+                    onSelectDate={handleSelectDate}
+                    onUpdateLog={handleUpdateLog}
+                    onOpenAutopsy={log => setAutopsyTargetLog(log)}
+                    onNavigateToArchives={() => setActiveTab('archives')}
+                    onOpenCreateCycle={() => setIsCreateCycleModalOpen(true)}
+                    onNavigateToHabitsGuide={() => setActiveTab('profile')}
+                  />
+                </motion.div>
+              )}
 
-            {(activeTab === 'dashboard' || activeTab === 'cycle') && (
-              <motion.div
-                key="dashboard"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="flex-1 flex flex-col w-full min-h-full"
-              >
-                <CycleDashboardView
-                  currentCycle={currentCycle}
-                  metrics={cycleMetrics}
-                  logs={systemState.logs}
-                  cycles={systemState.cycles}
-                  allTimeSettings={dashboardAllTimeSettings}
-                  onSelectDate={handleDashboardSelectDate}
-                  onNavigateTab={handleDashboardNavigateTab}
-                />
-              </motion.div>
-            )}
+              {(activeTab === 'dashboard' || activeTab === 'cycle') && (
+                <motion.div
+                  key="dashboard"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex-1 flex flex-col w-full min-h-full"
+                >
+                  <CycleDashboardView
+                    currentCycle={currentCycle}
+                    metrics={cycleMetrics}
+                    logs={systemState.logs}
+                    cycles={systemState.cycles}
+                    allTimeSettings={dashboardAllTimeSettings}
+                    onSelectDate={handleDashboardSelectDate}
+                    onNavigateTab={handleDashboardNavigateTab}
+                  />
+                </motion.div>
+              )}
 
-            {(activeTab === 'archives' || activeTab === 'database' || activeTab === 'court') && (
-              <motion.div
-                key="archives"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="flex-1 flex flex-col w-full min-h-full"
-              >
-                <ArchivesView
-                  cycles={systemState.cycles}
-                  currentCycle={currentCycle}
-                  logs={systemState.logs}
-                  metrics={cycleMetrics}
-                  onSelectCycle={c => setActiveCycleId(c.id)}
-                  onUpdateCycle={handleUpdateCycle}
-                  onDeleteCycle={handleDeleteCycle}
-                  onSelectDate={d => {
-                    handleSelectDate(d);
-                    setActiveTab('battlefield');
-                  }}
-                  onOpenAutopsy={log => setAutopsyTargetLog(log)}
-                  onCreateNewCycle={handleCreateNewCycle}
-                />
-              </motion.div>
-            )}
+              {(activeTab === 'archives' || activeTab === 'database' || activeTab === 'court') && (
+                <motion.div
+                  key="archives"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex-1 flex flex-col w-full min-h-full"
+                >
+                  <ArchivesView
+                    cycles={systemState.cycles}
+                    currentCycle={currentCycle}
+                    logs={systemState.logs}
+                    metrics={cycleMetrics}
+                    onSelectCycle={c => setActiveCycleId(c.id)}
+                    onUpdateCycle={handleUpdateCycle}
+                    onDeleteCycle={handleDeleteCycle}
+                    onSelectDate={d => {
+                      handleSelectDate(d);
+                      setActiveTab('battlefield');
+                    }}
+                    onOpenAutopsy={log => setAutopsyTargetLog(log)}
+                    onCreateNewCycle={handleCreateNewCycle}
+                  />
+                </motion.div>
+              )}
 
-            {(activeTab === 'profile' || activeTab === 'settings') && (
-              <motion.div
-                key="profile"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="flex-1 flex flex-col w-full min-h-full"
-              >
-                <ProfileSettingsView
-                  userProfile={systemState.userProfile}
-                  settings={systemState.settings}
-                  onUpdateUserProfile={handleUpdateUserProfile}
-                  onUpdateSettings={handleUpdateSettings}
-                  onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
-                  onOpenAuthModal={() => setIsAuthModalOpen(true)}
-                  onQuickLogin={handleQuickLogin}
-                  onLogout={handleLogout}
-                  onResetData={handleResetData}
-                  onImportData={handleImportData}
-                  onExportData={handleExportData}
-                  onNavigateToAdmin={() => setActiveTab('admin')}
-                />
-              </motion.div>
-            )}
+              {(activeTab === 'profile' || activeTab === 'settings') && (
+                <motion.div
+                  key="profile"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  className="flex-1 flex flex-col w-full min-h-full"
+                >
+                  <ProfileSettingsView
+                    userProfile={systemState.userProfile}
+                    settings={systemState.settings}
+                    onUpdateUserProfile={handleUpdateUserProfile}
+                    onUpdateSettings={handleUpdateSettings}
+                    onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
+                    onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                    onQuickLogin={handleQuickLogin}
+                    onLogout={handleLogout}
+                    onResetData={handleResetData}
+                    onImportData={handleImportData}
+                    onExportData={handleExportData}
+                    onNavigateToAdmin={() => setActiveTab('admin')}
+                  />
+                </motion.div>
+              )}
 
-            {activeTab === 'admin' && (
-              <motion.div
-                key="admin"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-              >
-                <AdminView
-                  currentUser={systemState.userProfile}
-                  authToken={authToken}
-                  onBack={() => setActiveTab('profile')}
-                  onImpersonateUser={handleImpersonateUser}
-                  onRefreshUserProfile={() => {
-                    if (authToken) {
-                      fetch('/api/auth/me', {
-                        headers: {
-                          'Content-Type': 'application/json',
-                          'Authorization': `Bearer ${authToken}`
-                        }
-                      })
-                        .then(r => r.json())
-                        .then(data => {
-                          if (data?.user) {
-                            setSystemState(prev => ({
-                              ...prev,
-                              userProfile: {
-                                ...prev.userProfile,
-                                ...data.user,
-                                isVip: !!data.user.isVip,
-                                isAdmin: !!data.user.isAdmin
-                              }
-                            }));
+              {activeTab === 'admin' && (
+                <motion.div
+                  key="admin"
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                >
+                  <AdminView
+                    currentUser={systemState.userProfile}
+                    authToken={authToken}
+                    onBack={() => setActiveTab('profile')}
+                    onImpersonateUser={handleImpersonateUser}
+                    onRefreshUserProfile={() => {
+                      if (authToken) {
+                        fetch('/api/auth/me', {
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${authToken}`
                           }
                         })
-                        .catch(console.error);
-                    }
-                  }}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-      </main>
+                          .then(r => r.json())
+                          .then(data => {
+                            if (data?.user) {
+                              setSystemState(prev => ({
+                                ...prev,
+                                userProfile: {
+                                  ...prev.userProfile,
+                                  ...data.user,
+                                  isVip: !!data.user.isVip,
+                                  isAdmin: !!data.user.isAdmin
+                                }
+                              }));
+                            }
+                          })
+                          .catch(console.error);
+                      }
+                    }}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </Suspense>
+        </main>
 
-      {/* Autopsy Drawer/Modal */}
-      {autopsyTargetLog && (
-        <AutopsyModal
-          log={autopsyTargetLog}
-          cycleTheme={currentCycle?.targetTheme ?? 'amber'}
-          allUnresolvedLogs={systemState.logs.filter(l => {
-            if (l.date >= logicalToday) return false;
-            const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
-            const isStd = habitKeys.every(k => l[k]);
-            const isFrozen = l.failureReason === 'دلایل شخصی';
-            const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
-            return !isStd && !isResolved;
-          })}
-          onSelectLog={nextLog => setAutopsyTargetLog(nextLog)}
-          onSave={handleUpdateLog}
-          onClose={() => setAutopsyTargetLog(null)}
+        {/* Autopsy Drawer/Modal */}
+        {autopsyTargetLog && (
+          <AutopsyModal
+            log={autopsyTargetLog}
+            cycleTheme={currentCycle?.targetTheme ?? 'amber'}
+            allUnresolvedLogs={systemState.logs.filter(l => {
+              if (l.date >= logicalToday) return false;
+              const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
+              const isStd = habitKeys.every(k => l[k]);
+              const isFrozen = l.failureReason === 'دلایل شخصی';
+              const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
+              return !isStd && !isResolved;
+            })}
+            onSelectLog={nextLog => setAutopsyTargetLog(nextLog)}
+            onSave={handleUpdateLog}
+            onClose={() => setAutopsyTargetLog(null)}
+          />
+        )}
+
+        {/* Mock Payment / Subscription Modal */}
+        <PaymentModal
+          userProfile={systemState.userProfile}
+          isOpen={isPaymentModalOpen}
+          onClose={() => setIsPaymentModalOpen(false)}
+          onUpgradeSuccess={handleUpdateUserProfile}
         />
-      )}
 
-      {/* Mock Payment / Subscription Modal */}
-      <PaymentModal
-        userProfile={systemState.userProfile}
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        onUpgradeSuccess={handleUpdateUserProfile}
-      />
+        {/* User Auth Modal */}
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          onClose={() => setIsAuthModalOpen(false)}
+          currentUser={systemState.userProfile?.id ? systemState.userProfile : null}
+          onAuthSuccess={handleAuthSuccess}
+          onLogout={handleLogout}
+        />
 
-      {/* User Auth Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
-        currentUser={systemState.userProfile?.id ? systemState.userProfile : null}
-        onAuthSuccess={handleAuthSuccess}
-        onLogout={handleLogout}
-      />
+        {/* Global Micro-Toast Notification Layer */}
+        <Toast toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Global Micro-Toast Notification Layer */}
-      <Toast toasts={toasts} onDismiss={dismissToast} />
+        {/* Create Cycle Modal */}
+        <CreateCycleModal
+          isOpen={isCreateCycleModalOpen}
+          existingCycles={systemState.cycles}
+          onClose={() => setIsCreateCycleModalOpen(false)}
+          onCreateCycle={handleCreateNewCycle}
+        />
 
-      {/* Create Cycle Modal */}
-      <CreateCycleModal
-        isOpen={isCreateCycleModalOpen}
-        existingCycles={systemState.cycles}
-        onClose={() => setIsCreateCycleModalOpen(false)}
-        onCreateCycle={handleCreateNewCycle}
-      />
-
-      {/* Reset Confirmation Modal */}
-      {isResetConfirmOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-start sm:items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] overscroll-contain overflow-y-auto max-h-[100dvh]">
-          <div className="bg-[#121215] border border-red-500/40 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
-                <RotateCcw className="w-6 h-6" />
+        {/* Reset Confirmation Modal */}
+        {isResetConfirmOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-start sm:items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] overscroll-contain overflow-y-auto max-h-[100dvh]">
+            <div className="bg-[#121215] border border-red-500/40 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+                  <RotateCcw className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-zinc-100">
+                    بازنشانی داده‌های سامانه
+                  </h3>
+                  <p className="text-xs text-red-400 mt-0.5">
+                    بازگشت به مقادیر اولیه سیستم بوشیدو
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-base text-zinc-100">
-                  بازنشانی داده‌های سامانه
-                </h3>
-                <p className="text-xs text-red-400 mt-0.5">
-                  بازگشت به مقادیر اولیه سیستم بوشیدو
-                </p>
+
+              <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4">
+                آیا از بازنشانی کلیه داده‌ها، لاگ‌ها و چرخه‌ها به اطلاعات نمونه اولیه سیستم بوشیدو اطمینان دارید؟ تمام تغییرات ثبت‌شده محلی پاک خواهند شد.
+              </p>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsResetConfirmOpen(false)}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  انصراف
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmReset}
+                  className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>بله، بازنشانی داده‌ها</span>
+                </button>
               </div>
-            </div>
-
-            <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4">
-              آیا از بازنشانی کلیه داده‌ها، لاگ‌ها و چرخه‌ها به اطلاعات نمونه اولیه سیستم بوشیدو اطمینان دارید؟ تمام تغییرات ثبت‌شده محلی پاک خواهند شد.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setIsResetConfirmOpen(false)}
-                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                انصراف
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReset}
-                className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>بله، بازنشانی داده‌ها</span>
-              </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </ErrorBoundary>
   );
 }
-
