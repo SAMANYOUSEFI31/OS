@@ -142,3 +142,7 @@ export function isSuperAdminIdentifier(identifier: string): boolean {
 
   return crypto.timingSafeEqual(inputBuffer, targetBuffer);
 }
+export const SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || '';
+export const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || '';
+export const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS || '';
+export const SUPER_ADMIN_NAME = process.env.SUPER_ADMIN_NAME || 'Super Admin';
