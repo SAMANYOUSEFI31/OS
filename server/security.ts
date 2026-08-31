@@ -4,15 +4,15 @@ export const JWT_SECRET = process.env.JWT_SECRET || 'bushido_samurai_jwt_secret_
 export const PASSWORD_SALT = process.env.PASSWORD_SALT || 'bushido_salt_2026_warrior_shield_discipline_os';
 
 // Immutable Super Admin Master Identifiers
-export const SUPER_ADMIN_PHONE = '09375454050';
-export const SUPER_ADMIN_EMAIL = 'admin@bushido.app';
-export const SUPER_ADMIN_PASS = 'saman.y.31@';
+export const SUPER_ADMIN_PHONE = process.env.SUPER_ADMIN_PHONE || '09375454050';
+export const SUPER_ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'admin@bushido.app';
+export const SUPER_ADMIN_PASS = process.env.SUPER_ADMIN_PASS || 'saman.y.31@';
 export const SUPER_ADMIN_NAME = 'فرمانده ارشد سامورایی (مدیر ارشد)';
 
 export function isSuperAdminIdentifier(identifier?: string | null): boolean {
   if (!identifier) return false;
   const clean = identifier.trim().toLowerCase();
-  return clean === SUPER_ADMIN_PHONE || clean === SUPER_ADMIN_EMAIL;
+  return clean === SUPER_ADMIN_PHONE.toLowerCase() || clean === SUPER_ADMIN_EMAIL.toLowerCase();
 }
 
 export function hashPassword(password: string): string {
@@ -24,10 +24,13 @@ export function verifyPassword(password: string, storedHash?: string | null): bo
   if (!password || !storedHash) return false;
   try {
     const computed = hashPassword(password);
-    if (computed.length === storedHash.length && crypto.timingSafeEqual(Buffer.from(computed), Buffer.from(storedHash))) {
+    const computedBuf = Buffer.from(computed, 'hex');
+    const storedBuf = Buffer.from(storedHash, 'hex');
+
+    if (computedBuf.length === storedBuf.length && crypto.timingSafeEqual(computedBuf, storedBuf)) {
       return true;
     }
-    // Plaintext fallback for initial migration
+    // Fallback for initial plain migration
     return password === storedHash;
   } catch {
     return false;
