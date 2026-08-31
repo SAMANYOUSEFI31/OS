@@ -1,151 +1,85 @@
-import { SystemState } from '../types';
-import { createInitialSystemState } from '../data/initialData';
+import { SystemState, User } from '../types';
+import { initialCycles, initialDailyLogs } from '../data/initialData';
 
-export const STORAGE_KEY = 'bushido_discipline_os_v1';
-export const TOKEN_KEY = 'bushido_auth_token';
+const SYSTEM_STATE_KEY = 'bushido_discipline_os_v1';
+const AUTH_TOKEN_KEY = 'bushido_jwt_token_v1';
+const USER_DATA_KEY = 'bushido_user_data_v1';
 
-let pendingStateToSave: SystemState | null = null;
-let debounceTimer: NodeJS.Timeout | number | null = null;
-let idleCallbackId: number | null = null;
+export const defaultSystemState: SystemState = {
+  cycles: initialCycles,
+  dailyLogs: initialDailyLogs,
+  activeCycleId: initialCycles[0]?.id || 'cycle-1'
+};
 
-const DEBOUNCE_DELAY_MS = 350;
-
-/**
- * Directly writes state to localStorage safely
- */
-function writeStateDirect(state: SystemState): boolean {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    return true;
-  } catch (err) {
-    console.error('[Bushido Storage] Failed to save state to localStorage:', err);
-    return false;
-  }
-}
-
-/**
- * Flush any pending debounced writes immediately to disk.
- * Must be called before page unload or critical resets.
- */
-export function flushPendingStorageSave(): void {
-  if (debounceTimer) {
-    clearTimeout(debounceTimer as NodeJS.Timeout);
-    debounceTimer = null;
-  }
-  if (idleCallbackId !== null && typeof window !== 'undefined' && 'cancelIdleCallback' in window) {
-    window.cancelIdleCallback(idleCallbackId);
-    idleCallbackId = null;
-  }
-  if (pendingStateToSave) {
-    writeStateDirect(pendingStateToSave);
-    pendingStateToSave = null;
-  }
-}
-
-// Auto-register unload and pagehide listeners to ensure zero data loss
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeunload', flushPendingStorageSave, { capture: true });
-  window.addEventListener('pagehide', flushPendingStorageSave, { capture: true });
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      flushPendingStorageSave();
-    }
-  });
-}
-
-/**
- * Asynchronously persists system state to localStorage with debouncing & requestIdleCallback
- * to completely eliminate main thread blocking and frame drops on rapid habit toggling.
- */
-export function saveSystemStateDebounced(state: SystemState, delayMs: number = DEBOUNCE_DELAY_MS): void {
-  pendingStateToSave = state;
-
-  if (debounceTimer) {
-    clearTimeout(debounceTimer as NodeJS.Timeout);
-  }
-
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      if (idleCallbackId !== null) {
-        window.cancelIdleCallback(idleCallbackId);
-      }
-      idleCallbackId = window.requestIdleCallback(
-        () => {
-          idleCallbackId = null;
-          if (pendingStateToSave) {
-            writeStateDirect(pendingStateToSave);
-            pendingStateToSave = null;
-          }
-        },
-        { timeout: 1000 }
-      );
-    } else {
-      if (pendingStateToSave) {
-        writeStateDirect(pendingStateToSave);
-        pendingStateToSave = null;
-      }
-    }
-  }, delayMs);
-}
-
-/**
- * Loads system state from localStorage with fallback and schema migration checks
- */
 export function loadStoredSystemState(): SystemState {
-  const initial = createInitialSystemState();
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (!parsed || typeof parsed !== 'object') {
-        return initial;
-      }
+    const raw = localStorage.getItem(SYSTEM_STATE_KEY);
+    if (!raw) return defaultSystemState;
 
-      // 1. User Profile Protection
-      if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
-        parsed.userProfile = initial.userProfile;
-      }
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && Array.isArray(parsed.cycles) && Array.isArray(parsed.dailyLogs)) {
+      return {
+        cycles: parsed.cycles.length > 0 ? parsed.cycles : initialCycles,
+        dailyLogs: parsed.dailyLogs,
+        activeCycleId: parsed.activeCycleId || parsed.cycles[0]?.id || 'cycle-1'
+      };
+    }
+  } catch (error) {
+    console.warn('Failed to parse local system state, falling back to initial data:', error);
+  }
+  return defaultSystemState;
+}
 
-      // 2. Cycles Array Protection (Strict Array.isArray check)
-      if (!Array.isArray(parsed.cycles)) {
-        parsed.cycles = initial.cycles;
-      } else {
-        parsed.cycles = parsed.cycles
-          .filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string')
-          .map((c: any) => {
-            if (c.id === 'cycle-1' && c.isArchived) {
-              return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : false };
-            }
-            return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : false };
-          });
-        if (parsed.cycles.length === 0) {
-          parsed.cycles = initial.cycles;
-        }
-      }
+export function saveStoredSystemState(state: SystemState): void {
+  try {
+    localStorage.setItem(SYSTEM_STATE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.error('Failed to persist system state:', error);
+  }
+}
 
-      // 3. Logs Array Protection (Strict Array.isArray check)
-      if (!Array.isArray(parsed.logs)) {
-        parsed.logs = initial.logs;
-      } else {
-        parsed.logs = parsed.logs
-          .filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string')
-          .map((l: any) => ({
-            ...l,
-            isSynced: l.isSynced !== undefined ? l.isSynced : false
-          }));
-      }
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
 
-      // 4. Settings Protection
-      if (!parsed.settings || typeof parsed.settings !== 'object') {
-        parsed.settings = initial.settings;
-      }
+export function setAuthToken(token: string): void {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch (e) {
+    console.error('Failed to save auth token:', e);
+  }
+}
 
-      return parsed as SystemState;
+export function removeAuthToken(): void {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch (e) {
+    console.error('Failed to remove auth token:', e);
+  }
+}
+
+export function getStoredUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_DATA_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredUser(user: User | null): void {
+  try {
+    if (!user) {
+      localStorage.removeItem(USER_DATA_KEY);
+    } else {
+      localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
   } catch (e) {
-    console.warn('[Bushido Storage] Failed to load from localStorage, initializing fresh:', e);
+    console.error('Failed to save user data:', e);
   }
-  return initial;
 }
