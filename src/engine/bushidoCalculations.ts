@@ -134,7 +134,9 @@ export function computeDailyProperties(
   if (cycleStartDate && log.date > cycleStartDate) {
     let checkDate = cycleStartDate;
     while (checkDate < log.date && checkDate < logicalToday) {
-      const existing = allCycleLogs.find(l => l.date === checkDate);
+      const existing = allCycleLogs.find(
+        l => l.date === checkDate && (!log.cycleId || !l.cycleId || l.cycleId === log.cycleId)
+      );
       if (!existing) {
         // Missing past calendar day in cycle is automatically an open unresolved debt
         pastUnresolvedCount += 1;
@@ -151,6 +153,7 @@ export function computeDailyProperties(
     }
   } else {
     pastUnresolvedCount = allCycleLogs.filter(l => {
+      if (log.cycleId && l.cycleId && l.cycleId !== log.cycleId) return false;
       if (l.date >= log.date || l.date >= logicalToday) return false;
       const lCount = [l.wakeUp, l.workout, l.study, l.journal, l.hardTask].filter(Boolean).length;
       const lStandard = lCount === 5;
@@ -228,7 +231,7 @@ export function computeCycleMetrics(
 ): CycleMetrics {
   // Sort logs by date ascending
   const cycleLogs = logs
-    .filter(l => l.cycleId === cycle.id || (l.date >= cycle.startDate && l.date <= cycle.endDate))
+    .filter(l => l.cycleId === cycle.id || (!l.cycleId && l.date >= cycle.startDate && l.date <= cycle.endDate))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   // Determine cycle status

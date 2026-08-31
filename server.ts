@@ -326,11 +326,16 @@ app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
 
     console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
 
-    res.json({
+    const responsePayload: Record<string, any> = {
       success: true,
-      message: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`,
-      debugCode: generatedCode
-    });
+      message: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`
+    };
+
+    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_OTP_DEBUG === 'true') {
+      responsePayload.debugCode = generatedCode;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Forgot password OTP error:', error);
     res.status(500).json({ error: 'خطا در ارسال کد بازیابی رمز عبور.' });
@@ -403,11 +408,16 @@ app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
 
     console.log(`[Bushido Auth] Generated OTP for ${cleanId}: [ ${generatedCode} ]`);
 
-    res.json({
+    const responsePayload: Record<string, any> = {
       success: true,
-      message: `کد تایید امن ۵ رقمی برای ${cleanId} ارسال شد.`,
-      debugCode: generatedCode
-    });
+      message: `کد تایید امن ۵ رقمی برای ${cleanId} ارسال شد.`
+    };
+
+    if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_OTP_DEBUG === 'true') {
+      responsePayload.debugCode = generatedCode;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('Send OTP error:', error);
     res.status(500).json({ error: 'خطا در ارسال کد تایید.' });
@@ -545,18 +555,25 @@ app.get('/api/auth/me', authMiddleware, async (req: AuthenticatedRequest, res) =
   }
 });
 
-// Update user profile
-app.put('/api/auth/profile', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+// Update user profile - Protected & Hardened against Unauthorized Privilege Escalation
+app.put('/api/auth/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
-    const { name, isVip, tier, nightOwlCutoffHour, accentTheme } = req.body;
-    const updated = await updateUser(userId, {
-      name,
-      isVip: isVip !== undefined ? isVip : undefined,
-      tier: tier || undefined,
-      nightOwlCutoffHour: typeof nightOwlCutoffHour === 'number' ? nightOwlCutoffHour : undefined,
-      accentTheme: typeof accentTheme === 'string' ? accentTheme : undefined
-    });
+    const userId = req.user!.userId;
+    const { name, nightOwlCutoffHour, accentTheme } = req.body;
+    
+    // OWASP & Security Hardening: Never allow client injection of isVip, tier, isAdmin, or subscription fields
+    const updatePayload: Record<string, any> = {};
+    if (typeof name === 'string' && name.trim()) {
+      updatePayload.name = name.trim().slice(0, 80);
+    }
+    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
+      updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
+    }
+    if (typeof accentTheme === 'string' && ['amber', 'emerald', 'rose', 'blue', 'violet'].includes(accentTheme)) {
+      updatePayload.accentTheme = accentTheme;
+    }
+
+    const updated = await updateUser(userId, updatePayload);
     res.json({ user: updated });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -564,18 +581,25 @@ app.put('/api/auth/profile', optionalAuthMiddleware, async (req: AuthenticatedRe
   }
 });
 
-// Alias for profile update
-app.put('/api/user/profile', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+// Alias for profile update - Protected & Hardened
+app.put('/api/user/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
-    const { name, isVip, tier, nightOwlCutoffHour, accentTheme } = req.body;
-    const updated = await updateUser(userId, {
-      name,
-      isVip: isVip !== undefined ? isVip : undefined,
-      tier: tier || undefined,
-      nightOwlCutoffHour: typeof nightOwlCutoffHour === 'number' ? nightOwlCutoffHour : undefined,
-      accentTheme: typeof accentTheme === 'string' ? accentTheme : undefined
-    });
+    const userId = req.user!.userId;
+    const { name, nightOwlCutoffHour, accentTheme } = req.body;
+
+    // OWASP & Security Hardening: Never allow client injection of isVip, tier, isAdmin, or subscription fields
+    const updatePayload: Record<string, any> = {};
+    if (typeof name === 'string' && name.trim()) {
+      updatePayload.name = name.trim().slice(0, 80);
+    }
+    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
+      updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
+    }
+    if (typeof accentTheme === 'string' && ['amber', 'emerald', 'rose', 'blue', 'violet'].includes(accentTheme)) {
+      updatePayload.accentTheme = accentTheme;
+    }
+
+    const updated = await updateUser(userId, updatePayload);
     res.json({ user: updated });
   } catch (error) {
     console.error('Update profile error:', error);
@@ -588,9 +612,9 @@ app.put('/api/user/profile', optionalAuthMiddleware, async (req: AuthenticatedRe
  * ========================================================================= */
 
 // Get user's cycles
-app.get('/api/cycles', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+app.get('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const cycles = await getUserCycles(userId);
     res.json({ cycles });
   } catch (error) {
@@ -600,9 +624,9 @@ app.get('/api/cycles', optionalAuthMiddleware, async (req: AuthenticatedRequest,
 });
 
 // Create new cycle for user
-app.post('/api/cycles', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+app.post('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const { title, startDate, endDate, targetTheme, inheritedStreak, rules } = req.body;
 
     if (!title || !startDate || !endDate) {
@@ -626,9 +650,9 @@ app.post('/api/cycles', optionalAuthMiddleware, async (req: AuthenticatedRequest
 });
 
 // Update cycle
-app.put('/api/cycles/:id', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+app.put('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const cycleId = req.params.id;
     const updated = await updateCycle(userId, cycleId, req.body);
 
@@ -644,9 +668,9 @@ app.put('/api/cycles/:id', optionalAuthMiddleware, async (req: AuthenticatedRequ
 });
 
 // Delete cycle
-app.delete('/api/cycles/:id', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const cycleId = req.params.id;
     const success = await deleteCycle(userId, cycleId);
 
@@ -668,7 +692,7 @@ app.delete('/api/cycles/:id', optionalAuthMiddleware, async (req: AuthenticatedR
 // Handler for upserting daily logs
 const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const { cycleId, date } = req.body;
 
     if (!cycleId || !date) {
@@ -686,7 +710,7 @@ const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Resp
 // Handler for getting daily logs
 const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Response) => {
   try {
-    const userId = req.user?.userId || 'guest-warrior-1';
+    const userId = req.user!.userId;
     const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId : undefined;
     const logs = await getUserDailyLogs(userId, cycleId);
     res.json({ logs, success: true });
@@ -697,13 +721,13 @@ const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Respon
 };
 
 // Unified /api/logs endpoints (both GET and POST)
-app.get('/api/logs', optionalAuthMiddleware, handleGetDailyLogs);
-app.post('/api/logs', optionalAuthMiddleware, handleUpsertDailyLog);
+app.get('/api/logs', authMiddleware, handleGetDailyLogs);
+app.post('/api/logs', authMiddleware, handleUpsertDailyLog);
 
 // Backward-compatibility aliases
-app.post('/api/logs/upsert', optionalAuthMiddleware, handleUpsertDailyLog);
-app.get('/api/daily-logs', optionalAuthMiddleware, handleGetDailyLogs);
-app.post('/api/daily-logs', optionalAuthMiddleware, handleUpsertDailyLog);
+app.post('/api/logs/upsert', authMiddleware, handleUpsertDailyLog);
+app.get('/api/daily-logs', authMiddleware, handleGetDailyLogs);
+app.post('/api/daily-logs', authMiddleware, handleUpsertDailyLog);
 
 /* =========================================================================
  * DETERMINISTIC REASONING ENGINE (NO AI REQUIRED - OFFLINE / INSTANT)

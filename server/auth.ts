@@ -80,7 +80,12 @@ export function verifyToken(token: string): AuthUserPayload | null {
       .update(signatureInput)
       .digest('base64url');
 
-    if (signature !== expectedSig) return null;
+    const sigBuf = Buffer.from(signature, 'utf-8');
+    const expectedSigBuf = Buffer.from(expectedSig, 'utf-8');
+
+    if (sigBuf.length !== expectedSigBuf.length || !crypto.timingSafeEqual(sigBuf, expectedSigBuf)) {
+      return null;
+    }
 
     const payload = JSON.parse(base64UrlDecode(payloadB64));
     if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
