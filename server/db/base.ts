@@ -282,23 +282,36 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
 // -------------------------------------------------------------
 // Initialize Default Admin & Test Users
 // -------------------------------------------------------------
+// -------------------------------------------------------------
+// Initialize Default Admin & Test Users
+// -------------------------------------------------------------
 export function ensureDefaultAdminAndUsers() {
   const nowStr = new Date().toISOString();
   const nextYearStr = new Date(Date.now() + 365 * 86400000).toISOString();
-  const adminHashedPass = hashPassword(SUPER_ADMIN_PASS);
 
-  // 1. Ensure Master Admin Account (Immutable Super Admin)
+  // بدون رمز ادمین معتبر در env، seed ادمین انجام نشود
+  if (!SUPER_ADMIN_PASS || String(SUPER_ADMIN_PASS).trim().length < 8) {
+    console.warn('[Database] SUPER_ADMIN_PASS خالی یا کوتاه است؛ seed ادمین انجام نشد.');
+  }
+
+  const adminHashedPass =
+    SUPER_ADMIN_PASS && String(SUPER_ADMIN_PASS).trim().length >= 8
+      ? hashPassword(SUPER_ADMIN_PASS)
+      : null;
+
+  // 1. Master Admin فقط وقتی SUPER_ADMIN_PASS تنظیم شده باشد
   const existingAdmin = memoryStore.users.find(
-    u => u.id === 'admin-master-001' || 
-         u.phoneNumber === SUPER_ADMIN_PHONE || 
-         u.email === SUPER_ADMIN_EMAIL
+    (u) =>
+      u.id === 'admin-master-001' ||
+      u.phoneNumber === SUPER_ADMIN_PHONE ||
+      u.email === SUPER_ADMIN_EMAIL
   );
 
-  if (!existingAdmin) {
+  if (adminHashedPass && !existingAdmin) {
     const adminUser: DBUser = {
       id: 'admin-master-001',
-      email: SUPER_ADMIN_EMAIL,
-      phoneNumber: SUPER_ADMIN_PHONE,
+      email: SUPER_ADMIN_EMAIL || null,
+      phoneNumber: SUPER_ADMIN_PHONE || null,
       name: SUPER_ADMIN_NAME,
       passwordHash: adminHashedPass,
       tier: 'vip_samurai',
@@ -316,11 +329,10 @@ export function ensureDefaultAdminAndUsers() {
     const seed = seedUserData(adminUser.id);
     memoryStore.cycles.push(seed.cycle);
     memoryStore.dailyLogs.push(...seed.logs);
-  } else {
-    // Immutable reinforcement of Super Admin attributes
+  } else if (adminHashedPass && existingAdmin) {
     existingAdmin.id = 'admin-master-001';
-    existingAdmin.phoneNumber = SUPER_ADMIN_PHONE;
-    existingAdmin.email = SUPER_ADMIN_EMAIL;
+    if (SUPER_ADMIN_PHONE) existingAdmin.phoneNumber = SUPER_ADMIN_PHONE;
+    if (SUPER_ADMIN_EMAIL) existingAdmin.email = SUPER_ADMIN_EMAIL;
     existingAdmin.name = SUPER_ADMIN_NAME;
     existingAdmin.passwordHash = adminHashedPass;
     existingAdmin.isAdmin = true;
@@ -329,9 +341,11 @@ export function ensureDefaultAdminAndUsers() {
     if (!existingAdmin.vipExpiresAt) existingAdmin.vipExpiresAt = nextYearStr;
   }
 
-  // 2. Ensure Default Test User Account
+  // 2. کاربر تست (برای محیط توسعه / ALLOW_TEST_SHORTCUTS)
   const testHashedPass = hashPassword('test1234');
-  const existingTestUser = memoryStore.users.find(u => u.id === 'test-user-001' || u.email === 'test@bushido.app');
+  const existingTestUser = memoryStore.users.find(
+    (u) => u.id === 'test-user-001' || u.email === 'test@bushido.app'
+  );
   if (!existingTestUser) {
     const testUser: DBUser = {
       id: 'test-user-001',
@@ -363,5 +377,4 @@ export function ensureDefaultAdminAndUsers() {
   saveLocalStore();
 }
 
-// Seed on module load
-ensureDefaultAdminAndUsers();
+// Seed فقط از server.ts یا initializeDatabase صدا زده می‌شود — اینجا خودکار اجرا نشود
