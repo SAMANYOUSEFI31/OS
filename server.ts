@@ -2,9 +2,9 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
-import { z } from 'zod';
 import {
+  initializeDatabase,
+  closeDatabase,
   findUserById,
   findUserByIdentifier,
   createUser,
@@ -25,7 +25,7 @@ import {
   adminGetAllSubscriptions,
   adminGetOverviewStats,
   ensureDefaultAdminAndUsers
-} from './server/db';
+} from './server/db/index';
 import {
   generateToken,
   authMiddleware,
@@ -42,224 +42,93 @@ import {
   hashPassword,
   verifyPassword
 } from './server/security';
+import {
+  apiRateLimiter,
+  authRateLimiter,
+  setSecurityHeaders,
+  errorHandler
+} from './server/middleware/security';
+import {
+  validateBody,
+  registerSchema,
+  loginSchema,
+  otpRequestSchema,
+  resetPasswordSchema,
+  createCycleSchema,
+  updateCycleSchema,
+  upsertDailyLogSchema,
+  autopsySchema,
+  paymentRequestSchema,
+  paymentVerifySchema
+} from './server/utils/validation';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const IS_PROD = process.env.NODE_ENV === 'production';
+const PORT = 3000;
+const isProd = process.env.NODE_ENV === 'production';
 
-// Trust proxy required for Cloud Run / reverse proxies and express-rate-limit
+// Trust proxy required for Cloud Run / reverse proxies and IP-based rate limiting
 app.set('trust proxy', 1);
 
-// Standard HTTP Security Headers (Safe for AI Studio iframe environment)
-app.use((req, res, next) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  next();
-});
+// Apply Security Headers (CSP, HSTS, No-Sniff, etc.)
+app.use(setSecurityHeaders);
 
+// JSON Body Parser
 app.use(express.json());
 
 /* =========================================================================
- * ZOD SCHEMA VALIDATIONS (Item B5: Request Body Sanitization)
- * ========================================================================= */
-const RegisterSchema = z.object({
-  identifier: z.string().optional(),
-  password: z.string().min(4, 'رمز عبور باید حداقل دارای ۴ کاراکتر باشد.'),
-  name: z.string().optional(),
-  email: z.string().email('فرمت ایمیل نامعتبر است').optional(),
-  phoneNumber: z.string().optional(),
-});
-
-const LoginSchema = z.object({
-  identifier: z.string().min(1, 'لطفاً شناسه را وارد کنید.'),
-  password: z.string().min(1, 'لطفاً رمز عبور را وارد کنید.'),
-});
-
-const IdentifierSchema = z.object({
-  identifier: z.string().min(1, 'لطفاً شناسه کاربری را وارد کنید.'),
-});
-
-const ResetPasswordSchema = z.object({
-  identifier: z.string().min(1, 'شناسه کاربری الزامی است.'),
-  code: z.string().min(1, 'کد تایید الزامی است.'),
-  newPassword: z.string().min(4, 'رمز عبور جدید باید حداقل دارای ۴ کاراکتر باشد.'),
-});
-
-const VerifyOtpSchema = z.object({
-  identifier: z.string().min(1, 'شناسه کاربری الزامی است.'),
-  code: z.string().min(1, 'کد تایید الزامی است.'),
-  name: z.string().optional(),
-});
-
-const ProfileUpdateSchema = z.object({
-  name: z.string().optional(),
-  nightOwlCutoffHour: z.number().min(0).max(23).optional(),
-  accentTheme: z.enum(['amber', 'emerald', 'rose', 'blue', 'violet', 'crimson', 'cyan']).optional(),
-});
-
-const CycleCreateSchema = z.object({
-  title: z.string().min(1, 'عنوان الزامی است').max(120),
-  startDate: z.string().min(1, 'تاریخ شروع الزامی است').max(20),
-  endDate: z.string().min(1, 'تاریخ پایان الزامی است').max(20),
-  targetTheme: z.string().max(200).optional().nullable(),
-  inheritedStreak: z.number().optional(),
-  rules: z.array(z.string()).optional(),
-});
-
-const CycleUpdateSchema = z.object({
-  title: z.string().max(120).optional(),
-  targetTheme: z.string().max(200).optional().nullable(),
-  rules: z.array(z.string()).optional(),
-  isArchived: z.boolean().optional(),
-  reportRead: z.boolean().optional(),
-  verdict: z.any().optional(),
-});
-
-const DailyLogSchema = z.object({
-  cycleId: z.string().max(100),
-  date: z.string().max(20),
-  wakeUp: z.boolean().optional().default(false),
-  workout: z.boolean().optional().default(false),
-  study: z.boolean().optional().default(false),
-  journal: z.boolean().optional().default(false),
-  hardTask: z.boolean().optional().default(false),
-  specialMission: z.boolean().optional().default(false),
-  failureReason: z.string().max(500).optional().nullable(),
-  failureTime: z.string().max(100).optional().nullable(),
-  autopsyNotes: z.string().max(2000).optional().nullable(),
-  countermeasure: z.string().max(2000).optional().nullable(),
-  aiFeedback: z.string().max(2000).optional().nullable(),
-  notes: z.string().max(2000).optional().nullable(),
-});
-
-const PaymentRequestSchema = z.object({
-  planId: z.string().optional(),
-  amount: z.number().optional(),
-  description: z.string().optional(),
-  userEmail: z.string().optional(),
-});
-
-const PaymentVerifySchema = z.object({
-  authority: z.string().min(1, 'شناسه مرجع تراکنش الزامی است.'),
-  amount: z.number().optional(),
-});
-
-/* =========================================================================
- * SECURITY & RATE LIMITING LAYER (Brute-Force & Anti-Spam Protection)
+ * RATE LIMITING LAYER (Brute-Force & Anti-Spam Protection)
  * ========================================================================= */
 
-// 1. General API Rate Limiter
-const generalApiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // Limit each IP to 300 requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, forwardedHeader: false },
-  message: {
-    error: 'تعداد درخواست‌ها به سرور بیش از حد مجاز است. لطفاً چند دقیقه بعد تلاش فرمایید.',
-    code: 'RATE_LIMIT_EXCEEDED'
-  }
-});
+// General API Limiter applied to all /api routes
+app.use('/api', apiRateLimiter);
 
-// 2. Strict Authentication Rate Limiter (Brute-Force Shield for login/verify)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 25, // Limit each IP to 25 auth requests per windowMs
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, forwardedHeader: false },
-  message: {
-    error: 'تعداد تلاش‌های احراز هویت بیش از حد مجاز است. لطفاً پس از ۱۵ دقیقه دوباره امتحان کنید.',
-    code: 'AUTH_RATE_LIMIT_EXCEEDED'
-  }
-});
+// Strict Authentication Limiter applied to auth routes
+app.use('/api/auth', authRateLimiter);
 
-// 3. Strict OTP Dispatch Limiter (Anti-SMS/OTP Bombing Shield)
-const otpSendLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 8, // Max 8 OTP sends per 10 minutes per IP
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, forwardedHeader: false },
-  message: {
-    error: 'تعداد دفعات ارسال کد تایید بیش از حد مجاز است. لطفاً دقایقی دیگر امتحان کنید.',
-    code: 'OTP_RATE_LIMIT_EXCEEDED'
-  }
-});
-
-// 4. Admin Protection Rate Limiter
-const adminLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  validate: { xForwardedForHeader: false, forwardedHeader: false },
-  message: {
-    error: 'محدودیت دسترسی امنیتی به پنل مدیریت فعال گردید.',
-    code: 'ADMIN_RATE_LIMIT_EXCEEDED'
-  }
-});
-
-// Apply general API rate limiting to all /api/ routes
-app.use('/api', generalApiLimiter);
-app.use('/api/auth', authLimiter);
-app.use('/api/admin', adminLimiter);
-
-// 1. Health check endpoint (Container & PaaS Liveness/Readiness Probe)
+// Health check endpoint (Container & PaaS Liveness/Readiness Probe)
 app.get('/api/health', (req, res) => {
   const memory = process.memoryUsage();
   res.json({
     status: 'ok',
-    engine: 'Bushido Discipline OS (PostgreSQL + Prisma ORM + JWT Auth + RateLimit)',
-    mode: 'self-hosted-fullstack',
+    engine: 'Bushido Discipline OS (Production Grade)',
+    mode: isProd ? 'production' : 'development',
     version: '3.0.0',
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     nodeVersion: process.version,
     memoryRssMb: Math.round(memory.rss / 1024 / 1024),
-    memoryHeapMb: Math.round(memory.heapUsed / 1024 / 1024)
   });
 });
 
 /* =========================================================================
- * AUTHENTICATION ENDPOINTS (Self-Hosted JWT, Direct Register/Login & OTP Recovery)
+ * AUTHENTICATION ENDPOINTS
  * ========================================================================= */
 
 // 1. Direct Registration (Mobile/Email + Password)
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', validateBody(registerSchema), async (req, res, next) => {
   try {
-    const parsed = RegisterSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات ارسالی نامعتبر است.', details: parsed.error.format() });
-    }
-
-    const { identifier, password, name, email, phoneNumber } = parsed.data;
+    const { identifier, password, name, email, phoneNumber } = req.body;
     const rawId = identifier || email || phoneNumber;
-
-    if (!rawId || typeof rawId !== 'string' || !rawId.trim()) {
-      return res.status(400).json({ error: 'لطفاً شماره موبایل یا ایمیل خود را وارد نمایید.' });
-    }
-
     const cleanId = rawId.trim().toLowerCase();
-    const existing = await findUserByIdentifier(cleanId);
 
+    const existing = await findUserByIdentifier(cleanId);
     if (existing) {
       return res.status(400).json({
-        error: 'کاربری با این شماره موبایل یا ایمیل قبلاً ثبت‌نام کرده است. لطفاً وارد شوید.'
+        code: 'USER_EXISTS',
+        messageFa: 'کاربری با این مشخصات قبلاً ثبت‌نام کرده است. لطفاً وارد شوید.'
       });
     }
 
-    const isEmail = cleanId.includes('@');
+    const isEmailInput = cleanId.includes('@');
     const isMaster = isSuperAdminIdentifier(cleanId);
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = await hashPassword(password);
 
     const user = await createUser({
-      email: isEmail ? cleanId : undefined,
-      phoneNumber: !isEmail ? cleanId : undefined,
-      name: name?.trim() || (isEmail ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
+      email: isEmailInput ? cleanId : undefined,
+      phoneNumber: !isEmailInput ? cleanId : undefined,
+      name: name?.trim() || (isEmailInput ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
       passwordHash: hashedPassword,
       tier: isMaster ? 'vip_samurai' : 'free',
       isVip: isMaster,
@@ -275,7 +144,9 @@ app.post('/api/auth/register', async (req, res) => {
       isAdmin: Boolean(user.isAdmin)
     });
 
-    console.log(`[Bushido Auth] User registered successfully: ${user.id} (${cleanId})`);
+    if (!isProd) {
+      console.log(`[Bushido Auth] User registered successfully: ${user.id}`);
+    }
 
     res.json({
       success: true,
@@ -284,33 +155,30 @@ app.post('/api/auth/register', async (req, res) => {
       user
     });
   } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ error: 'خطا در ثبت‌نام کاربر در سیستم.' });
+    next(error);
   }
 });
 
 // 2. Direct Login (Mobile/Email + Password)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) => {
   try {
-    const parsed = LoginSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'لطفاً شناسه و رمز عبور را به درستی وارد کنید.', details: parsed.error.format() });
-    }
-
-    const { identifier, password } = parsed.data;
+    const { identifier, password } = req.body;
     const cleanId = identifier.trim().toLowerCase();
-    ensureDefaultAdminAndUsers();
 
-    // Check Super Admin Hardened Shortcut / Guarantee
+    // Development/Fallback Ensure
+    if (!isProd) ensureDefaultAdminAndUsers();
+
+    // Check Super Admin Hardened Shortcut
     const isMaster = isSuperAdminIdentifier(cleanId);
     if (isMaster && (password === SUPER_ADMIN_PASS || password === 'admin')) {
       let masterAdmin = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
       if (!masterAdmin) {
+        const hashedPassword = await hashPassword(SUPER_ADMIN_PASS);
         masterAdmin = await createUser({
           email: SUPER_ADMIN_EMAIL,
           phoneNumber: SUPER_ADMIN_PHONE,
           name: SUPER_ADMIN_NAME,
-          passwordHash: hashPassword(SUPER_ADMIN_PASS),
+          passwordHash: hashedPassword,
           tier: 'vip_samurai',
           isVip: true,
           isAdmin: true
@@ -329,29 +197,27 @@ app.post('/api/auth/login', async (req, res) => {
         isAdmin: true
       });
 
-      console.log(`[Bushido Auth] Super Admin logged in: ${masterAdmin.phoneNumber}`);
       return res.json({
         success: true,
-        message: 'فرمانده ارشد سامورایی، ورود به سامانه با موفقیت تایید شد.',
+        message: 'فرمانده ارشد سامورایی، ورود به سامانه تایید شد.',
         token,
         user: masterAdmin
       });
     }
 
-    // Normal User Verification
     let user = await findUserByIdentifier(cleanId);
-
     if (!user) {
       return res.status(401).json({
-        error: 'کاربری با این شماره موبایل یا ایمیل یافت نشد. لطفاً ابتدا ثبت‌نام فرمایید.'
+        code: 'USER_NOT_FOUND',
+        messageFa: 'حساب کاربری یافت نشد. لطفاً ابتدا ثبت‌نام فرمایید.'
       });
     }
 
-    // Check password
-    const isMatch = verifyPassword(password, user.passwordHash);
+    const isMatch = await verifyPassword(password, user.passwordHash || '');
     if (!isMatch) {
       return res.status(401).json({
-        error: 'رمز عبور وارد شده نادرست است. در صورت فراموشی، از گزینه «فراموشی رمز عبور» استفاده نمایید.'
+        code: 'INVALID_CREDENTIALS',
+        messageFa: 'رمز عبور وارد شده نادرست است.'
       });
     }
 
@@ -364,85 +230,63 @@ app.post('/api/auth/login', async (req, res) => {
       isAdmin: Boolean(user.isAdmin)
     });
 
-    console.log(`[Bushido Auth] User logged in: ${user.id} (${cleanId})`);
-
-    res.json({
-      success: true,
-      token,
-      user
-    });
+    res.json({ success: true, token, user });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'خطا در ورود به سامانه.' });
+    next(error);
   }
 });
 
-// 3. Forgot Password - Request OTP (Dedicated to Password Recovery)
-app.post('/api/auth/forgot-password', otpSendLimiter, async (req, res) => {
+// 3. Forgot Password - Request OTP
+app.post('/api/auth/forgot-password', validateBody(otpRequestSchema), async (req, res, next) => {
   try {
-    const parsed = IdentifierSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه کاربری نامعتبر است.', details: parsed.error.format() });
-    }
-
-    const { identifier } = parsed.data;
+    const { identifier } = req.body;
     const cleanId = identifier.trim().toLowerCase();
     const user = await findUserByIdentifier(cleanId);
 
     if (!user) {
-      return res.status(404).json({ error: 'حساب کاربری با این مشخصات یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'حساب کاربری با این مشخصات یافت نشد.' });
     }
 
-    // Generate 5-digit verification OTP
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
     await saveOtpCode(cleanId, generatedCode);
 
-    if (!IS_PROD) {
+    // Item A5: Do not log OTP code in production
+    if (!isProd) {
       console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
-    } else {
-      // TODO: Integrate actual SMS gateway (Kavenegar, FarazSMS, etc.) here
-      console.log(`[Bushido Auth] OTP generated for ${cleanId}. Dispatching to SMS provider...`);
     }
 
     const responsePayload: Record<string, any> = {
       success: true,
-      message: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`
+      messageFa: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`
     };
 
-    // Item A5: Never expose debug code in production
-    if (!IS_PROD && process.env.ENABLE_OTP_DEBUG === 'true') {
+    if (!isProd && process.env.ENABLE_OTP_DEBUG === 'true') {
       responsePayload.debugCode = generatedCode;
     }
 
     res.json(responsePayload);
   } catch (error) {
-    console.error('Forgot password OTP error:', error);
-    res.status(500).json({ error: 'خطا در ارسال کد بازیابی رمز عبور.' });
+    next(error);
   }
 });
 
 // 4. Reset Password with OTP Code
-app.post('/api/auth/reset-password', async (req, res) => {
+app.post('/api/auth/reset-password', validateBody(resetPasswordSchema), async (req, res, next) => {
   try {
-    const parsed = ResetPasswordSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات وارد شده برای بازیابی نامعتبر است.', details: parsed.error.format() });
-    }
-
-    const { identifier, code, newPassword } = parsed.data;
+    const { identifier, code, newPassword } = req.body;
     const cleanId = identifier.trim().toLowerCase();
     
     const isValid = await verifyOtpCode(cleanId, String(code));
     if (!isValid) {
-      return res.status(400).json({ error: 'کد تایید وارد شده نامعتبر یا منقضی شده است.' });
+      return res.status(400).json({ code: 'INVALID_OTP', messageFa: 'کد تایید نامعتبر یا منقضی شده است.' });
     }
 
     const user = await findUserByIdentifier(cleanId);
     if (!user) {
-      return res.status(404).json({ error: 'کاربر مورد نظر در دیتابیس یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
     }
 
-    const hashed = hashPassword(newPassword);
+    const hashed = await hashPassword(newPassword);
     const updated = await updateUser(user.id, { passwordHash: hashed });
 
     const token = generateToken({
@@ -454,74 +298,61 @@ app.post('/api/auth/reset-password', async (req, res) => {
       isAdmin: Boolean(user.isAdmin)
     });
 
-    console.log(`[Bushido Auth] Password reset successfully for user: ${user.id}`);
-
     res.json({
       success: true,
-      message: 'رمز عبور شما با موفقیت به‌روزرسانی شد.',
+      messageFa: 'رمز عبور با موفقیت به‌روزرسانی شد.',
       token,
       user: updated || user
     });
   } catch (error) {
-    console.error('Reset password error:', error);
-    res.status(500).json({ error: 'خطا در بازنشانی رمز عبور.' });
+    next(error);
   }
 });
 
-// 5. Send OTP (General Compatibility)
-app.post('/api/auth/send-otp', otpSendLimiter, async (req, res) => {
+// 5. Send OTP (General Auth)
+app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, next) => {
   try {
-    const parsed = IdentifierSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شماره موبایل یا ایمیل را وارد نمایید.', details: parsed.error.format() });
-    }
-
-    const { identifier } = parsed.data;
+    const { identifier } = req.body;
     const cleanId = identifier.trim().toLowerCase();
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
 
     await saveOtpCode(cleanId, generatedCode);
 
-    if (!IS_PROD) {
+    // Item A5: Do not log OTP code in production
+    if (!isProd) {
       console.log(`[Bushido Auth] Generated OTP for ${cleanId}: [ ${generatedCode} ]`);
-    } else {
-      // TODO: Integrate actual SMS gateway
-      console.log(`[Bushido Auth] OTP generated for ${cleanId}. Dispatching to SMS provider...`);
     }
 
     const responsePayload: Record<string, any> = {
       success: true,
-      message: `کد تایید امن ۵ رقمی برای ${cleanId} ارسال شد.`
+      messageFa: `کد تایید ۵ رقمی برای ${cleanId} ارسال شد.`
     };
 
-    if (!IS_PROD && process.env.ENABLE_OTP_DEBUG === 'true') {
+    if (!isProd && process.env.ENABLE_OTP_DEBUG === 'true') {
       responsePayload.debugCode = generatedCode;
     }
 
     res.json(responsePayload);
   } catch (error) {
-    console.error('Send OTP error:', error);
-    res.status(500).json({ error: 'خطا در ارسال کد تایید.' });
+    next(error);
   }
 });
 
-// 6. Verify OTP & Login / Register (Compatibility Fallback)
-app.post('/api/auth/verify-otp', async (req, res) => {
+// 6. Verify OTP & Auto Login/Register
+app.post('/api/auth/verify-otp', async (req, res, next) => {
   try {
-    const parsed = VerifyOtpSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات وارد شده نامعتبر است.', details: parsed.error.format() });
+    const { identifier, code, name } = req.body;
+    if (!identifier || !code) {
+      return res.status(400).json({ code: 'BAD_REQUEST', messageFa: 'شناسه کاربری و کد تایید الزامی است.' });
     }
 
-    const { identifier, code, name } = parsed.data;
     const cleanId = identifier.trim().toLowerCase();
     const isValid = await verifyOtpCode(cleanId, String(code));
 
     if (!isValid) {
-      return res.status(400).json({ error: 'کد تایید وارد شده نامعتبر یا منقضی شده است.' });
+      return res.status(400).json({ code: 'INVALID_OTP', messageFa: 'کد تایید نامعتبر یا منقضی شده است.' });
     }
 
-    // Find or create user
     let user = await findUserByIdentifier(cleanId);
     const isMasterAdmin = isSuperAdminIdentifier(cleanId);
 
@@ -553,25 +384,19 @@ app.post('/api/auth/verify-otp', async (req, res) => {
       isAdmin: Boolean(user.isAdmin)
     });
 
-    res.json({
-      success: true,
-      token,
-      user
-    });
+    res.json({ success: true, token, user });
   } catch (error) {
-    console.error('Verify OTP error:', error);
-    res.status(500).json({ error: 'خطا در احراز هویت.' });
+    next(error);
   }
 });
 
-// 7. Quick Direct Login for Local Admin & Test Accounts
-// Item A4: Locked strictly in Production
-app.post('/api/auth/quick-login', async (req, res) => {
+// 7. Quick Direct Login (Item A4: Locked in Production)
+app.post('/api/auth/quick-login', async (req, res, next) => {
   try {
-    if (IS_PROD) {
+    if (isProd) {
       return res.status(403).json({
         code: 'FORBIDDEN',
-        error: 'دسترسی به مسیر Quick-Login در محیط پروداکشن به دلایل امنیتی اکیداً مسدود است.'
+        messageFa: 'دسترسی غیرمجاز: سیستم ورود سریع در محیط عملیاتی مسدود شده است.'
       });
     }
 
@@ -582,33 +407,13 @@ app.post('/api/auth/quick-login', async (req, res) => {
     if (userId) {
       user = await findUserById(userId);
     } else if (role === 'admin') {
-      user = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
+      user = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE));
     } else if (role === 'test_user') {
       user = (await findUserById('test-user-001')) || (await findUserByIdentifier('test@bushido.app'));
     }
 
     if (!user) {
-      if (role === 'admin') {
-        user = await createUser({
-          email: SUPER_ADMIN_EMAIL,
-          phoneNumber: SUPER_ADMIN_PHONE,
-          name: SUPER_ADMIN_NAME,
-          passwordHash: hashPassword(SUPER_ADMIN_PASS),
-          tier: 'vip_samurai',
-          isVip: true,
-          isAdmin: true
-        });
-      } else {
-        user = await createUser({
-          email: 'test@bushido.app',
-          phoneNumber: '09121111111',
-          name: 'کاربر آزمایشی بوشیدو (دید کاربر)',
-          passwordHash: hashPassword('test1234'),
-          tier: 'free',
-          isVip: false,
-          isAdmin: false
-        });
-      }
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر تست یافت نشد.' });
     }
 
     const token = generateToken({
@@ -620,595 +425,367 @@ app.post('/api/auth/quick-login', async (req, res) => {
       isAdmin: Boolean(user.isAdmin)
     });
 
-    res.json({
-      success: true,
-      token,
-      user
-    });
+    res.json({ success: true, token, user });
   } catch (error) {
-    console.error('Quick login error:', error);
-    res.status(500).json({ error: 'خطا در ورود سریع به حساب.' });
+    next(error);
   }
 });
 
-// Get current user profile
-app.get('/api/auth/me', authMiddleware, async (req: AuthenticatedRequest, res) => {
+// Get profile
+app.get('/api/auth/me', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const user = await findUserById(req.user!.userId);
     if (!user) {
-      return res.status(404).json({ error: 'کاربر یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر یافت نشد.' });
     }
     res.json({ user });
   } catch (error) {
-    console.error('Get profile error:', error);
-    res.status(500).json({ error: 'خطا در دریافت مشخصات کاربر.' });
+    next(error);
   }
 });
 
-// Update user profile - Protected & Hardened against Unauthorized Privilege Escalation
-app.put('/api/auth/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
+// Update profile
+const handleProfileUpdate = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   try {
-    const parsed = ProfileUpdateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی‌های نامعتبر است.', details: parsed.error.format() });
-    }
-
     const userId = req.user!.userId;
-    const { name, nightOwlCutoffHour, accentTheme } = parsed.data;
+    const { name, nightOwlCutoffHour, accentTheme } = req.body;
     
-    // OWASP & Security Hardening: Never allow client injection of isVip, tier, isAdmin, or subscription fields
     const updatePayload: Record<string, any> = {};
-    if (name) updatePayload.name = name.trim().slice(0, 80);
-    if (nightOwlCutoffHour !== undefined) updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
-    if (accentTheme) updatePayload.accentTheme = accentTheme;
-
-    const updated = await updateUser(userId, updatePayload);
-    res.json({ user: updated });
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'خطا در به‌روزرسانی پروفایل.' });
-  }
-});
-
-// Alias for profile update - Protected & Hardened
-app.put('/api/user/profile', authMiddleware, async (req: AuthenticatedRequest, res) => {
-  try {
-    const parsed = ProfileUpdateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی‌های نامعتبر است.', details: parsed.error.format() });
+    if (typeof name === 'string' && name.trim()) {
+      updatePayload.name = name.trim().slice(0, 80);
+    }
+    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
+      updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
+    }
+    if (typeof accentTheme === 'string' && ['amber', 'emerald', 'crimson', 'cyan'].includes(accentTheme)) {
+      updatePayload.accentTheme = accentTheme;
     }
 
-    const userId = req.user!.userId;
-    const { name, nightOwlCutoffHour, accentTheme } = parsed.data;
-
-    const updatePayload: Record<string, any> = {};
-    if (name) updatePayload.name = name.trim().slice(0, 80);
-    if (nightOwlCutoffHour !== undefined) updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
-    if (accentTheme) updatePayload.accentTheme = accentTheme;
-
     const updated = await updateUser(userId, updatePayload);
     res.json({ user: updated });
   } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'خطا در به‌روزرسانی پروفایل.' });
+    next(error);
   }
-});
+};
+
+app.put('/api/auth/profile', authMiddleware, handleProfileUpdate);
+app.put('/api/user/profile', authMiddleware, handleProfileUpdate);
 
 /* =========================================================================
- * CYCLES ENDPOINTS (User-Scoped)
+ * CYCLES ENDPOINTS
  * ========================================================================= */
 
-// Get user's cycles
-app.get('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) => {
+app.get('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = req.user!.userId;
     const cycles = await getUserCycles(userId);
     res.json({ cycles });
   } catch (error) {
-    console.error('Get cycles error:', error);
-    res.status(500).json({ error: 'خطا در دریافت اطلاعات چرخه‌ها.' });
+    next(error);
   }
 });
 
-// Create new cycle for user
-app.post('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res) => {
+app.post('/api/cycles', authMiddleware, validateBody(createCycleSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
-    const parsed = CycleCreateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات عنوان و تاریخ شروع/پایان الزامی و معتبر است.', details: parsed.error.format() });
-    }
-
     const userId = req.user!.userId;
-    const { title, startDate, endDate, targetTheme, inheritedStreak, rules } = parsed.data;
-
-    const newCycle = await createCycle(userId, {
-      title: title.trim(),
-      startDate: startDate.trim(),
-      endDate: endDate.trim(),
-      targetTheme: targetTheme?.trim(),
-      inheritedStreak: inheritedStreak || 0,
-      rules: rules ? rules.map(r => r.trim().slice(0, 200)).slice(0, 20) : []
-    });
-
+    const newCycle = await createCycle(userId, req.body);
     res.json({ cycle: newCycle });
   } catch (error) {
-    console.error('Create cycle error:', error);
-    res.status(500).json({ error: 'خطا در ایجاد چرخه جدید.' });
+    next(error);
   }
 });
 
-// Update cycle
-app.put('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res) => {
+app.put('/api/cycles/:id', authMiddleware, validateBody(updateCycleSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
-    const parsed = CycleUpdateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'مقادیر به‌روزرسانی نامعتبر است.', details: parsed.error.format() });
-    }
-
     const userId = req.user!.userId;
     const cycleId = req.params.id;
-    const { title, targetTheme, rules, isArchived, reportRead, verdict } = parsed.data;
-
-    const sanitizedUpdate: Record<string, any> = {};
-    if (title) sanitizedUpdate.title = title.trim();
-    if (targetTheme !== undefined) sanitizedUpdate.targetTheme = targetTheme?.trim() || null;
-    if (rules) sanitizedUpdate.rules = rules.map(r => r.trim().slice(0, 200)).slice(0, 20);
-    if (isArchived !== undefined) sanitizedUpdate.isArchived = isArchived;
-    if (reportRead !== undefined) sanitizedUpdate.reportRead = reportRead;
-    if (verdict !== undefined) sanitizedUpdate.verdict = verdict;
-
-    const updated = await updateCycle(userId, cycleId, sanitizedUpdate);
+    const updated = await updateCycle(userId, cycleId, req.body);
 
     if (!updated) {
-      return res.status(404).json({ error: 'چرخه مورد نظر یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر یافت نشد.' });
     }
-
     res.json({ cycle: updated });
   } catch (error) {
-    console.error('Update cycle error:', error);
-    res.status(500).json({ error: 'خطا در ویرایش چرخه.' });
+    next(error);
   }
 });
 
-// Delete cycle
-app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res) => {
+app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = req.user!.userId;
     const cycleId = req.params.id;
     const success = await deleteCycle(userId, cycleId);
 
     if (!success) {
-      return res.status(404).json({ error: 'چرخه مورد نظر برای حذف یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر برای حذف یافت نشد.' });
     }
-
-    res.json({ success: true, message: 'چرخه و گزارش‌های مرتبط با موفقیت حذف شدند.' });
+    res.json({ success: true, messageFa: 'چرخه و گزارش‌های مرتبط حذف شدند.' });
   } catch (error) {
-    console.error('Delete cycle error:', error);
-    res.status(500).json({ error: 'خطا در حذف چرخه.' });
+    next(error);
   }
 });
 
 /* =========================================================================
- * DAILY LOGS ENDPOINTS (User-Scoped - Unified /api/logs)
+ * DAILY LOGS ENDPOINTS
  * ========================================================================= */
 
-// Handler for upserting daily logs with safe string clamping
-const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response) => {
+const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   try {
-    const parsed = DailyLogSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه چرخه و تاریخ روز الزامی و داده‌ها باید معتبر باشند.', details: parsed.error.format() });
-    }
-
     const userId = req.user!.userId;
-    const sanitizedData = parsed.data;
-
-    const log = await upsertDailyLog(userId, sanitizedData);
+    const log = await upsertDailyLog(userId, req.body);
     res.json({ log, success: true });
   } catch (error) {
-    console.error('Upsert log error:', error);
-    res.status(500).json({ error: 'خطا در ثبت لاگ روزانه.' });
+    next(error);
   }
 };
 
-// Handler for getting daily logs
-const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Response) => {
+const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   try {
     const userId = req.user!.userId;
     const cycleId = typeof req.query.cycleId === 'string' ? req.query.cycleId.slice(0, 100) : undefined;
     const logs = await getUserDailyLogs(userId, cycleId);
     res.json({ logs, success: true });
   } catch (error) {
-    console.error('Get logs error:', error);
-    res.status(500).json({ error: 'خطا در دریافت لاگ‌های روزانه.' });
+    next(error);
   }
 };
 
-// Unified /api/logs endpoints (both GET and POST)
 app.get('/api/logs', authMiddleware, handleGetDailyLogs);
-app.post('/api/logs', authMiddleware, handleUpsertDailyLog);
-
-// Backward-compatibility aliases
-app.post('/api/logs/upsert', authMiddleware, handleUpsertDailyLog);
+app.post('/api/logs', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
+app.post('/api/logs/upsert', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
 app.get('/api/daily-logs', authMiddleware, handleGetDailyLogs);
-app.post('/api/daily-logs', authMiddleware, handleUpsertDailyLog);
+app.post('/api/daily-logs', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
 
 /* =========================================================================
- * DETERMINISTIC REASONING ENGINE (NO AI REQUIRED - OFFLINE / INSTANT)
+ * DETERMINISTIC REASONING ENGINE
  * ========================================================================= */
 
-const AutopsySchema = z.object({
-  date: z.string(),
-  missedHabits: z.array(z.string()).optional(),
-  failureReason: z.string().optional(),
-  failureTime: z.string().optional(),
-  userNotes: z.string().optional(),
-});
-
-// 2. Failure Autopsy (کالبدشکافی دقیق و امن)
-app.post('/api/ai/autopsy', authMiddleware, (req: AuthenticatedRequest, res) => {
+app.post('/api/ai/autopsy', authMiddleware, validateBody(autopsySchema), (req: AuthenticatedRequest, res, next) => {
   try {
-    const parsed = AutopsySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'ورودی نامعتبر', details: parsed.error.format() });
-    }
-
-    const { date, missedHabits, failureReason, failureTime, userNotes } = parsed.data;
-    const cleanFailureReason = failureReason ? failureReason.slice(0, 500) : '';
-    const cleanFailureTime = failureTime ? failureTime.slice(0, 100) : '';
-    const cleanUserNotes = userNotes ? userNotes.slice(0, 2000) : '';
-
-    if (cleanFailureReason === 'دلایل شخصی') {
+    const { missedHabits, failureReason, failureTime, userNotes } = req.body;
+    
+    if (failureReason === 'دلایل شخصی') {
       return res.json({
-        analysis: 'توقف اضطراری به دلایل غیرقابل پیش‌بینی شخصی رخ داده است. طبق اصول بوشیدو، حفظ آرامش در مواجهه با شرایط اضطراری عین دیسیپلین است.',
-        psychologicalTrap: 'تله سرزنش بیهوده خود در شرایط اضطراری بیرونی',
-        countermeasure: 'قانون مقابله: ثبت فریز و بازگشت پرقدرت به ریتم اصلی بدون فوت وقت از فردا صبح.',
-        tacticalActionTomorrow: 'اجرای بدون درنگ اولین فونداسیون روز (سحرخیزی و آب‌رسانی) در ثانیه اول بیداری.'
+        analysis: 'توقف اضطراری به دلایل غیرقابل پیش‌بینی شخصی رخ داده است.',
+        psychologicalTrap: 'تله سرزنش بیهوده',
+        countermeasure: 'قانون مقابله: ثبت فریز و بازگشت پرقدرت به ریتم اصلی.',
+        tacticalActionTomorrow: 'اجرای بدون درنگ اولین فونداسیون روز در ثانیه اول بیداری.'
       });
     }
 
-    let trap = 'تله توهم کنترل زمان و انباشت اصطکاک‌های خرد';
-    let analysis = 'عدم مرزبندی مشخص میان ساعات تمرکز عمیق و فعالیت‌های پراکنده باعث فرسایش اراده شده است.';
-    let countermeasure = 'قانون مقابله: مسدودسازی کلیه عوامل حواس‌پرتی تا پایان اجرای کار سخت روز.';
-    let tacticalActionTomorrow = 'تعیین دقیق سنگین‌ترین وظیفه فردا روی کاغذ قبل از خواب امشب.';
+    let trap = 'تله توهم کنترل زمان';
+    let analysis = 'عدم مرزبندی مشخص میان ساعات تمرکز باعث فرسایش اراده شده است.';
+    let countermeasure = 'قانون مقابله: مسدودسازی کلیه عوامل حواس‌پرتی.';
+    let tacticalActionTomorrow = 'تعیین دقیق سنگین‌ترین وظیفه فردا روی کاغذ.';
 
-    if (cleanFailureTime === 'اول روز') {
-      trap = 'تله اینرسی صبحگاهی و به تعویق انداختن نخستین ضربه (Friction Gap)';
-      analysis = 'شکست در آغاز روز، زنجیره دوپامینی و اعتمادبه‌نفس بقیه روزکاری را مختل کرده است. شروع روز بدون برنامه مکتوب باعث فرار ذهن به فعالیت‌های آسان شد.';
-      countermeasure = 'قانون ۳۰ دقیقه اول: ورود مستقیم به روتین فونداسیون بدون لمس تلفن همراه.';
-      tacticalActionTomorrow = 'قرار دادن لباس ورزشی و دفترچه ژورنال کنار تخت قبل از خواب.';
-    } else if (cleanFailureTime === 'وسط روز') {
-      trap = 'تله افت دوپامین پس از ظهر و پذیرش وقفه‌های کاذب (Midday Slump)';
-      analysis = 'در میانه روز به دلیل خستگی ذهنی، آستانه مقاومت در برابر حواس‌پرتی کاهش یافته و انجام وظایف سخت نیمه‌کاره رها شده است.';
-      countermeasure = 'قانون بلوک عمیق ۹۰ دقیقه‌ای: تقسیم کار سخت به دو بازه متمرکز همراه با ۵ دقیقه استراحت فیزیکی.';
-      tacticalActionTomorrow = 'انجام مهم‌ترین بخش کار سخت پیش از ساعت ۱۲ ظهر.';
-    } else if (cleanFailureTime === 'آخر روز') {
-      trap = 'تله تخلیه مخزن اراده و اهمال‌کاری تا ساعات پایانی شب (Revenge Procrastination)';
-      analysis = 'انتقال دادن عادت‌ها (نظیر مطالعه یا ژورنال) به ساعات پایانی شب که مغز در کمترین سطح بازدهی قرار دارد، علت اصلی ثبت شکست بوده است.';
-      countermeasure = 'قانون خط قرمز ساعت ۲۱: هیچ عادت پایه‌ای نباید پس از ساعت ۹ شب بدون تیک بماند.';
-      tacticalActionTomorrow = 'جابجایی زمان مطالعه و ژورنال به عصر یا بلافاصله پس از اتمام کار روزانه.';
-    }
-
-    if (cleanFailureReason === 'نیمه‌کاره رها کردم') {
-      trap = 'تله کمال‌گرایی منفی یا خستگی زودهنگام در مواجهه با ابهام وظیفه';
-      analysis = 'عدم خرد کردن وظیفه به گام‌های کوچک و شفاف، اصطکاک شناختی ایجاد کرده و منجر به توقف در نیمه راه شد.';
-      countermeasure = 'قانون ۵ دقیقه اول: فقط ۵ دقیقه متوالی روی کار تمرکز کن؛ سپس مغز وارد جریان کار می‌شود.';
-    } else if (cleanFailureReason === 'بی‌برنامه بودم') {
-      trap = 'تله تصمیم‌گیری لحظه‌ای زیر فشار خستگی روزانه';
-      analysis = 'وقتی برای روز برنامه‌ریزی قبلی وجود نداشته باشد، ناخودآگاه کوتاه‌ترین مسیر به سمت راحتی و مصرف محتوای سطحی را انتخاب می‌کند.';
-      countermeasure = 'قانون شامگاه: ۵ تسک فردا باید شب قبل با زمان‌بندی دقیق ثبت شوند.';
-    } else if (cleanFailureReason === 'وقتم رو به خوبی مدیریت نکردم') {
-      trap = 'تله نشت زمان در حباب شبکه‌های اجتماعی و کارهای کم‌ارزش';
-      analysis = 'ریز‌فعالیت‌های بی‌ثمر زمان ارزشمند کار عمیق را بلعیده‌اند و در پایان روز زمانی برای اجرای تعهدات اصلی باقی نماند.';
-      countermeasure = 'قانون حالت هواپیما: تلفن همراه در طول کار سخت در اتاقی دیگر قرار می‌گیرد.';
+    if (failureTime === 'اول روز') {
+      trap = 'تله اینرسی صبحگاهی';
+      countermeasure = 'قانون ۳۰ دقیقه اول: ورود مستقیم به روتین فونداسیون.';
+    } else if (failureTime === 'وسط روز') {
+      trap = 'تله افت دوپامین پس از ظهر';
+      countermeasure = 'قانون بلوک عمیق ۹۰ دقیقه‌ای.';
+    } else if (failureTime === 'آخر روز') {
+      trap = 'تله تخلیه مخزن اراده';
+      countermeasure = 'قانون خط قرمز ساعت ۲۱: هیچ عادتی نباید پس از ۹ شب بماند.';
     }
 
     if (missedHabits && missedHabits.length > 0) {
-      const cleanHabits = missedHabits.filter(h => typeof h === 'string').map(h => h.slice(0, 100));
-      if (cleanHabits.length > 0) {
-        analysis += ` عدم اجرای «${cleanHabits.join('، ')}» مستقیماً ساختار روز را تضعیف کرده است.`;
-      }
+      analysis += ` عدم اجرای «${missedHabits.join('، ')}» مستقیماً ساختار روز را تضعیف کرده است.`;
     }
 
-    if (cleanUserNotes && cleanUserNotes.trim()) {
-      analysis += ` نکته مهم: اصطکاک ثبت‌شده در یادداشت باید به عنوان تجربه راهبردی در دستور کار فردا لحاظ شود.`;
-    }
-
-    res.json({
-      analysis,
-      psychologicalTrap: trap,
-      countermeasure,
-      tacticalActionTomorrow
-    });
+    res.json({ analysis, psychologicalTrap: trap, countermeasure, tacticalActionTomorrow });
   } catch (error) {
-    console.error('Autopsy error:', error);
-    res.status(500).json({
-      analysis: 'بررسی رفتاری نشان می‌دهد تخلیه تمرکز در ساعات ابتدایی علت اصلی شکسته شدن تعهد روز بوده است.',
-      psychologicalTrap: 'تله اصطکاک شروع کار سخت و فرار به فعالیت‌های کاذب',
-      countermeasure: 'قانون مقابله: مسدودسازی کلیه عوامل حواس‌پرتی تا پایان اجرای کار سخت روز.',
-      tacticalActionTomorrow: 'شروع مستقیم با فونداسیون اول بلافاصله بعد از بیداری.'
-    });
+    next(error);
   }
 });
 
-// 3. Sensei Coach (مربی و سخنگوی بوشیدو بر اساس منطق دیسیپلین)
-app.post('/api/ai/coach', (req, res) => {
+// Deterministic Sensei Coach
+app.post('/api/ai/coach', authMiddleware, (req, res, next) => {
   try {
-    const { cycleTitle, elapsedDays, remainingDays, disciplinePercentage, disciplineLevel, pureStreak, vulnerableHabits, dominantFailureReason, dominantFailureTime } = req.body;
-
-    let coachVerdict = '';
-    let keyAdvice = '';
-    let strategicWarning = '';
-    let bushidoQuote = 'راه سامورایی در پایبندی بی‌چون‌وچرا به عهد خویش است.';
-
+    const { disciplinePercentage } = req.body;
     const pct = typeof disciplinePercentage === 'number' ? disciplinePercentage : 75;
+    let coachVerdict = '';
 
     if (pct >= 80) {
-      coachVerdict = `دلاور، شاخص انضباط ${pct}٪ با ${pureStreak || 0} روز استریک متوالی نشان‌دهنده شکل‌گیری دیسیپلین پولادین در «${cycleTitle || 'چرخه جاری'}» است. ریتم جنگی شما در تراز عالی قرار دارد.`;
-      keyAdvice = 'از تله غرور و آسودگی خاطر دوری کن. حفظ قله همواره از فتح آن دشوارتر است.';
-      strategicWarning = 'در روزهای موفقیت، مراقب انحراف‌های ریز باشید که به آرامی ساختار را سست می‌کنند.';
-      bushidoQuote = 'آرامش سامورایی در میان طوفان است و هوشیاری‌اش در اوج آرامش.';
+      coachVerdict = 'دلاور، شاخص انضباط نشان‌دهنده شکل‌گیری دیسیپلین پولادین است.';
     } else if (pct >= 60) {
-      coachVerdict = `عملکرد شما در روز ${elapsedDays || 1} با نرخ ${pct}٪ در سطح «${disciplineLevel || 'انضباط پایدار'}» ارزیابی می‌شود. پتانسیل جهش بالاست اما لغزش‌های مقطعی پیوستگی را تهدید می‌کنند.`;
-      keyAdvice = 'روی ساعت طلایی شروع روز تمرکز کن تا قبل از ظهر حداقل ۳ پایه از ۵ پایه تکمیل شوند.';
-      strategicWarning = Array.isArray(vulnerableHabits) && vulnerableHabits.length > 0
-        ? `ضعف در ${vulnerableHabits.map((v: any) => v.titleFa || v.key).join(' و ')} نیازمند مراقبت جدی است.`
-        : 'از رها کردن نیمه‌کاره کارها در ساعات پس از ظهر بپرهیزید.';
-      bushidoQuote = 'پیروزی واقعی نه در شکست‌ناپذیری، بلکه در ایستادن دوباره پس از هر لغزش است.';
+      coachVerdict = 'عملکرد شما در وضعیت انضباط پایدار ارزیابی می‌شود.';
     } else {
-      coachVerdict = `هشدار دیوان بوشیدو: سطح انضباط جاری (${pct}٪) حاکی از اختلال در ساختار تعهدات است. در ${remainingDays || 90} روز باقیمانده، فرصت بازسازی تمام‌عیار وجود دارد.`;
-      keyAdvice = 'ساده‌سازی روتین: فردا فقط و فقط روی ۲ پایه حیاتی تمرکز کن تا حس پیشروی دوباره زنده شود.';
-      strategicWarning = `بیشترین افت شما در بازه «${dominantFailureTime || 'وسط روز'}» با دلیل «${dominantFailureReason || 'عدم مدیریت زمان'}» ثبت شده است.`;
-      bushidoQuote = 'جنگجو وقتی می‌افتد، به زمین نگاه نمی‌کند؛ برمی‌خیزد و شمشیرش را محکم‌تر می‌گیرد.';
+      coachVerdict = 'هشدار دیوان بوشیدو: اختلال در ساختار تعهدات مشاهده می‌شود.';
     }
 
     res.json({
       coachVerdict,
-      keyAdvice,
-      strategicWarning,
-      bushidoQuote
+      keyAdvice: 'روی ساعت طلایی شروع روز تمرکز کن.',
+      strategicWarning: 'بدهی‌های حل‌نشده انرژی روانی را می‌بلعند.',
+      bushidoQuote: 'راه سامورایی در پایبندی بی‌چون‌وچرا به عهد خویش است.'
     });
   } catch (error) {
-    console.error('Coach error:', error);
-    res.status(500).json({
-      coachVerdict: 'ثبات، کلید عبور از تلاطم است. ۵ پایه فونداسیون را سر وقت تکمیل کنید.',
-      keyAdvice: 'روی سنگین‌ترین کار روز در اول صبح تمرکز کنید.',
-      strategicWarning: 'بدهی‌های حل‌نشده انرژی روانی چرخه را می‌بلعند.',
-      bushidoQuote: 'پیروزی واقعی، غلبه بر تنبلی در هر طلوع آفتاب است.'
-    });
+    next(error);
   }
 });
 
-// 4. Bushido Court Verdict (حکم دادگاه پایان دوره بوشیدو)
-app.post('/api/ai/verdict', (req, res) => {
+// Court Verdict
+app.post('/api/ai/verdict', authMiddleware, (req, res, next) => {
   try {
-    const { cycleTitle, standardDays, totalDays, maxStreak, disciplinePercentage, vulnerableHabits } = req.body;
+    const { disciplinePercentage, cycleTitle } = req.body;
     const pct = typeof disciplinePercentage === 'number' ? disciplinePercentage : 70;
-
+    
     let grade = 'B';
     let verdict = '';
-    let senseiNotes = '';
-    const strengths: string[] = [];
-    const weaknesses: string[] = [];
-    let tacticalPlanForNextCycle = '';
+    
+    if (pct >= 85) grade = 'A+';
+    else if (pct >= 70) grade = 'A';
+    else if (pct >= 50) grade = 'B';
+    else grade = 'C';
 
-    if (pct >= 85) {
-      grade = 'A+';
-      verdict = `دیوان عالی بوشیدو با افتخار، وفاداری و تسلط کم‌نظیر شما را در چرخه «${cycleTitle || 'چرخه ۹۰ روزه'}» تصدیق می‌کند. کسب ${standardDays || 0} روز استاندارد کامل و ثبت استریک ${maxStreak || 0} روز، نشان‌دهنده ارتقای شخصیتی و دیسیپلین آهنین است.`;
-      senseiNotes = 'شما اثبات کردید که اراده سامورایی بر هرگونه وسوسه و اهمال‌کاری غلبه می‌کند. این الگو را در چرخه‌های آینده توسعه دهید.';
-      strengths.push('تداوم بی‌نقص در زنجیره روزهای استاندارد', 'مهار کامل وسوسه‌های اهمال‌کاری', 'ایجاد پایداری حداکثری در ۵ رکن فونداسیون');
-      weaknesses.push('لزوم مراقبت از فرسودگی در دوره‌های با شدت بالا');
-      tacticalPlanForNextCycle = 'ارتقای سطح چالش: افزایش بار کاری در تسک‌های سخت و ورود به قلمرو چرخه‌های تخصصی.';
-    } else if (pct >= 70) {
-      grade = 'A';
-      verdict = `دیوان بوشیدو عملکرد شما را در چرخه «${cycleTitle || 'چرخه ۹۰ روزه'}» با شاخص ${pct}٪ مورد تایید قرار می‌دهد. ثبت ${standardDays || 0} روز موفق و استریک ${maxStreak || 0} روز، گواه شکل‌گیری دیسیپلین استوار است.`;
-      senseiNotes = 'رشد محسوسی در مقایسه با ابتدای دوره مشاهده می‌شود. ساختار روزانه شما تثبیت شده و اکنون آماده جهش به سطوح بالاتر هستید.';
-      strengths.push('پایداری عالی در شروع روز', 'بازیابی موثر پس از روزهای افت', 'کاهش نرخ روزهای سوخته بدون کالبدشکافی');
-      weaknesses.push('نوسان در کار سخت در روزهای پایانی هفته');
-      tacticalPlanForNextCycle = 'تثبیت حداقل ۲۵ روز استاندارد در هر ماه و پوشش کامل نقاط ضعف شناسایی‌شده در کالبدشکافی‌ها.';
-    } else if (pct >= 50) {
-      grade = 'B';
-      verdict = `دیوان بوشیدو پایان چرخه ۹۰ روزه «${cycleTitle || 'چرخه ۹۰ روزه'}» را با رتبه متوسط (${pct}٪) ثبت می‌نماید. تلاش‌های شما قابل تقدیر است، اما نوسانات رفتاری مانع از آزادسازی تمام ظرفیت سیستم شد.`;
-      senseiNotes = 'اصلی‌ترین چالش شما، توهم کنترل زمان در ساعات پس از ظهر بوده است. ساختار نیاز به مرزبندی سفت‌تر دارد.';
-      strengths.push('ثبت رکوردهای خوب در روزهای با انگیزه بالا', 'پایبندی به تسویه بدهی‌های کالبدشکافی');
-      weaknesses.push('افت مکرر در فونداسیون‌های اصلی به ویژه در اواخر هفته', 'پیوستگی ناکافی در زنجیره متوالی');
-      tacticalPlanForNextCycle = 'کاهش اهداف فانتزی و تمرکز تمام‌عیار روی ۳ رکن اصلی تا دستیابی به ۲۰ روز استاندارد پیوسته.';
-    } else {
-      grade = 'C';
-      verdict = `دیوان بوشیدو چرخه «${cycleTitle || 'چرخه ۹۰ روزه'}» را با شاخص ${pct}٪ بایگانی می‌کند. این دوره حامل درس‌های ارزشمندی از نقاط آسیب‌پذیری رفتاری است که نباید نادیده گرفته شوند.`;
-      senseiNotes = 'شکست در این چرخه پایان راه نیست، بلکه نقشه راه شفافی از مواضع نیازمند بازسازی است.';
-      strengths.push('شجاعت در مواجهه با واقعیت داده‌ها و عدم انکار شکست');
-      weaknesses.push('تسلیم شدن زودهنگام در برابر اصطکاک‌های خرد', 'توقف‌های طولانی‌مدت پس از افت');
-      tacticalPlanForNextCycle = 'آغاز فوری چرخه ترمیمی جدید با تمرکز صرف بر سحرخیزی و کار سخت به مدت ۳۰ روز.';
-    }
+    verdict = `دیوان عالی بوشیدو چرخه «${cycleTitle || 'نبرد'}» را با شاخص ${pct}٪ در رتبه ${grade} تایید می‌کند.`;
 
     res.json({
       verdict,
       grade,
-      senseiNotes,
-      strengths,
-      weaknesses,
-      tacticalPlanForNextCycle
+      senseiNotes: 'ساختار روزانه تثبیت شده است.',
+      strengths: ['پایداری در شروع روز', 'بازیابی موثر'],
+      weaknesses: ['نوسان مقطعی'],
+      tacticalPlanForNextCycle: 'تثبیت روزهای استاندارد.'
     });
   } catch (error) {
-    console.error('Verdict error:', error);
-    res.status(500).json({ error: 'Failed to generate court verdict' });
+    next(error);
   }
 });
 
 /* =========================================================================
- * PAYMENT & SUBSCRIPTION GATEWAY (Zarinpal Flow + High-Fidelity Mock)
+ * PAYMENT & SUBSCRIPTION GATEWAY
  * ========================================================================= */
 
-// Start payment request
-app.post('/api/payment/request', optionalAuthMiddleware, async (req: AuthenticatedRequest, res) => {
+app.post('/api/payment/request', optionalAuthMiddleware, validateBody(paymentRequestSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
-    const parsed = PaymentRequestSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'اطلاعات درخواست پرداخت معتبر نیست', details: parsed.error.format() });
-    }
-
-    const { planId, amount, description } = parsed.data;
+    const { planId, amount, description } = req.body;
     const userId = req.user?.userId || 'guest-warrior-1';
-    const numericAmount = Number(amount) || 199000;
+    
     const merchantId = process.env.ZARINPAL_MERCHANT_ID?.trim();
     const isLiveZarinpal = merchantId && merchantId.length >= 30;
 
     const authority = 'A' + Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(4, '0');
 
-    // Create pending subscription record in DB
     await createSubscriptionRecord({
       userId,
-      planId: planId || 'samurai_90days',
-      amount: numericAmount,
+      planId,
+      amount,
       authority,
-      description: description || 'ارتقا به حساب سامورایی ویژه (Bushido VIP)'
+      description: description || 'ارتقا به حساب سامورایی ویژه'
     });
 
     res.json({
       status: 100,
       authority,
-      paymentUrl: `/mock-gateway?authority=${authority}&amount=${numericAmount}`,
-      amount: numericAmount,
-      description: description || 'ارتقا به حساب سامورایی ویژه (Bushido VIP)',
+      paymentUrl: `/mock-gateway?authority=${authority}&amount=${amount}`,
+      amount,
       mode: isLiveZarinpal ? 'zarinpal-live' : 'zarinpal-mock-simulator',
-      merchant: isLiveZarinpal ? merchantId : 'ZARINPAL-SANDBOX-TEST'
     });
   } catch (error) {
-    console.error('Payment request error:', error);
-    res.status(500).json({ error: 'خطا در ایجاد درخواست پرداخت.' });
+    next(error);
   }
 });
 
-// Verify payment (Items A6 & B6: Real Zarinpal Integration & Idempotency Anti-Double-Spend Check)
-app.post('/api/payment/verify', async (req, res) => {
+app.post('/api/payment/verify', validateBody(paymentVerifySchema), async (req, res, next) => {
   try {
-    const parsed = PaymentVerifySchema.safeParse(req.body);
-    if (!parsed.success) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', error: 'شناسه مرجع تراکنش (Authority) نامعتبر است.', details: parsed.error.format() });
-    }
+    const { authority, amount } = req.body;
 
-    const { authority, amount } = parsed.data;
-    const ZARINPAL_MERCHANT_ID = process.env.ZARINPAL_MERCHANT_ID?.trim();
-    const isLiveZarinpal = ZARINPAL_MERCHANT_ID && ZARINPAL_MERCHANT_ID.length >= 30;
-
-    // Fetch all subs (since we lack a findByAuthority method, we filter)
     const allSubs = await adminGetAllSubscriptions();
-    const sub = allSubs.find(s => s.authority === authority);
-
-    if (!sub) {
-      return res.status(404).json({
-        status: -11,
-        code: 'NOT_FOUND',
-        message: 'تراکنش یافت نشد.'
+    const existingSub = allSubs.find(s => s.authority === authority);
+    
+    // Idempotency check: Don't process twice
+    if (existingSub && existingSub.status === 'COMPLETED') {
+      return res.json({
+        status: 101,
+        refId: existingSub.refId,
+        cardPan: existingSub.cardPan,
+        messageFa: 'این تراکنش قبلاً با موفقیت ثبت و تایید شده است.',
+        tier: 'vip_samurai',
+        subscription: existingSub
       });
     }
 
-    // Anti-Double Spend Idempotency Guard
-    if (sub.status === 'COMPLETED') {
-      return res.status(400).json({
-        status: -101,
-        code: 'DOUBLE_SPEND',
-        message: 'این تراکنش قبلاً با موفقیت تایید و اعمال شده است.'
-      });
-    }
+    let refId = 'REF-' + Math.floor(10000000 + Math.random() * 90000000);
+    let cardPan = '6037-99**-****-' + Math.floor(1000 + Math.random() * 9000);
 
-    let refId = '';
-    let cardPan = '';
-
-    if (isLiveZarinpal) {
-      // Execute Real Zarinpal Verification
-      const zpRes = await fetch('https://payment.zarinpal.com/pg/v4/payment/verify.json', {
+    const merchantId = process.env.ZARINPAL_MERCHANT_ID?.trim();
+    if (merchantId && merchantId.length >= 30) {
+      const zRes = await fetch('https://api.zarinpal.com/pg/v4/payment/verify.json', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          merchant_id: ZARINPAL_MERCHANT_ID,
-          amount: amount || sub.amount,
-          authority: authority
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ merchant_id: merchantId, authority, amount })
       });
+      const zData = await zRes.json();
 
-      const zpData = await zpRes.json();
-      
-      if (zpData.data && (zpData.data.code === 100 || zpData.data.code === 101)) {
-        refId = zpData.data.ref_id.toString();
-        cardPan = zpData.data.card_pan || '****';
+      if (zData.data && (zData.data.code === 100 || zData.data.code === 101)) {
+        refId = zData.data.ref_id.toString();
+        cardPan = zData.data.card_pan || cardPan;
       } else {
         return res.status(400).json({
-          status: zpData.errors?.code || -50,
-          code: 'VERIFY_FAILED',
-          message: 'تراکنش از سوی بانک تایید نشد.',
-          details: zpData.errors
+          code: 'PAYMENT_FAILED',
+          messageFa: 'تراکنش توسط درگاه زرین‌پال تایید نشد.',
+          details: zData.errors
         });
       }
-    } else {
-      // Execute High-Fidelity Mock Verification
-      refId = 'REF-' + Math.floor(10000000 + Math.random() * 90000000);
-      cardPan = '6037-99**-****-' + Math.floor(1000 + Math.random() * 9000);
     }
 
-    const completedSub = await completeSubscription(authority, refId, cardPan);
+    const sub = await completeSubscription(authority, refId, cardPan);
+    if (!sub) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'رکورد تراکنش یافت نشد.' });
+    }
 
     res.json({
       status: 100,
       refId,
       cardPan,
       authority,
-      amount: amount || sub.amount,
-      message: 'تراکنش با موفقیت تایید شد و حساب شما به «سامورایی ویژه VIP» ارتقا یافت.',
+      amount,
+      messageFa: 'تراکنش با موفقیت تایید شد و حساب شما ارتقا یافت.',
       tier: 'vip_samurai',
-      subscription: completedSub
+      subscription: sub
     });
   } catch (error) {
-    console.error('Payment verify error:', error);
-    res.status(500).json({ error: 'خطا در تایید تراکنش.' });
+    next(error);
   }
 });
 
 /* =========================================================================
- * ADMIN PANEL ENDPOINTS (User Management & Stats)
+ * ADMIN PANEL ENDPOINTS
  * ========================================================================= */
 
-// Get system overview statistics (Admin protected)
-app.get('/api/admin/stats', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.get('/api/admin/stats', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const stats = await adminGetOverviewStats();
     res.json({ stats });
   } catch (error) {
-    console.error('Admin stats error:', error);
-    res.status(500).json({ error: 'خطا در دریافت آمار سیستم.' });
+    next(error);
   }
 });
 
-// Get all registered users (Admin protected)
-app.get('/api/admin/users', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.get('/api/admin/users', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const users = await adminGetAllUsers();
     res.json({ users });
   } catch (error) {
-    console.error('Admin users error:', error);
-    res.status(500).json({ error: 'خطا در دریافت لیست کاربران.' });
+    next(error);
   }
 });
 
-// Update user tier or status by admin (Admin protected)
-app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = req.params.id;
     const { tier, isVip, isAdmin, name, daysExtension } = req.body;
 
     const targetUser = await findUserById(userId);
     if (!targetUser) {
-      return res.status(404).json({ error: 'کاربر مورد نظر یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
     }
 
-    // Protection for root admin: Prevent demotion or revocation of root admin account
     const isTargetRootAdmin = targetUser.email === SUPER_ADMIN_EMAIL || targetUser.phoneNumber === SUPER_ADMIN_PHONE;
     if (isTargetRootAdmin && (isAdmin === false || isVip === false)) {
-      return res.status(403).json({ error: 'حساب مالک ارشد سیستم غیرقابل عزل یا تنزل می‌باشد.' });
+      return res.status(403).json({ code: 'FORBIDDEN', messageFa: 'حساب مالک ارشد سیستم غیرقابل تنزل می‌باشد.' });
     }
 
     const updated = await adminUpdateUser(userId, {
@@ -1219,19 +796,13 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
       daysExtension: Number(daysExtension) || undefined
     });
 
-    if (!updated) {
-      return res.status(404).json({ error: 'کاربر مورد نظر یافت نشد.' });
-    }
-
-    res.json({ user: updated, message: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
+    res.json({ user: updated, messageFa: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
   } catch (error) {
-    console.error('Admin update user error:', error);
-    res.status(500).json({ error: 'خطا در ویرایش کاربر.' });
+    next(error);
   }
 });
 
-// Create test user (Admin protected)
-app.post('/api/admin/users/create-test', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.post('/api/admin/users/create-test', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { name, email, phoneNumber, tier, isVip, isAdmin } = req.body;
     const user = await adminCreateTestUser({
@@ -1252,29 +823,19 @@ app.post('/api/admin/users/create-test', adminMiddleware, async (req: Authentica
       isAdmin: Boolean(user.isAdmin)
     });
 
-    res.json({
-      success: true,
-      user,
-      token,
-      message: `حساب کاربری جدید «${user.name}» با موفقیت ایجاد گردید.`
-    });
+    res.json({ success: true, user, token, messageFa: `حساب جدید «${user.name}» ایجاد گردید.` });
   } catch (error) {
-    console.error('Admin create test user error:', error);
-    res.status(500).json({ error: 'خطا در ایجاد حساب آزمایشی.' });
+    next(error);
   }
 });
 
-// Impersonate / switch to user view (Admin protected)
-app.post('/api/admin/impersonate', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.post('/api/admin/impersonate', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { targetUserId } = req.body;
-    if (!targetUserId) {
-      return res.status(400).json({ error: 'شناسه کاربر هدف الزامی است.' });
-    }
-
     const targetUser = await findUserById(targetUserId);
+    
     if (!targetUser) {
-      return res.status(404).json({ error: 'کاربر مورد نظر در دیتابیس یافت نشد.' });
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
     }
 
     const token = generateToken({
@@ -1286,31 +847,34 @@ app.post('/api/admin/impersonate', adminMiddleware, async (req: AuthenticatedReq
       isAdmin: Boolean(targetUser.isAdmin)
     });
 
-    res.json({
-      success: true,
-      token,
-      user: targetUser,
-      message: `ورود موقت به عنوان «${targetUser.name}» انجام شد.`
-    });
+    res.json({ success: true, token, user: targetUser, messageFa: `شبیه‌سازی کاربر فعال شد.` });
   } catch (error) {
-    console.error('Admin impersonate error:', error);
-    res.status(500).json({ error: 'خطا در جابجایی به حساب کاربر.' });
+    next(error);
   }
 });
 
-app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRequest, res) => {
+app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const subscriptions = await adminGetAllSubscriptions();
     res.json({ subscriptions });
   } catch (error) {
-    console.error('Admin subscriptions error:', error);
-    res.status(500).json({ error: 'خطا در دریافت لیست تراکنش‌ها.' });
+    next(error);
   }
 });
 
-// Vite & Static Asset Handling
+/* =========================================================================
+ * SERVER BOOT & STATIC SERVING
+ * ========================================================================= */
+
+// Global Unified API Error Handler
+app.use(errorHandler);
+
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  // Step 1: Initialize DB connection to completely avoid Race Conditions
+  await initializeDatabase();
+
+  // Step 2: Configure Vite / Static files
+  if (!isProd) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -1324,30 +888,22 @@ async function startServer() {
     });
   }
 
-  // Global Error Handler Middleware
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('Unhandled server error:', err);
-    res.status(err.statusCode || 500).json({
-      code: err.code || 'INTERNAL_SERVER_ERROR',
-      error: err.messageFa || 'خطای غیرمنتظره در پردازش درخواست سرور.',
-      message: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-  });
-
+  // Step 3: Start Web Server
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Bushido Discipline OS (PostgreSQL + Prisma) running on port ${PORT}`);
+    console.log(`[Server] Bushido Discipline OS is running on port ${PORT} [Mode: ${isProd ? 'Production' : 'Dev'}]`);
   });
 
-  // Graceful Shutdown for PaaS / Docker (Liara, Kubernetes, VPS)
-  const shutdown = (signal: string) => {
-    console.log(`Received ${signal}. Shutting down gracefully...`);
-    server.close(() => {
-      console.log('HTTP server closed.');
+  // Graceful Shutdown
+  const shutdown = async (signal: string) => {
+    console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
+    server.close(async () => {
+      await closeDatabase();
+      console.log('[Server] HTTP server and Database connection closed.');
       process.exit(0);
     });
 
     setTimeout(() => {
-      console.error('Forceful shutdown after timeout.');
+      console.error('[Server] Forceful shutdown after timeout.');
       process.exit(1);
     }, 10000);
   };
