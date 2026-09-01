@@ -5,11 +5,13 @@ export let prisma: PrismaClient | null = null;
 export let isPrismaAvailable = false;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const isProd = NODE_ENV === 'production';
+// اگر متغیر ALLOW_TEST_SHORTCUTS فعال باشد، حالت خاموشی اجباری سرور خنثی می‌شود
+const isAllowTest = process.env.ALLOW_TEST_SHORTCUTS === 'true';
+const isStrictProd = NODE_ENV === 'production' && !isAllowTest;
 
 // Configuration for Retry Mechanism
-const MAX_RETRIES = isProd ? 5 : 3;
-const RETRY_DELAY_MS = 2000;
+const MAX_RETRIES = isStrictProd ? 5 : 2;
+const RETRY_DELAY_MS = 1000;
 
 /**
  * Delays execution for a specific amount of time.
@@ -21,7 +23,7 @@ function wait(ms: number): Promise<void> {
 /**
  * Securely initializes the database connection.
  * Resolves Race Conditions on server boot using a robust Retry Mechanism and Lazy Initialization.
- * In Production, it strictly binds to Prisma/PostgreSQL and will fail fast if the connection cannot be established.
+ * In Production, it strictly binds to Prisma/PostgreSQL unless ALLOW_TEST_SHORTCUTS is true.
  */
 export async function initializeDatabase(): Promise<void> {
   const dbConnectionString =
@@ -39,7 +41,7 @@ export async function initializeDatabase(): Promise<void> {
         
         // Initialize Prisma Client
         prisma = new PrismaClient({
-          log: isProd ? ['error', 'warn'] : ['query', 'info', 'warn', 'error'],
+          log: isStrictProd ? ['error', 'warn'] : ['query', 'info', 'warn', 'error'],
         });
 
         // Test the connection to resolve any pending states
@@ -59,7 +61,7 @@ export async function initializeDatabase(): Promise<void> {
         }
 
         if (attempt === MAX_RETRIES) {
-          if (isProd) {
+          if (isStrictProd) {
             console.error('[Database] FATAL ERROR: Could not connect to the database in production. Shutting down.');
             process.exit(1);
           } else {
@@ -73,7 +75,7 @@ export async function initializeDatabase(): Promise<void> {
       }
     }
   } else {
-    if (isProd) {
+    if (isStrictProd) {
       console.error('[Database] FATAL ERROR: No Database connection URL found in production mode. Shutting down.');
       process.exit(1);
     } else {
@@ -83,14 +85,12 @@ export async function initializeDatabase(): Promise<void> {
 
   // Handle Seeding logic
   if (!isPrismaAvailable) {
-    // Only load initial test data and admin if in development, or if specifically forced.
-    if (!isProd || process.env.SEED_ADMIN === 'true') {
+    if (!isStrictProd || process.env.SEED_ADMIN === 'true') {
         console.log('[Database] Seeding default admin and test users in local store.');
         ensureDefaultAdminAndUsers();
     }
   } else {
-     // Optional: Add Prisma specific seeding logic here if needed, protected by the same flags.
-     if (!isProd || process.env.SEED_ADMIN === 'true') {
+     if (!isStrictProd || process.env.SEED_ADMIN === 'true') {
          console.log('[Database] Production Seeding requested (SEED_ADMIN=true), but Prisma automatic seeding is disabled in this layer. Use Prisma migrations/seed scripts.');
      }
   }
