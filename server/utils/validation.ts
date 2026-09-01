@@ -1,12 +1,24 @@
 import { z, ZodSchema } from 'zod';
 import { Request, Response, NextFunction } from 'express';
+import { toEnglishDigits } from '../security';
+
+/**
+ * تابع کمکی پاک‌سازی و تبدیل اعداد فارسی/عربی به انگلیسی
+ */
+const cleanDigits = (val: string) => toEnglishDigits(val ? val.trim() : '');
 
 /**
  * Standard date string format validator (YYYY-MM-DD)
+ * تبدیل خودکار اعداد فارسی در تاریخ و اعتبارسنجی فرمت
  */
-const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
-  message: 'فرمت تاریخ باید به صورت YYYY-MM-DD باشد.',
-});
+const dateStringSchema = z
+  .string()
+  .transform(cleanDigits)
+  .pipe(
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'فرمت تاریخ باید به صورت YYYY-MM-DD باشد.',
+    })
+  );
 
 /* =========================================================================
  * ZOD SCHEMAS FOR API INPUT VALIDATION (Item B5)
@@ -16,18 +28,27 @@ const dateStringSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
  * User Registration Schema
  */
 export const registerSchema = z.object({
-  identifier: z.string().min(3, { message: 'شماره موبایل یا ایمیل باید حداقل ۳ کاراکتر باشد.' }),
+  identifier: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(3, { message: 'شماره موبایل یا ایمیل باید حداقل ۳ کاراکتر باشد.' })),
   password: z.string().min(8, { message: 'رمز عبور باید حداقل ۸ کاراکتر باشد.' }),
   name: z.string().max(80, { message: 'نام کاربری حداکثر می‌تواند ۸۰ کاراکتر باشد.' }).optional(),
   email: z.string().email({ message: 'فرمت ایمیل وارد شده نامعتبر است.' }).optional().or(z.literal('')),
-  phoneNumber: z.string().optional(),
+  phoneNumber: z
+    .string()
+    .optional()
+    .transform((val) => (val ? cleanDigits(val) : val)),
 });
 
 /**
  * User Login Schema
  */
 export const loginSchema = z.object({
-  identifier: z.string().min(1, { message: 'ورود شماره موبایل یا ایمیل الزامی است.' }),
+  identifier: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(1, { message: 'ورود شماره موبایل یا ایمیل الزامی است.' })),
   password: z.string().min(1, { message: 'ورود رمز عبور الزامی است.' }),
 });
 
@@ -35,15 +56,24 @@ export const loginSchema = z.object({
  * OTP Dispatch Request Schema
  */
 export const otpRequestSchema = z.object({
-  identifier: z.string().min(1, { message: 'ورود شماره موبایل یا ایمیل الزامی است.' }),
+  identifier: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(1, { message: 'ورود شماره موبایل یا ایمیل الزامی است.' })),
 });
 
 /**
  * Reset Password with OTP Schema
  */
 export const resetPasswordSchema = z.object({
-  identifier: z.string().min(1, { message: 'شناسه کاربری الزامی است.' }),
-  code: z.string().min(4, { message: 'کد تایید ۵ رقمی الزامی است.' }),
+  identifier: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(1, { message: 'شناسه کاربری الزامی است.' })),
+  code: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(4, { message: 'کد تایید الزامی است.' })),
   newPassword: z.string().min(8, { message: 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد.' }),
 });
 
@@ -118,7 +148,10 @@ export const paymentRequestSchema = z.object({
  * Payment Verification Schema
  */
 export const paymentVerifySchema = z.object({
-  authority: z.string().min(1, { message: 'شناسه مرجع (Authority) الزامی است.' }),
+  authority: z
+    .string()
+    .transform(cleanDigits)
+    .pipe(z.string().min(1, { message: 'شناسه مرجع (Authority) الزامی است.' })),
   amount: z.number().optional(),
 });
 
@@ -148,7 +181,7 @@ export function validateBody(schema: ZodSchema) {
       return;
     }
 
-    // Replace request body with sanitised and validated data
+    // Replace request body with sanitised, digit-converted and validated data
     req.body = result.data;
     next();
   };
