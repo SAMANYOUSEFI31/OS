@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
@@ -55,24 +56,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   const cycleDropdownButtonRef = useRef<HTMLButtonElement>(null);
   const cycleDropdownPanelRef = useRef<HTMLDivElement>(null);
 
-  // Accessible dismissal on Outside Click / Touch / Escape
+  // Accessible dismissal on Outside Click / Touch / Escape with Click-Eater protection
   useEffect(() => {
     if (!isCycleDropdownOpen) return;
 
-    const handlePointerDown = (e: MouseEvent | TouchEvent | PointerEvent) => {
+    const handlePointerDownCapture = (e: PointerEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
 
-      // If clicking inside the dropdown panel, allow action to proceed
+      // If clicking inside the dropdown panel, allow action to proceed smoothly
       if (cycleDropdownPanelRef.current && cycleDropdownPanelRef.current.contains(target)) {
         return;
       }
-      // If clicking the toggle button, allow toggle button's onClick to handle it
+      // If clicking the toggle button itself, let the button's onClick toggle it
       if (cycleDropdownButtonRef.current && cycleDropdownButtonRef.current.contains(target)) {
         return;
       }
 
-      // Clicked outside -> close dropdown cleanly
+      // Clicked anywhere else -> Eat the event completely and close dropdown
+      e.preventDefault();
+      e.stopPropagation();
       setIsCycleDropdownOpen(false);
       setConfirmDeleteCycleId(null);
     };
@@ -84,12 +87,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       }
     };
 
-    // Use capture phase on document to reliably intercept outside clicks across all environments (iframe, touch, desktop)
-    document.addEventListener('pointerdown', handlePointerDown);
+    // Use capture phase to intercept outside clicks before underlying buttons can execute
+    document.addEventListener('pointerdown', handlePointerDownCapture, { capture: true });
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('pointerdown', handlePointerDownCapture, { capture: true });
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCycleDropdownOpen]);
@@ -184,9 +187,30 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
+      {/* Click-Eater Backdrop: Covers the entire screen below the header to block underlying clicks when dropdown is open */}
+      {isCycleDropdownOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[45] bg-transparent cursor-default touch-manipulation select-none" 
+          onPointerDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsCycleDropdownOpen(false);
+            setConfirmDeleteCycleId(null);
+          }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsCycleDropdownOpen(false);
+            setConfirmDeleteCycleId(null);
+          }}
+          aria-hidden="true"
+        />,
+        document.body
+      )}
+
       {/* Top Hub Bar Header with Dynamic Island & PWA Safe-Area Support */}
       <header 
-        className="sticky top-0 z-40 bg-[#09090b]/95 backdrop-blur-md border-b border-zinc-800 transition-all pt-[env(safe-area-inset-top,0px)] shadow-md shadow-black/40" 
+        className="sticky top-0 z-50 bg-[#09090b]/95 backdrop-blur-md border-b border-zinc-800 transition-all pt-[env(safe-area-inset-top,0px)] shadow-md shadow-black/40" 
         dir="rtl"
       >
         <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
