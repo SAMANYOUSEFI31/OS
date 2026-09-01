@@ -55,21 +55,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   const cycleDropdownButtonRef = useRef<HTMLButtonElement>(null);
   const cycleDropdownPanelRef = useRef<HTMLDivElement>(null);
 
-  // Global click/touch/Escape outside listener for instant, safe, and reliable dismissal
+  // Accessible dismissal on Outside Click / Touch / Escape
   useEffect(() => {
     if (!isCycleDropdownOpen) return;
 
-    const handlePointerDownOutside = (e: PointerEvent) => {
+    const handlePointerDown = (e: MouseEvent | TouchEvent | PointerEvent) => {
       const target = e.target as Node | null;
       if (!target) return;
 
+      // If clicking inside the dropdown panel, allow action to proceed
       if (cycleDropdownPanelRef.current && cycleDropdownPanelRef.current.contains(target)) {
         return;
       }
+      // If clicking the toggle button, allow toggle button's onClick to handle it
       if (cycleDropdownButtonRef.current && cycleDropdownButtonRef.current.contains(target)) {
         return;
       }
 
+      // Clicked outside -> close dropdown cleanly
       setIsCycleDropdownOpen(false);
       setConfirmDeleteCycleId(null);
     };
@@ -81,11 +84,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       }
     };
 
-    window.addEventListener('pointerdown', handlePointerDownOutside);
+    // Use capture phase on document to reliably intercept outside clicks across all environments (iframe, touch, desktop)
+    document.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener('pointerdown', handlePointerDownOutside);
+      document.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCycleDropdownOpen]);
@@ -223,118 +227,100 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
 
                 {isCycleDropdownOpen && (
-                  <>
-                    {/* Full-screen Click-Eater Backdrop: consumes outside click/touch and cleanly dismisses popover */}
-                    <div 
-                      className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] cursor-default touch-manipulation" 
-                      onPointerDown={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsCycleDropdownOpen(false);
-                        setConfirmDeleteCycleId(null);
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setIsCycleDropdownOpen(false);
-                        setConfirmDeleteCycleId(null);
-                      }}
-                    />
-                    <div 
-                      ref={cycleDropdownPanelRef}
-                      className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-150"
-                    >
-                      <div className="px-3 py-1.5 text-[10px] text-zinc-400 font-bold border-b border-zinc-800 flex items-center justify-between">
-                        <span>انتخاب و مدیریت چرخه‌های ۹۰ روزه:</span>
-                        <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>
-                      </div>
-                      <div className="max-h-60 overflow-y-auto py-1">
-                        {cycles.length === 0 ? (
-                          <div className="p-3 text-center text-xs text-zinc-400">
-                            چرخه‌ای تعریف نشده است.
-                          </div>
-                        ) : (
-                          cycles.map(c => {
-                            const isCurrent = currentCycle && c.id === currentCycle.id;
-                            const isConfirming = confirmDeleteCycleId === c.id;
+                  <div 
+                    ref={cycleDropdownPanelRef}
+                    className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150"
+                  >
+                    <div className="px-3 py-1.5 text-[10px] text-zinc-400 font-bold border-b border-zinc-800 flex items-center justify-between">
+                      <span>انتخاب و مدیریت چرخه‌های ۹۰ روزه:</span>
+                      <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto py-1">
+                      {cycles.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-zinc-400">
+                          چرخه‌ای تعریف نشده است.
+                        </div>
+                      ) : (
+                        cycles.map(c => {
+                          const isCurrent = currentCycle && c.id === currentCycle.id;
+                          const isConfirming = confirmDeleteCycleId === c.id;
 
-                            return (
-                              <div
-                                key={c.id}
-                                className={`w-full px-3 py-2.5 min-h-[44px] text-xs hover:bg-zinc-800/80 transition flex items-center justify-between gap-2 cursor-pointer border-b border-zinc-850 last:border-0 touch-manipulation ${
-                                  isCurrent ? 'text-emerald-400 font-bold bg-zinc-800/50' : 'text-zinc-300'
-                                }`}
-                                onClick={() => {
-                                  onSelectCycle(c);
-                                  setIsCycleDropdownOpen(false);
-                                  setConfirmDeleteCycleId(null);
-                                }}
-                              >
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
-                                  <span className="truncate text-right">{c.title}</span>
-                                  {c.isArchived && (
-                                    <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
-                                      بایگانی
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Delete Action inside Dropdown */}
-                                {onDeleteCycle && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleDeleteCycleClick(e, c.id)}
-                                    className={`p-2 min-h-[36px] min-w-[36px] rounded-lg text-xs transition shrink-0 cursor-pointer flex items-center justify-center touch-manipulation ${
-                                      isConfirming 
-                                        ? 'bg-red-500 hover:bg-red-600 text-white font-black px-2 py-1 shadow-md animate-pulse' 
-                                        : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
-                                    }`}
-                                    title={isConfirming ? 'کلیک مجدد برای حذف قطعی' : 'حذف این چرخه'}
-                                  >
-                                    {isConfirming ? (
-                                      <span className="text-[10px] whitespace-nowrap leading-none">تایید حذف؟</span>
-                                    ) : (
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    )}
-                                  </button>
+                          return (
+                            <div
+                              key={c.id}
+                              className={`w-full px-3 py-2.5 min-h-[44px] text-xs hover:bg-zinc-800/80 transition flex items-center justify-between gap-2 cursor-pointer border-b border-zinc-850 last:border-0 touch-manipulation ${
+                                isCurrent ? 'text-emerald-400 font-bold bg-zinc-800/50' : 'text-zinc-300'
+                              }`}
+                              onClick={() => {
+                                onSelectCycle(c);
+                                setIsCycleDropdownOpen(false);
+                                setConfirmDeleteCycleId(null);
+                              }}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isCurrent ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                <span className="truncate text-right">{c.title}</span>
+                                {c.isArchived && (
+                                  <span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded shrink-0">
+                                    بایگانی
+                                  </span>
                                 )}
                               </div>
-                            );
-                          })
-                        )}
-                      </div>
-                      
-                      <div className="p-2 border-t border-zinc-800 space-y-1.5 bg-[#0e0e11] rounded-b-2xl">
-                        {onOpenNewCycleModal && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setIsCycleDropdownOpen(false);
-                              setConfirmDeleteCycleId(null);
-                              onOpenNewCycleModal();
-                            }}
-                            className="w-full py-2.5 min-h-[44px] px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10 active:scale-[0.98] touch-manipulation"
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>+ تعریف چرخه جدید ۹۰ روزه</span>
-                          </button>
-                        )}
+
+                              {/* Delete Action inside Dropdown */}
+                              {onDeleteCycle && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteCycleClick(e, c.id)}
+                                  className={`p-2 min-h-[36px] min-w-[36px] rounded-lg text-xs transition shrink-0 cursor-pointer flex items-center justify-center touch-manipulation ${
+                                    isConfirming 
+                                      ? 'bg-red-500 hover:bg-red-600 text-white font-black px-2 py-1 shadow-md animate-pulse' 
+                                      : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'
+                                  }`}
+                                  title={isConfirming ? 'کلیک مجدد برای حذف قطعی' : 'حذف این چرخه'}
+                                >
+                                  {isConfirming ? (
+                                    <span className="text-[10px] whitespace-nowrap leading-none">تایید حذف؟</span>
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                    
+                    <div className="p-2 border-t border-zinc-800 space-y-1.5 bg-[#0e0e11] rounded-b-2xl">
+                      {onOpenNewCycleModal && (
                         <button
                           type="button"
                           onClick={() => {
                             setIsCycleDropdownOpen(false);
                             setConfirmDeleteCycleId(null);
-                            onSelectTab('archives');
+                            onOpenNewCycleModal();
                           }}
-                          className="w-full py-2.5 min-h-[44px] px-3 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation"
+                          className="w-full py-2.5 min-h-[44px] px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/10 active:scale-[0.98] touch-manipulation"
                         >
-                          <Archive className="w-3.5 h-3.5 text-zinc-400" />
-                          <span>کارنامه و بایگانی چرخه‌ها</span>
+                          <Plus className="w-4 h-4" />
+                          <span>+ تعریف چرخه جدید ۹۰ روزه</span>
                         </button>
-                      </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCycleDropdownOpen(false);
+                          setConfirmDeleteCycleId(null);
+                          onSelectTab('archives');
+                        }}
+                        className="w-full py-2.5 min-h-[44px] px-3 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation"
+                      >
+                        <Archive className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>کارنامه و بایگانی چرخه‌ها</span>
+                      </button>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             </div>

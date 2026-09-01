@@ -15,8 +15,8 @@ import {
 } from 'lucide-react';
 
 interface HabitFidelityMatrixProps {
-  currentCycle: Cycle;
-  metrics: CycleMetrics;
+  currentCycle?: Cycle | null;
+  metrics?: CycleMetrics | null;
   logs: DailyLog[];
 }
 
@@ -32,6 +32,16 @@ const HabitFidelityMatrixComponent: React.FC<HabitFidelityMatrixProps> = ({
     activeBase,
     averageFidelity
   } = useMemo(() => {
+    if (!currentCycle || !metrics) {
+      return {
+        habitStats: [],
+        specialMissionRate: 0,
+        specialMissionCount: 0,
+        activeBase: 0,
+        averageFidelity: 0
+      };
+    }
+
     const cycleLogs = logs.filter(
       l => l.cycleId === currentCycle.id || (l.date >= currentCycle.startDate && l.date <= currentCycle.endDate)
     );

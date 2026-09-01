@@ -16,9 +16,9 @@ import {
 } from 'lucide-react';
 
 interface SenseiViewProps {
-  currentCycle: Cycle;
-  metrics: CycleMetrics;
-  logs: DailyLog[];
+  currentCycle?: Cycle | null;
+  metrics?: CycleMetrics | null;
+  logs?: DailyLog[];
 }
 
 interface CoachResponse {
@@ -37,6 +37,24 @@ export const SenseiView: React.FC<SenseiViewProps> = ({
   const [userQuery, setUserQuery] = useState('');
   const [customAdvice, setCustomAdvice] = useState<string | null>(null);
   const [isQuerying, setIsQuerying] = useState(false);
+
+  if (!currentCycle || !metrics) {
+    return (
+      <div className="space-y-6 max-w-lg mx-auto py-12 px-4 animate-in fade-in duration-200" dir="rtl">
+        <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-8 text-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+            <Brain className="w-8 h-8" />
+          </div>
+          <h3 className="text-base sm:text-lg font-black text-zinc-100">
+            سنسی در انتظار آغاز نبرد
+          </h3>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            جهت دریافت ارزیابی‌های تاکتیکی، تحلیل نقاط کور و توصیه‌های استراتژیک مربی بوشیدو، ابتدا یک چرخه نبرد فعال کنید.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchCoachDebrief = async () => {
     setIsLoading(true);

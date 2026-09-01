@@ -21,10 +21,10 @@ import {
 } from 'lucide-react';
 
 interface BushidoCourtViewProps {
-  currentCycle: Cycle;
-  metrics: CycleMetrics;
+  currentCycle?: Cycle | null;
+  metrics?: CycleMetrics | null;
   logs: DailyLog[];
-  onUpdateCycle: (updated: Cycle) => void;
+  onUpdateCycle?: (updated: Cycle) => void;
 }
 
 export const BushidoCourtView: React.FC<BushidoCourtViewProps> = ({
@@ -33,10 +33,29 @@ export const BushidoCourtView: React.FC<BushidoCourtViewProps> = ({
   logs,
   onUpdateCycle
 }) => {
-  const [verdictData, setVerdictData] = useState<CycleVerdict | null>(currentCycle.verdict || null);
+  const [verdictData, setVerdictData] = useState<CycleVerdict | null>(currentCycle?.verdict || null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  if (!currentCycle || !metrics) {
+    return (
+      <div className="space-y-6 max-w-lg mx-auto py-12 px-4 animate-in fade-in duration-200" dir="rtl">
+        <div className="bg-[#121215] border border-zinc-800 rounded-3xl p-8 text-center space-y-4 shadow-xl">
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+            <Gavel className="w-8 h-8" />
+          </div>
+          <h3 className="text-base sm:text-lg font-black text-zinc-100">
+            دیوان قضاوت در انتظار چرخه فعال
+          </h3>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            جهت بررسی کارنامه ۹۰ روزه، صدور حکم نهایی و پلمپ رسمی چرخه، ابتدا یک چرخه نبرد فعال کنید.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const handleGenerateVerdict = async () => {
+    if (!onUpdateCycle) return;
     setIsGenerating(true);
     try {
       // Deterministic court calculation

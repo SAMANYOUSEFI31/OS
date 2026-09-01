@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 
 interface TacticalHeatmap90Props {
-  currentCycle: Cycle;
-  metrics: CycleMetrics;
+  currentCycle?: Cycle | null;
+  metrics?: CycleMetrics | null;
   logs: DailyLog[];
   onSelectDate: (date: string) => void;
 }
@@ -33,6 +33,7 @@ const TacticalHeatmap90Component: React.FC<TacticalHeatmap90Props> = ({
 
   // Generate unified and precomputed 90 days array with static classes
   const allDays = useMemo(() => {
+    if (!currentCycle) return [];
     return Array.from({ length: 90 }, (_, idx) => {
       const dayNumber = idx + 1;
       const dateStr = addDaysToDate(currentCycle.startDate, idx);

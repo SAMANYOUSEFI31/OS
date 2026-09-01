@@ -67,15 +67,31 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             {/* Error detail banner */}
-            <div className="bg-[#09090b] border border-red-500/30 rounded-2xl p-4 space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-red-300">
-                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>پیام خطا:</span>
+            {process.env.NODE_ENV !== 'production' ? (
+              <div className="bg-[#09090b] border border-red-500/30 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center gap-2 text-xs font-bold text-red-300">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>پیام خطا (محیط توسعه):</span>
+                </div>
+                <p className="text-xs font-mono text-zinc-300 break-words leading-relaxed">
+                  {this.state.error?.message || 'یک خطای نامشخص در رابط کاربری رخ داده است.'}
+                </p>
+                {this.state.errorInfo?.componentStack && (
+                  <details className="mt-2 text-[11px] text-zinc-400 font-mono">
+                    <summary className="cursor-pointer text-zinc-300 hover:text-white">نمایش ردپای کامپوننت‌ها</summary>
+                    <pre className="mt-2 p-2 bg-zinc-950 rounded-lg overflow-x-auto text-[10px] text-zinc-400 text-left whitespace-pre-wrap" dir="ltr">
+                      {this.state.errorInfo.componentStack}
+                    </pre>
+                  </details>
+                )}
               </div>
-              <p className="text-xs font-mono text-zinc-300 break-words leading-relaxed">
-                {this.state.error?.message || 'یک خطای نامشخص در رابط کاربری رخ داده است.'}
-              </p>
-            </div>
+            ) : (
+              <div className="bg-[#09090b] border border-zinc-800 rounded-2xl p-4 text-center space-y-1.5">
+                <p className="text-xs text-zinc-300 leading-relaxed">
+                  اطلاعات و رکوردهای شما در حافظه محلی ذخیره شده‌اند. با کلیک روی دکمه زیر، سامانه به‌صورت خودکار بازیابی می‌شود.
+                </p>
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
