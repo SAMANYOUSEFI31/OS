@@ -1,30 +1,16 @@
-import { PrismaClient } from '@prisma/client';
-import { loadLocalStore, saveLocalStore, memoryStore, ensureDefaultAdminAndUsers } from './base';
+import { loadLocalStore, saveLocalStore, memoryStore, ensureDefaultAdminAndUsers } from './base.js';
 
-export let prisma: PrismaClient | null = null;
+export let prisma: any = null;
 export let isPrismaAvailable = false;
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
-// اگر متغیر ALLOW_TEST_SHORTCUTS فعال باشد، حالت خاموشی اجباری سرور خنثی می‌شود
 const isAllowTest = process.env.ALLOW_TEST_SHORTCUTS === 'true';
-const isStrictProd = NODE_ENV === 'production' && !isAllowTest;
+const isOnVercel = Boolean(process.env.VERCEL);
 
-// Configuration for Retry Mechanism
-const MAX_RETRIES = isStrictProd ? 5 : 2;
-const RETRY_DELAY_MS = 1000;
-
-/**
- * Delays execution for a specific amount of time.
- */
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/**
- * Securely initializes the database connection.
- * Resolves Race Conditions on server boot using a robust Retry Mechanism and Lazy Initialization.
- * In Production, it strictly binds to Prisma/PostgreSQL unless ALLOW_TEST_SHORTCUTS is true.
- */
 export async function initializeDatabase(): Promise<void> {
   const dbConnectionString =
     process.env.DATABASE_URL ||
@@ -32,101 +18,59 @@ export async function initializeDatabase(): Promise<void> {
     process.env.POSTGRES_URL ||
     process.env.DIRECT_URL;
 
-  if (dbConnectionString) {
-    let attempt = 1;
+  const isLocalhost =
+    !!dbConnectionString &&
+    (dbConnectionString.includes('localhost') || dbConnectionString.includes('127.0.0.1'));
 
-    while (attempt <= MAX_RETRIES) {
+  // روی Vercel هرگز به localhost وصل نشو
+  if (dbConnectionString && !(isOnVercel && isLocalhost)) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        console.log(`[Database] Attempting connection to PostgreSQL (Attempt ${attempt}/${MAX_RETRIES})...`);
-        
-        // Initialize Prisma Client
-        prisma = new PrismaClient({
-          log: isStrictProd ? ['error', 'warn'] : ['query', 'info', 'warn', 'error'],
+        const mod = await import('@prisma/client');
+        prisma = new mod.PrismaClient({
+          log: ['error', 'warn']
         });
-
-        // Test the connection to resolve any pending states
         await prisma.$connect();
-        
         isPrismaAvailable = true;
-        console.log('[Database] 🟢 Successfully connected to PostgreSQL via Prisma.');
-        
-        break; // Connection successful, exit retry loop
-
-      } catch (error: any) {
-        console.error(`[Database] 🔴 Failed to connect to PostgreSQL on attempt ${attempt}:`, error.message);
-        
+        console.log('[Database] PostgreSQL connected.');
+        break;
+      } catch (err: any) {
+        console.error(`[Database] attempt ${attempt} failed:`, err?.message || err);
         if (prisma) {
-           await prisma.$disconnect().catch(() => {});
-           prisma = null;
+          try { await prisma.$disconnect(); } catch {}
+          prisma = null;
         }
-
-        if (attempt === MAX_RETRIES) {
-          if (isStrictProd) {
-            console.error('[Database] FATAL ERROR: Could not connect to the database in production. Shutting down.');
-            process.exit(1);
-          } else {
-            console.warn('[Database] Falling back to local/in-memory store for development environment.');
-            break;
-          }
-        }
-
-        await wait(RETRY_DELAY_MS);
-        attempt++;
+        if (attempt < 3) await wait(500);
       }
     }
   } else {
-    if (isStrictProd) {
-      console.error('[Database] FATAL ERROR: No Database connection URL found in production mode. Shutting down.');
-      process.exit(1);
-    } else {
-      console.log('[Database] PostgreSQL Connection URL not set. Defaulting to local/in-memory store.');
-    }
+    console.log('[Database] Using local/memory store (no usable DATABASE_URL on this host).');
   }
 
-  // Handle Seeding logic
+  // اگر Prisma نبود → fallback + seed برای تست
   if (!isPrismaAvailable) {
-    if (!isStrictProd || process.env.SEED_ADMIN === 'true') {
-        console.log('[Database] Seeding default admin and test users in local store.');
-        ensureDefaultAdminAndUsers();
+    try { loadLocalStore(); } catch {}
+    if (isAllowTest || isOnVercel || NODE_ENV !== 'production') {
+      ensureDefaultAdminAndUsers();
     }
-  } else {
-     if (!isStrictProd || process.env.SEED_ADMIN === 'true') {
-         console.log('[Database] Production Seeding requested (SEED_ADMIN=true), but Prisma automatic seeding is disabled in this layer. Use Prisma migrations/seed scripts.');
-     }
   }
 }
 
-/**
- * Safely disconnects the database when the server shuts down.
- */
 export async function closeDatabase(): Promise<void> {
-  if (isPrismaAvailable && prisma) {
-    try {
-      await prisma.$disconnect();
-      console.log('[Database] PostgreSQL connection closed cleanly.');
-    } catch (error) {
-      console.error('[Database] Error while closing PostgreSQL connection:', error);
-    }
-  } else {
-      // Save any pending changes to the local file store
-      saveLocalStore();
-      console.log('[Database] Local/in-memory store saved.');
+  if (prisma) {
+    try { await prisma.$disconnect(); } catch {}
+    prisma = null;
+    isPrismaAvailable = false;
   }
 }
 
-// Ensure the process attempts a clean disconnect on termination
-process.on('SIGINT', async () => {
-    await closeDatabase();
-    process.exit(0);
-});
+export {
+  memoryStore,
+  saveLocalStore,
+  loadLocalStore,
+  ensureDefaultAdminAndUsers
+} from './base.js';
 
-process.on('SIGTERM', async () => {
-    await closeDatabase();
-    process.exit(0);
-});
-
-// Re-export all necessary modules
-export * from './base.js';
 export * from './users.js';
 export * from './cycles.js';
 export * from './logs.js';
