@@ -126,8 +126,8 @@ process.on('SIGTERM', async () => {
 });
 
 // Re-export all necessary modules
-export * from './base';
-export * from './users';
-export * from './cycles';
-export * from './logs';
-export * from './subscriptions';
+export * from './base.js';
+export * from './users.js';
+export * from './cycles.js';
+export * from './logs.js';
+export * from './subscriptions.js';
