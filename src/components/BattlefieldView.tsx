@@ -72,18 +72,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 }) => {
   const logicalToday = getLogicalTodayDate();
   const isToday = selectedDate === logicalToday;
-
-  // 1. Guard against No Active Cycle / Empty State with Comprehensive Onboarding
-  if (!currentCycle || !metrics) {
-    return (
-      <OnboardingWelcomeView
-        onOpenCreateCycle={onOpenCreateCycle || onNavigateToArchives || (() => {})}
-        onNavigateToHabitsGuide={onNavigateToHabitsGuide || (() => {})}
-      />
-    );
-  }
-
-  const isCycleArchived = !!currentCycle.isArchived;
+  const isCycleArchived = !!currentCycle?.isArchived;
   const isFuture = selectedDate > logicalToday;
   const isPast = selectedDate < logicalToday;
 
@@ -109,7 +98,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     if (found) return found;
     return {
       id: `log-${selectedDate}`,
-      cycleId: currentCycle.id,
+      cycleId: currentCycle?.id || '',
       date: selectedDate,
       createdAt: new Date().toISOString(),
       wakeUp: false,
@@ -119,7 +108,107 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
       hardTask: false,
       specialMission: false
     };
-  }, [logs, selectedDate, currentCycle.id]);
+  }, [logs, selectedDate, currentCycle?.id]);
+
+  // Local state for smooth, real-time typing in notes without UI stutter
+  const [notesValue, setNotesValue] = useState(activeLog?.notes || '');
+  const [isSaved, setIsSaved] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Keep latest notes, activeLog, and handler in refs to guarantee zero data-loss on rapid unmount / date switch
+  const latestNotesRef = useRef(notesValue);
+  latestNotesRef.current = notesValue;
+
+  const latestActiveLogRef = useRef(activeLog);
+  latestActiveLogRef.current = activeLog;
+
+  const onUpdateLogRef = useRef(onUpdateLog);
+  onUpdateLogRef.current = onUpdateLog;
+
+  const isCycleArchivedRef = useRef(isCycleArchived);
+  isCycleArchivedRef.current = isCycleArchived;
+
+  const isFutureRef = useRef(isFuture);
+  isFutureRef.current = isFuture;
+
+  // Flush any pending note changes immediately
+  const flushPendingNotes = useCallback(() => {
+    const currentActiveLog = latestActiveLogRef.current;
+    if (!currentActiveLog || isCycleArchivedRef.current || isFutureRef.current) return;
+    const currentVal = latestNotesRef.current;
+    if (currentVal !== (currentActiveLog.notes || '')) {
+      const updated: DailyLog = {
+        ...currentActiveLog,
+        notes: currentVal
+      };
+      onUpdateLogRef.current(updated);
+      setIsSaved(true);
+    }
+  }, []);
+
+  // Sync with selected date changes while flushing any unsaved pending edits from the previous date
+  const lastSyncDateRef = useRef(selectedDate);
+  useEffect(() => {
+    if (lastSyncDateRef.current !== selectedDate) {
+      flushPendingNotes();
+      setNotesValue(activeLog?.notes || '');
+      setIsSaved(true);
+      lastSyncDateRef.current = selectedDate;
+    } else if (isSaved && notesValue !== (activeLog?.notes || '')) {
+      setNotesValue(activeLog?.notes || '');
+    }
+  }, [selectedDate, activeLog?.notes, isSaved, flushPendingNotes]);
+
+  // Auto-resize textarea height to fit content naturally without awkward drag scroll
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.max(80, textareaRef.current.scrollHeight)}px`;
+    }
+  }, [notesValue]);
+
+  // Ensure any unsaved pending notes are always flushed on unmount
+  useEffect(() => {
+    return () => {
+      flushPendingNotes();
+    };
+  }, [flushPendingNotes]);
+
+  // Debounced auto-save to global store
+  useEffect(() => {
+    if (isCycleArchived || isFuture || isSaved) return;
+
+    const timer = setTimeout(() => {
+      const currentActiveLog = latestActiveLogRef.current;
+      if (currentActiveLog) {
+        const updated: DailyLog = {
+          ...currentActiveLog,
+          notes: notesValue
+        };
+        onUpdateLogRef.current(updated);
+        setIsSaved(true);
+      }
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [notesValue, isSaved, isCycleArchived, isFuture]);
+
+  // Track navigation direction for directional slide animation (1: next, -1: prev)
+  const [navDirection, setNavDirection] = useState<number>(0);
+
+  // Touch swipe gesture handlers (smart touch-area: works across canvas with strict deliberate thresholds)
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  // 1. Guard against No Active Cycle / Empty State with Comprehensive Onboarding
+  // (Placed AFTER all hooks to strictly adhere to React Rules of Hooks)
+  if (!currentCycle || !metrics) {
+    return (
+      <OnboardingWelcomeView
+        onOpenCreateCycle={onOpenCreateCycle || onNavigateToArchives || (() => {})}
+        onNavigateToHabitsGuide={onNavigateToHabitsGuide || (() => {})}
+      />
+    );
+  }
 
   const computed = computeDailyProperties(activeLog, logs, logicalToday, currentCycle.startDate);
 
@@ -231,89 +320,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     onUpdateLog(updated);
   };
 
-  // Local state for smooth, real-time typing in notes without UI stutter
-  const [notesValue, setNotesValue] = useState(activeLog?.notes || '');
-  const [isSaved, setIsSaved] = useState(true);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Keep latest notes, activeLog, and handler in refs to guarantee zero data-loss on rapid unmount / date switch
-  const latestNotesRef = useRef(notesValue);
-  latestNotesRef.current = notesValue;
-
-  const latestActiveLogRef = useRef(activeLog);
-  latestActiveLogRef.current = activeLog;
-
-  const onUpdateLogRef = useRef(onUpdateLog);
-  onUpdateLogRef.current = onUpdateLog;
-
-  const isCycleArchivedRef = useRef(isCycleArchived);
-  isCycleArchivedRef.current = isCycleArchived;
-
-  const isFutureRef = useRef(isFuture);
-  isFutureRef.current = isFuture;
-
-  // Flush any pending note changes immediately
-  const flushPendingNotes = useCallback(() => {
-    const currentActiveLog = latestActiveLogRef.current;
-    if (!currentActiveLog || isCycleArchivedRef.current || isFutureRef.current) return;
-    const currentVal = latestNotesRef.current;
-    if (currentVal !== (currentActiveLog.notes || '')) {
-      const updated: DailyLog = {
-        ...currentActiveLog,
-        notes: currentVal
-      };
-      onUpdateLogRef.current(updated);
-      setIsSaved(true);
-    }
-  }, []);
-
-  // Sync with selected date changes while flushing any unsaved pending edits from the previous date
-  const lastSyncDateRef = useRef(selectedDate);
-  useEffect(() => {
-    if (lastSyncDateRef.current !== selectedDate) {
-      flushPendingNotes();
-      setNotesValue(activeLog?.notes || '');
-      setIsSaved(true);
-      lastSyncDateRef.current = selectedDate;
-    } else if (isSaved && notesValue !== (activeLog?.notes || '')) {
-      setNotesValue(activeLog?.notes || '');
-    }
-  }, [selectedDate, activeLog?.notes, isSaved, flushPendingNotes]);
-
-  // Auto-resize textarea height to fit content naturally without awkward drag scroll
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.max(80, textareaRef.current.scrollHeight)}px`;
-    }
-  }, [notesValue]);
-
-  // Ensure any unsaved pending notes are always flushed on unmount
-  useEffect(() => {
-    return () => {
-      flushPendingNotes();
-    };
-  }, [flushPendingNotes]);
-
-  // Debounced auto-save to global store
-  useEffect(() => {
-    if (isCycleArchived || isFuture || isSaved) return;
-
-    const timer = setTimeout(() => {
-      const currentActiveLog = latestActiveLogRef.current;
-      if (currentActiveLog) {
-        const updated: DailyLog = {
-          ...currentActiveLog,
-          notes: notesValue
-        };
-        onUpdateLogRef.current(updated);
-        setIsSaved(true);
-      }
-    }, 450);
-
-    return () => clearTimeout(timer);
-  }, [notesValue, isSaved, isCycleArchived, isFuture]);
-
   const handleNotesChange = (val: string) => {
     if (isCycleArchived || isFuture) return;
     setNotesValue(val);
@@ -327,9 +333,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     flushPendingNotes();
   };
 
-  // Track navigation direction for directional slide animation (1: next, -1: prev)
-  const [navDirection, setNavDirection] = useState<number>(0);
-
   const navigateDate = (newDate: string, direction: number) => {
     setNavDirection(direction);
     // Navigation is completely silent per Apple HIG & BENCHMARKS.md audio ergonomics
@@ -340,8 +343,6 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
   };
 
   // Touch swipe gesture handlers (smart touch-area: works across canvas with strict deliberate thresholds)
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('textarea, input, select, [data-no-swipe], [contenteditable="true"]')) {

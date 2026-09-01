@@ -55,6 +55,7 @@ const CycleDashboardViewComponent: React.FC<CycleDashboardViewProps> = ({
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<DashboardSubTab>('overview');
   const [navDirection, setNavDirection] = useState<number>(0);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const logicalToday = getLogicalTodayDate();
 
   if (!currentCycle || !metrics) {
@@ -134,8 +135,6 @@ const CycleDashboardViewComponent: React.FC<CycleDashboardViewProps> = ({
   };
 
   // Touch swipe gesture handlers (smart vector disambiguation for fluid sub-tab swiping)
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-
   const handleTouchStart = (e: React.TouchEvent) => {
     const target = e.target as HTMLElement;
     // Only exclude active form inputs; allow smooth swiping starting on cards and matrix squares
