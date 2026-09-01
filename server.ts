@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import {
   initializeDatabase,
@@ -78,6 +77,20 @@ app.use(setSecurityHeaders);
 
 // JSON Body Parser
 app.use(express.json());
+
+// Lazy Database Initialization for Vercel Serverless (جلوگیری از کرش ۵۰۰)
+let isDbInitialized = false;
+app.use(async (req, res, next) => {
+  if (!isDbInitialized) {
+    try {
+      await initializeDatabase();
+      isDbInitialized = true;
+    } catch (err) {
+      console.error('[Database Init Error]:', err);
+    }
+  }
+  next();
+});
 
 /* =========================================================================
  * RATE LIMITING LAYER (Brute-Force & Anti-Spam Protection)
@@ -252,7 +265,6 @@ app.post('/api/auth/forgot-password', validateBody(otpRequestSchema), async (req
     const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
     await saveOtpCode(cleanId, generatedCode);
 
-    // Item A5: Do not log OTP code in production
     if (!isProd) {
       console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
     }
@@ -320,10 +332,9 @@ app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, 
 
     await saveOtpCode(cleanId, generatedCode);
 
-    // Item A5: Do not log OTP code in production
     if (testMode) {
-  console.log(`[Bushido Auth] OTP for ${cleanId}: [ ${generatedCode} ]`);
-}
+      console.log(`[Bushido Auth] OTP for ${cleanId}: [ ${generatedCode} ]`);
+    }
 
     const responsePayload: Record<string, any> = {
       success: true,
@@ -331,8 +342,8 @@ app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, 
     };
 
     if (testMode && process.env.ENABLE_OTP_DEBUG === 'true') {
-  responsePayload.debugCode = generatedCode;
-}
+      responsePayload.debugCode = generatedCode;
+    }
 
     res.json(responsePayload);
   } catch (error) {
@@ -392,15 +403,15 @@ app.post('/api/auth/verify-otp', async (req, res, next) => {
   }
 });
 
-// 7. Quick Direct Login (Item A4: Locked in Production)
+// 7. Quick Direct Login (Locked in Production)
 app.post('/api/auth/quick-login', async (req, res, next) => {
   try {
     if (!testMode) {
-  return res.status(403).json({
-    code: 'FORBIDDEN',
-    messageFa: 'ورود سریع فقط در حالت تست فعال است.'
-  });
-}
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        messageFa: 'ورود سریع فقط در حالت تست فعال است.'
+      });
+    }
 
     const { role, userId } = req.body;
     ensureDefaultAdminAndUsers();
@@ -872,17 +883,18 @@ app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRe
 app.use(errorHandler);
 
 async function startServer() {
-  // Step 1: Initialize DB connection to completely avoid Race Conditions
+  // Step 1: Initialize DB connection
   await initializeDatabase();
 
-  // Step 2: Configure Vite / Static files
-  if (!isProd) {
+  // Step 2: Configure Vite / Static files dynamically for local dev
+  if (!isProd && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (isProd && !process.env.VERCEL) {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -890,31 +902,35 @@ async function startServer() {
     });
   }
 
-  // Step 3: Start Web Server
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[Server] Bushido Discipline OS is running on port ${PORT} [Mode: ${isProd ? 'Production' : 'Dev'}]`);
-  });
-
-  // Graceful Shutdown
-  const shutdown = async (signal: string) => {
-    console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
-    server.close(async () => {
-      await closeDatabase();
-      console.log('[Server] HTTP server and Database connection closed.');
-      process.exit(0);
+  // Step 3: Start Web Server (Only when NOT running in Vercel Serverless)
+  if (!process.env.VERCEL) {
+    const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[Server] Bushido Discipline OS is running on port ${PORT} [Mode: ${isProd ? 'Production' : 'Dev'}]`);
     });
 
-    setTimeout(() => {
-      console.error('[Server] Forceful shutdown after timeout.');
-      process.exit(1);
-    }, 10000);
-  };
+    const shutdown = async (signal: string) => {
+      console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
+      server.close(async () => {
+        await closeDatabase();
+        console.log('[Server] HTTP server and Database connection closed.');
+        process.exit(0);
+      });
 
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
+      setTimeout(() => {
+        console.error('[Server] Forceful shutdown after timeout.');
+        process.exit(1);
+      }, 10000);
+    };
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
+  }
 }
 
-startServer();
+// Only start full server listener if not on Vercel
+if (!process.env.VERCEL) {
+  startServer();
+}
 
-// جهت شناسایی و اجرای Express در محیط Serverless ورسل
+// Export default app for Vercel Serverless Function engine
 export default app;
