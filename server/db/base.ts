@@ -6,38 +6,42 @@ import {
   SUPER_ADMIN_PASS,
   SUPER_ADMIN_NAME,
   isSuperAdminIdentifier,
-  hashPassword
+  hashPassword,
+  allowTestShortcuts
 } from '../security.js';
 
-// Instantiate Prisma client safely
+// Prisma client state management (shared across all db modules)
 export let prisma: any = null;
 export let isPrismaAvailable = false;
 
-const dbConnectionString = 
-  process.env.DATABASE_URL || 
-  process.env.POSTGRES_PRISMA_URL || 
-  process.env.POSTGRES_URL || 
-  process.env.DIRECT_URL;
+export function setPrismaState(client: any, available: boolean) {
+  prisma = client;
+  isPrismaAvailable = available;
+}
 
-if (dbConnectionString) {
-  try {
-    const prismaPkg = '@prisma/client';
-    import(prismaPkg)
-      .then((module) => {
-        if (module && module.PrismaClient) {
-          prisma = new module.PrismaClient();
-          isPrismaAvailable = true;
-          console.log('[Database] Initialized Prisma Client with PostgreSQL datasource.');
-        }
-      })
-      .catch(() => {
-        console.log('[Database] Running in self-hosted persistent file/memory database mode.');
-      });
-  } catch {
-    console.log('[Database] Running in self-hosted persistent file/memory database mode.');
+// Harmonize connection string variables for Prisma & Vercel / Neon / Supabase
+export function harmonizeDatabaseEnv(): string | null {
+  const dbUrl =
+    process.env.POSTGRES_PRISMA_URL ||
+    process.env.DATABASE_URL ||
+    process.env.POSTGRES_URL ||
+    process.env.DIRECT_URL ||
+    null;
+
+  const directUrl =
+    process.env.POSTGRES_URL_NON_POOLING ||
+    process.env.DIRECT_URL ||
+    process.env.DATABASE_URL_UNPOOLED ||
+    dbUrl;
+
+  if (dbUrl) {
+    if (!process.env.POSTGRES_PRISMA_URL) process.env.POSTGRES_PRISMA_URL = dbUrl;
+    if (!process.env.DATABASE_URL) process.env.DATABASE_URL = dbUrl;
+    if (!process.env.POSTGRES_URL_NON_POOLING && directUrl) process.env.POSTGRES_URL_NON_POOLING = directUrl;
+    if (!process.env.DIRECT_URL && directUrl) process.env.DIRECT_URL = directUrl;
   }
-} else {
-  console.log('[Database] PostgreSQL Connection URL not set; running in self-hosted persistent file/memory database mode.');
+
+  return dbUrl;
 }
 
 // In-Memory / File Persistent Store Fallback (Ensures 100% operational guarantee)
@@ -129,16 +133,30 @@ export interface LocalStore {
   subscriptions: DBSubscription[];
 }
 
-export const DB_FILE_PATH = path.join(process.cwd(), 'bushido_local_db.json');
+export function getStorageFilePath(): string {
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join('/tmp', 'bushido_local_db.json');
+  }
+  return path.join(process.cwd(), 'bushido_local_db.json');
+}
+
+export const DB_FILE_PATH = getStorageFilePath();
 
 export function loadLocalStore(): LocalStore {
   try {
-    if (fs.existsSync(DB_FILE_PATH)) {
-      const data = fs.readFileSync(DB_FILE_PATH, 'utf-8');
+    const primaryPath = getStorageFilePath();
+    if (fs.existsSync(primaryPath)) {
+      const data = fs.readFileSync(primaryPath, 'utf-8');
+      return JSON.parse(data);
+    }
+    // Also check cwd fallback if /tmp doesn't have it yet
+    const cwdPath = path.join(process.cwd(), 'bushido_local_db.json');
+    if (primaryPath !== cwdPath && fs.existsSync(cwdPath)) {
+      const data = fs.readFileSync(cwdPath, 'utf-8');
       return JSON.parse(data);
     }
   } catch (e) {
-    console.error('[Database] Failed to read local db file, creating fresh:', e);
+    // Silent safe parse fallback
   }
   return {
     users: [],
@@ -151,11 +169,27 @@ export function loadLocalStore(): LocalStore {
 
 export let memoryStore: LocalStore = loadLocalStore();
 
+let hasWarnedReadOnly = false;
+
 export function saveLocalStore() {
+  // If Prisma is active and running, we do not write to local JSON file
+  if (isPrismaAvailable && prisma) {
+    return;
+  }
+
   try {
-    fs.writeFileSync(DB_FILE_PATH, JSON.stringify(memoryStore, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('[Database] Failed to persist local db file:', e);
+    const filePath = getStorageFilePath();
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(memoryStore, null, 2), 'utf-8');
+  } catch (e: any) {
+    // Avoid spamming serverless logs on EROFS or permissions issues
+    if (!hasWarnedReadOnly) {
+      hasWarnedReadOnly = true;
+      console.warn('[Database] Local file persistence fallback active in RAM (/tmp or read-only filesystem):', e?.message || e);
+    }
   }
 }
 

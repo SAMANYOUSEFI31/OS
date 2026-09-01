@@ -25,13 +25,24 @@ export function normalizeIdentifier(val: string): string {
   return res;
 }
 
+function mapPrismaUser(user: any): DBUser {
+  if (!user) return user;
+  return {
+    ...user,
+    vipSince: user.vipSince instanceof Date ? user.vipSince.toISOString() : user.vipSince,
+    vipExpiresAt: user.vipExpiresAt instanceof Date ? user.vipExpiresAt.toISOString() : user.vipExpiresAt,
+    createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : user.createdAt,
+    updatedAt: user.updatedAt instanceof Date ? user.updatedAt.toISOString() : user.updatedAt
+  };
+}
+
 export async function findUserById(id: string): Promise<DBUser | null> {
   if (isPrismaAvailable && prisma) {
     try {
       const user = await prisma.user.findUnique({
         where: { id }
       });
-      return user;
+      if (user) return mapPrismaUser(user);
     } catch (e) {
       console.warn('[Database] Prisma findUserById failed, falling back to local store:', e);
     }
@@ -54,7 +65,7 @@ export async function findUserByIdentifier(identifier: string): Promise<DBUser |
           ]
         }
       });
-      return user;
+      if (user) return mapPrismaUser(user);
     } catch (e) {
       console.warn('[Database] Prisma findUserByIdentifier failed, falling back to local store:', e);
     }
@@ -107,9 +118,23 @@ export async function createUser(data: {
   if (isPrismaAvailable && prisma) {
     try {
       const created = await prisma.user.create({
-        data: newUser
+        data: {
+          id: newUser.id,
+          email: newUser.email,
+          phoneNumber: newUser.phoneNumber,
+          name: newUser.name,
+          passwordHash: newUser.passwordHash,
+          tier: newUser.tier,
+          isVip: newUser.isVip,
+          isAdmin: newUser.isAdmin,
+          nightOwlCutoffHour: newUser.nightOwlCutoffHour,
+          accentTheme: newUser.accentTheme,
+          vipSince: newUser.vipSince ? new Date(newUser.vipSince) : null,
+          vipExpiresAt: newUser.vipExpiresAt ? new Date(newUser.vipExpiresAt) : null,
+          paymentRefId: newUser.paymentRefId
+        }
       });
-      return created;
+      return mapPrismaUser(created);
     } catch (e) {
       console.warn('[Database] Prisma createUser failed, saving to local store:', e);
     }
@@ -117,7 +142,7 @@ export async function createUser(data: {
 
   memoryStore.users.push(newUser);
 
-  // Automatically seed starter cycle and logs for new registered user
+  // Automatically seed starter cycle and logs for new registered user in local fallback
   const seed = seedUserData(newUser.id);
   memoryStore.cycles.push(seed.cycle);
   memoryStore.dailyLogs.push(...seed.logs);
@@ -136,7 +161,7 @@ export async function updateUser(
 
   // Super Admin security shield: prevent revoking admin or VIP status
   const isMaster = existingUser && (isSuperAdminIdentifier(existingUser.phoneNumber) || isSuperAdminIdentifier(existingUser.email));
-  const safeData = { ...data };
+  const safeData: any = { ...data };
   if (isMaster) {
     safeData.isAdmin = true;
     safeData.isVip = true;
@@ -145,14 +170,19 @@ export async function updateUser(
 
   if (isPrismaAvailable && prisma) {
     try {
+      const prismaUpdatePayload: any = { ...safeData, updatedAt: new Date() };
+      if (prismaUpdatePayload.vipSince) {
+        prismaUpdatePayload.vipSince = new Date(prismaUpdatePayload.vipSince);
+      }
+      if (prismaUpdatePayload.vipExpiresAt) {
+        prismaUpdatePayload.vipExpiresAt = new Date(prismaUpdatePayload.vipExpiresAt);
+      }
+
       const updated = await prisma.user.update({
         where: { id },
-        data: {
-          ...safeData,
-          updatedAt: now
-        }
+        data: prismaUpdatePayload
       });
-      return updated;
+      return mapPrismaUser(updated);
     } catch (e) {
       console.warn('[Database] Prisma updateUser failed, updating local store:', e);
     }
@@ -176,9 +206,10 @@ export async function updateUser(
 export async function adminGetAllUsers(): Promise<DBUser[]> {
   if (isPrismaAvailable && prisma) {
     try {
-      return await prisma.user.findMany({
+      const list = await prisma.user.findMany({
         orderBy: { createdAt: 'desc' }
       });
+      return list.map(mapPrismaUser);
     } catch (e) {
       console.warn('[Database] Prisma adminGetAllUsers failed, reading local store:', e);
     }

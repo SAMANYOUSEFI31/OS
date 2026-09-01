@@ -78,16 +78,22 @@ app.use(setSecurityHeaders);
 // JSON Body Parser
 app.use(express.json());
 
-// Lazy Database Initialization for Vercel Serverless (جلوگیری از کرش ۵۰۰)
+// Lazy Database Initialization for Vercel Serverless (جلوگیری از کرش ۵۰۰ در Cold Start)
 let isDbInitialized = false;
+let dbInitPromise: Promise<void> | null = null;
 app.use(async (req, res, next) => {
   if (!isDbInitialized) {
-    try {
-      await initializeDatabase();
-      isDbInitialized = true;
-    } catch (err) {
-      console.error('[Database Init Error]:', err);
+    if (!dbInitPromise) {
+      dbInitPromise = initializeDatabase()
+        .then(() => {
+          isDbInitialized = true;
+        })
+        .catch((err) => {
+          console.error('[Database Init Error]:', err);
+          isDbInitialized = true; // Prevent unhandled rejection loop
+        });
     }
+    await dbInitPromise;
   }
   next();
 });

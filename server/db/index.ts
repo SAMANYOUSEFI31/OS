@@ -1,4 +1,18 @@
-import { loadLocalStore, saveLocalStore, memoryStore, ensureDefaultAdminAndUsers } from './base.js';
+import {
+  loadLocalStore,
+  saveLocalStore,
+  memoryStore,
+  ensureDefaultAdminAndUsers,
+  setPrismaState,
+  harmonizeDatabaseEnv
+} from './base.js';
+import {
+  SUPER_ADMIN_PHONE,
+  SUPER_ADMIN_EMAIL,
+  SUPER_ADMIN_PASS,
+  SUPER_ADMIN_NAME,
+  hashPassword
+} from '../security.js';
 
 export let prisma: any = null;
 export let isPrismaAvailable = false;
@@ -11,20 +25,72 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export async function ensurePrismaAdmin(): Promise<void> {
+  if (!isPrismaAvailable || !prisma) return;
+  if (!SUPER_ADMIN_PASS || String(SUPER_ADMIN_PASS).trim().length < 8) return;
+
+  try {
+    const adminHashedPass = hashPassword(SUPER_ADMIN_PASS);
+    const existing = await prisma.user.findFirst({
+      where: {
+        OR: [
+          { id: 'admin-master-001' },
+          ...(SUPER_ADMIN_PHONE ? [{ phoneNumber: SUPER_ADMIN_PHONE }] : []),
+          ...(SUPER_ADMIN_EMAIL ? [{ email: SUPER_ADMIN_EMAIL }] : [])
+        ]
+      }
+    });
+
+    const now = new Date();
+    const nextYear = new Date(Date.now() + 365 * 86400000);
+
+    if (!existing) {
+      await prisma.user.create({
+        data: {
+          id: 'admin-master-001',
+          email: SUPER_ADMIN_EMAIL || null,
+          phoneNumber: SUPER_ADMIN_PHONE || null,
+          name: SUPER_ADMIN_NAME,
+          passwordHash: adminHashedPass,
+          tier: 'vip_samurai',
+          isVip: true,
+          isAdmin: true,
+          nightOwlCutoffHour: 4,
+          accentTheme: 'amber',
+          vipSince: now,
+          vipExpiresAt: nextYear,
+          paymentRefId: 'REF-ADMIN-MASTER-001'
+        }
+      });
+      console.log('[Database] Seeded Super Admin user in PostgreSQL datasource.');
+    } else {
+      await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          passwordHash: adminHashedPass,
+          isAdmin: true,
+          isVip: true,
+          tier: 'vip_samurai',
+          name: SUPER_ADMIN_NAME,
+          vipExpiresAt: existing.vipExpiresAt || nextYear
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn('[Database] ensurePrismaAdmin notice:', err?.message || err);
+  }
+}
+
 export async function initializeDatabase(): Promise<void> {
-  const dbConnectionString =
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DIRECT_URL;
+  const dbConnectionString = harmonizeDatabaseEnv();
 
   const isLocalhost =
     !!dbConnectionString &&
     (dbConnectionString.includes('localhost') || dbConnectionString.includes('127.0.0.1'));
 
-  // روی Vercel هرگز به localhost وصل نشو
+  // On Vercel / serverless, never attempt to connect to localhost Postgres
   if (dbConnectionString && !(isOnVercel && isLocalhost)) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const mod = await import('@prisma/client');
         prisma = new mod.PrismaClient({
@@ -32,23 +98,29 @@ export async function initializeDatabase(): Promise<void> {
         });
         await prisma.$connect();
         isPrismaAvailable = true;
-        console.log('[Database] PostgreSQL connected.');
+        setPrismaState(prisma, true);
+        console.log('[Database] PostgreSQL connected via Prisma datasource.');
+        
+        // Ensure master admin is configured in PostgreSQL
+        await ensurePrismaAdmin();
         break;
       } catch (err: any) {
-        console.error(`[Database] attempt ${attempt} failed:`, err?.message || err);
+        console.warn(`[Database] Prisma connection attempt ${attempt} notice:`, err?.message || err);
         if (prisma) {
           try { await prisma.$disconnect(); } catch {}
           prisma = null;
         }
-        if (attempt < 3) await wait(500);
+        setPrismaState(null, false);
+        if (attempt < 2) await wait(300);
       }
     }
   } else {
-    console.log('[Database] Using local/memory store (no usable DATABASE_URL on this host).');
+    console.log('[Database] Running in self-hosted persistent file/memory database mode.');
   }
 
-  // اگر Prisma نبود → fallback + seed برای تست
+  // Fallback to local memory / tmp file store if Prisma is not connected
   if (!isPrismaAvailable) {
+    setPrismaState(null, false);
     try { loadLocalStore(); } catch {}
     if (isAllowTest || isOnVercel || NODE_ENV !== 'production') {
       ensureDefaultAdminAndUsers();
@@ -61,6 +133,7 @@ export async function closeDatabase(): Promise<void> {
     try { await prisma.$disconnect(); } catch {}
     prisma = null;
     isPrismaAvailable = false;
+    setPrismaState(null, false);
   }
 }
 

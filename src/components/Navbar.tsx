@@ -52,17 +52,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
   const [confirmDeleteCycleId, setConfirmDeleteCycleId] = useState<string | null>(null);
-  const cycleDropdownRef = useRef<HTMLDivElement>(null);
+  const cycleDropdownButtonRef = useRef<HTMLButtonElement>(null);
+  const cycleDropdownPanelRef = useRef<HTMLDivElement>(null);
 
-  // Global click/touch/Escape outside listener for instant and reliable dismissal
+  // Global click/touch/Escape outside listener for instant, safe, and reliable dismissal
   useEffect(() => {
     if (!isCycleDropdownOpen) return;
 
-    const handlePointerDownOutside = (e: PointerEvent | MouseEvent | TouchEvent) => {
-      if (cycleDropdownRef.current && !cycleDropdownRef.current.contains(e.target as Node)) {
-        setIsCycleDropdownOpen(false);
-        setConfirmDeleteCycleId(null);
+    const handlePointerDownOutside = (e: PointerEvent) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+
+      if (cycleDropdownPanelRef.current && cycleDropdownPanelRef.current.contains(target)) {
+        return;
       }
+      if (cycleDropdownButtonRef.current && cycleDropdownButtonRef.current.contains(target)) {
+        return;
+      }
+
+      setIsCycleDropdownOpen(false);
+      setConfirmDeleteCycleId(null);
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -72,14 +81,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       }
     };
 
-    document.addEventListener('pointerdown', handlePointerDownOutside, true);
-    document.addEventListener('touchstart', handlePointerDownOutside, true);
-    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('pointerdown', handlePointerDownOutside);
+    window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      document.removeEventListener('pointerdown', handlePointerDownOutside, true);
-      document.removeEventListener('touchstart', handlePointerDownOutside, true);
-      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pointerdown', handlePointerDownOutside);
+      window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isCycleDropdownOpen]);
 
@@ -201,8 +208,9 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Cycle Switcher Dropdown */}
-              <div ref={cycleDropdownRef} className="relative min-w-0">
+              <div className="relative min-w-0">
                 <button 
+                  ref={cycleDropdownButtonRef}
                   type="button"
                   onClick={() => setIsCycleDropdownOpen(!isCycleDropdownOpen)}
                   className="h-8 sm:h-9 min-w-[44px] bg-[#121215] hover:bg-zinc-800 active:bg-zinc-750 border border-zinc-800 rounded-xl px-2 sm:px-2.5 text-xs text-zinc-200 inline-flex items-center justify-center gap-1 sm:gap-1.5 transition cursor-pointer shrink-0 touch-manipulation"
@@ -216,18 +224,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
                 {isCycleDropdownOpen && (
                   <>
+                    {/* Full-screen Click-Eater Backdrop: consumes outside click/touch and cleanly dismisses popover */}
                     <div 
-                      className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] cursor-pointer" 
-                      onClick={() => {
+                      className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-[2px] cursor-default touch-manipulation" 
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setIsCycleDropdownOpen(false);
                         setConfirmDeleteCycleId(null);
                       }}
-                      onTouchStart={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setIsCycleDropdownOpen(false);
                         setConfirmDeleteCycleId(null);
                       }}
                     />
-                    <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-150">
+                    <div 
+                      ref={cycleDropdownPanelRef}
+                      className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-[#121215] border border-zinc-800 rounded-2xl shadow-2xl py-2 z-[100] animate-in fade-in zoom-in-95 duration-150"
+                    >
                       <div className="px-3 py-1.5 text-[10px] text-zinc-400 font-bold border-b border-zinc-800 flex items-center justify-between">
                         <span>انتخاب و مدیریت چرخه‌های ۹۰ روزه:</span>
                         <span className="text-zinc-500 font-mono">{toPersianDigits(cycles.length)} چرخه</span>

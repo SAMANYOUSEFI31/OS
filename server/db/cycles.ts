@@ -14,7 +14,10 @@ export async function getUserCycles(userId: string): Promise<DBCycle[]> {
         where: { userId },
         orderBy: { startDate: 'asc' }
       });
-      if (cycles.length > 0) return cycles;
+      return cycles.map((c: any) => ({
+        ...c,
+        rules: Array.isArray(c.rules) ? c.rules : []
+      }));
     } catch (e) {
       console.warn('[Database] Prisma getUserCycles failed, checking local store:', e);
     }
@@ -62,9 +65,23 @@ export async function createCycle(
   if (isPrismaAvailable && prisma) {
     try {
       const created = await prisma.cycle.create({
-        data: newCycle
+        data: {
+          id: newCycle.id,
+          userId: newCycle.userId,
+          title: newCycle.title,
+          startDate: newCycle.startDate,
+          endDate: newCycle.endDate,
+          targetTheme: newCycle.targetTheme,
+          inheritedStreak: newCycle.inheritedStreak,
+          rules: newCycle.rules,
+          isArchived: newCycle.isArchived,
+          reportRead: newCycle.reportRead
+        }
       });
-      return created;
+      return {
+        ...created,
+        rules: Array.isArray(created.rules) ? created.rules : []
+      };
     } catch (e) {
       console.warn('[Database] Prisma createCycle failed, saving to local store:', e);
     }
@@ -88,10 +105,13 @@ export async function updateCycle(
         where: { id: cycleId },
         data: {
           ...data,
-          updatedAt: now
+          updatedAt: new Date()
         }
       });
-      return updated;
+      return {
+        ...updated,
+        rules: Array.isArray(updated.rules) ? updated.rules : []
+      };
     } catch (e) {
       console.warn('[Database] Prisma updateCycle failed, updating local store:', e);
     }

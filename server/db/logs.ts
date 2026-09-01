@@ -16,7 +16,11 @@ export async function getUserDailyLogs(userId: string, cycleId?: string): Promis
         },
         orderBy: { date: 'asc' }
       });
-      return logs;
+      return logs.map((l: any) => ({
+        ...l,
+        createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : l.createdAt,
+        updatedAt: l.updatedAt instanceof Date ? l.updatedAt.toISOString() : l.updatedAt
+      }));
     } catch (e) {
       console.warn('[Database] Prisma getUserDailyLogs failed, checking local store:', e);
     }
@@ -74,7 +78,7 @@ export async function upsertDailyLog(
           countermeasure: data.countermeasure,
           aiFeedback: data.aiFeedback,
           notes: data.notes,
-          updatedAt: now
+          updatedAt: new Date()
         },
         create: {
           id: `log-${userId}-${data.date}`,
@@ -92,12 +96,14 @@ export async function upsertDailyLog(
           autopsyNotes: data.autopsyNotes,
           countermeasure: data.countermeasure,
           aiFeedback: data.aiFeedback,
-          notes: data.notes,
-          createdAt: now,
-          updatedAt: now
+          notes: data.notes
         }
       });
-      return upserted;
+      return {
+        ...upserted,
+        createdAt: upserted.createdAt instanceof Date ? upserted.createdAt.toISOString() : upserted.createdAt,
+        updatedAt: upserted.updatedAt instanceof Date ? upserted.updatedAt.toISOString() : upserted.updatedAt
+      };
     } catch (e) {
       console.warn('[Database] Prisma upsertDailyLog failed, falling back to local store:', e);
     }

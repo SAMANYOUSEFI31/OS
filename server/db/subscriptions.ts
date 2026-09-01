@@ -233,13 +233,39 @@ export async function adminGetOverviewStats(): Promise<{
   totalLogs: number;
   activeCycles: number;
 }> {
+  const todayIso = new Date().toISOString().split('T')[0];
+
+  if (isPrismaAvailable && prisma) {
+    try {
+      const [totalUsers, vipUsers, logsToday, completedSubs, totalLogs, activeCycles] = await Promise.all([
+        prisma.user.count(),
+        prisma.user.count({ where: { isVip: true } }),
+        prisma.dailyLog.findMany({ where: { date: todayIso }, select: { userId: true } }),
+        prisma.subscription.findMany({ where: { status: 'COMPLETED' }, select: { amount: true } }),
+        prisma.dailyLog.count(),
+        prisma.cycle.count({ where: { isArchived: false } })
+      ]);
+
+      const activeUserIds = new Set(logsToday.map((l: any) => l.userId));
+      const totalRevenueToman = completedSubs.reduce((acc: number, curr: any) => acc + (curr.amount || 0), 0);
+
+      return {
+        totalUsers,
+        vipUsers,
+        activeToday: activeUserIds.size,
+        totalRevenueToman,
+        totalLogs,
+        activeCycles
+      };
+    } catch (e) {
+      console.warn('[Database] Prisma adminGetOverviewStats failed, calculating from local store:', e);
+    }
+  }
+
   const users = memoryStore.users;
   const vipUsers = users.filter(u => u.isVip).length;
-
-  const todayIso = new Date().toISOString().split('T')[0];
   const logsToday = memoryStore.dailyLogs.filter(l => l.date === todayIso);
   const activeUserIds = new Set(logsToday.map(l => l.userId));
-
   const completedSubs = memoryStore.subscriptions.filter(s => s.status === 'COMPLETED');
   const totalRevenueToman = completedSubs.reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
