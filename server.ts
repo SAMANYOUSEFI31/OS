@@ -915,3 +915,6 @@ async function startServer() {
 }
 
 startServer();
+
+// جهت شناسایی و اجرای Express در محیط Serverless ورسل
+export default app;
