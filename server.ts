@@ -24,14 +24,14 @@ import {
   adminGetAllSubscriptions,
   adminGetOverviewStats,
   ensureDefaultAdminAndUsers
-} from './server/db/index';
+} from './server/db/index.js';
 import {
   generateToken,
   authMiddleware,
   adminMiddleware,
   optionalAuthMiddleware,
   AuthenticatedRequest
-} from './server/auth';
+} from './server/auth.js';
 import {
   SUPER_ADMIN_PHONE,
   SUPER_ADMIN_EMAIL,
@@ -41,13 +41,13 @@ import {
   hashPassword,
   verifyPassword,
   allowTestShortcuts
-} from './server/security';
+} from './server/security.js';
 import {
   apiRateLimiter,
   authRateLimiter,
   setSecurityHeaders,
   errorHandler
-} from './server/middleware/security';
+} from './server/middleware/security.js';
 import {
   validateBody,
   registerSchema,
@@ -60,7 +60,7 @@ import {
   autopsySchema,
   paymentRequestSchema,
   paymentVerifySchema
-} from './server/utils/validation';
+} from './server/utils/validation.js';
 
 dotenv.config();
 
