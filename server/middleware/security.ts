@@ -78,29 +78,41 @@ export const apiRateLimiter = createRateLimiter({
 
 /**
  * Security Headers Middleware
- * Item A9: Sets CSP, HSTS, No-Sniff, Frameguard headers
+ * Implements strict dual-environment policy:
+ * - Production: Strict CSP, restricted frame-ancestors / X-Frame-Options, secure connect-src / img-src, HSTS
+ * - Development / Test Shortcuts: Permissive embed headers for AI Studio live preview iframe
  */
 export function setSecurityHeaders(req: Request, res: Response, next: NextFunction): void {
   const isProd = process.env.NODE_ENV === 'production';
+  const isDevOrTest = !isProd || process.env.ALLOW_TEST_SHORTCUTS === 'true';
 
   // HTTP Strict Transport Security (HSTS)
   if (isProd) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
   }
 
-  // Content Security Policy (CSP)
-  // Content Security Policy (CSP)
-  // Permissive frame-ancestors to support live iframe preview in AI Studio & local dev
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' *; frame-ancestors 'self' *;"
-  );
+  // Dual-Environment Content Security Policy (CSP) & Frame-Protection
+  if (isDevOrTest) {
+    // Development / AI Studio Preview Mode: allow iframe embed while preserving asset integrity
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' *; frame-ancestors 'self' *;"
+    );
+  } else {
+    // Strict Production Hardened Mode:
+    // 1. frame-ancestors 'self' and X-Frame-Options: SAMEORIGIN (Eliminates clickjacking)
+    // 2. connect-src strictly restricted to 'self' and verified external gateways (Zarinpal/API)
+    // 3. img-src restricted to 'self' data: blob: https://*.zarinpal.com
+    // 4. font-src and style-src preserved for Google Fonts (Vazirmatn/JetBrains/Plus Jakarta Sans)
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.zarinpal.com https://zarinpal.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://api.zarinpal.com https://payment.zarinpal.com https://sandbox.zarinpal.com; frame-ancestors 'self';"
+    );
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  }
 
   // Prevent MIME-type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
-
-  // Anti-clickjacking (omit DENY to allow preview iframe)
-  // res.setHeader('X-Frame-Options', 'DENY');
 
   // Enable Browser XSS filtering
   res.setHeader('X-XSS-Protection', '1; mode=block');
