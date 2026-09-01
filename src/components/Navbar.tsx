@@ -187,10 +187,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      {/* Click-Eater Backdrop: Covers the entire screen below the header to block underlying clicks when dropdown is open */}
+      {/* Click-Eater Backdrop: Covers the entire screen below the header to block underlying clicks with subtle backdrop blur */}
       {isCycleDropdownOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[45] bg-transparent cursor-default touch-manipulation select-none" 
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] cursor-default touch-manipulation select-none animate-in fade-in duration-150" 
           onPointerDown={(e) => {
             e.preventDefault();
             e.stopPropagation();

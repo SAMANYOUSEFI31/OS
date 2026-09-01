@@ -23,15 +23,7 @@ export async function getUserCycles(userId: string): Promise<DBCycle[]> {
     }
   }
 
-  let cycles = memoryStore.cycles.filter(c => c.userId === userId);
-  if (cycles.length === 0) {
-    const seed = seedUserData(userId);
-    memoryStore.cycles.push(seed.cycle);
-    memoryStore.dailyLogs.push(...seed.logs);
-    saveLocalStore();
-    cycles = [seed.cycle];
-  }
-
+  const cycles = memoryStore.cycles.filter(c => c.userId === userId);
   return cycles.sort((a, b) => a.startDate.localeCompare(b.startDate));
 }
 

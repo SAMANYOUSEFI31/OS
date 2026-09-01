@@ -114,15 +114,10 @@ export function loadStoredSystemState(): SystemState {
       } else {
         parsed.cycles = parsed.cycles
           .filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string')
-          .map((c: any) => {
-            if (c.id === 'cycle-1' && c.isArchived) {
-              return { ...c, isArchived: false, isSynced: c.isSynced !== undefined ? c.isSynced : false };
-            }
-            return { ...c, isSynced: c.isSynced !== undefined ? c.isSynced : false };
-          });
-        if (parsed.cycles.length === 0) {
-          parsed.cycles = initial.cycles;
-        }
+          .map((c: any) => ({
+            ...c,
+            isSynced: c.isSynced !== undefined ? c.isSynced : false
+          }));
       }
 
       // 3. Logs Array Protection (Strict Array.isArray check)

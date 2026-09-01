@@ -270,7 +270,7 @@ export default function App() {
         if (cyclesRes.ok) {
           const cyclesData = await cyclesRes.json();
           const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
-          if (Array.isArray(cyclesList) && cyclesList.length > 0) {
+          if (Array.isArray(cyclesList)) {
             setSystemState(prev => ({
               ...prev,
               cycles: cyclesList
