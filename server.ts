@@ -879,14 +879,29 @@ app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRe
  * SERVER BOOT & STATIC SERVING
  * ========================================================================= */
 
-// Global Unified API Error Handler
+// UI (React build) — روی Vercel هم باید سرو شود وگرنه Cannot GET /
+const distPath = path.join(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
+// هر مسیر غیر API → صفحه اصلی اپ
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next();
+  }
+  res.sendFile(path.join(distPath, 'index.html'), (err) => {
+    if (err) {
+      console.error('[Static] index.html missing or unreadable:', err.message);
+      res.status(404).send('UI build not found (dist/index.html). Check Vercel build logs for vite build.');
+    }
+  });
+});
+
+// خطاهای API
 app.use(errorHandler);
 
 async function startServer() {
-  // Step 1: Initialize DB connection
   await initializeDatabase();
 
-  // Step 2: Configure Vite / Static files dynamically for local dev
   if (!isProd && !process.env.VERCEL) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -894,32 +909,20 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else if (isProd && !process.env.VERCEL) {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
   }
 
-  // Step 3: Start Web Server (Only when NOT running in Vercel Serverless)
   if (!process.env.VERCEL) {
     const server = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`[Server] Bushido Discipline OS is running on port ${PORT} [Mode: ${isProd ? 'Production' : 'Dev'}]`);
+      console.log(`[Server] Bushido Discipline OS on port ${PORT}`);
     });
 
     const shutdown = async (signal: string) => {
-      console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
+      console.log(`[Server] ${signal} — shutting down...`);
       server.close(async () => {
         await closeDatabase();
-        console.log('[Server] HTTP server and Database connection closed.');
         process.exit(0);
       });
-
-      setTimeout(() => {
-        console.error('[Server] Forceful shutdown after timeout.');
-        process.exit(1);
-      }, 10000);
+      setTimeout(() => process.exit(1), 10000);
     };
 
     process.on('SIGTERM', () => shutdown('SIGTERM'));
@@ -927,10 +930,8 @@ async function startServer() {
   }
 }
 
-// Only start full server listener if not on Vercel
 if (!process.env.VERCEL) {
   startServer();
 }
 
-// Export default app for Vercel Serverless Function engine
 export default app;
