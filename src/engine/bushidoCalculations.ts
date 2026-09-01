@@ -57,11 +57,21 @@ export const FOUNDATION_HABITS: HabitDef[] = [
 
 export function createEmptyCycleMetrics(): CycleMetrics {
   return {
+    cycle: {
+      id: '',
+      title: 'بدون چرخه فعال',
+      startDate: '',
+      endDate: '',
+      targetTheme: 'تسلط بر سحرخیزی و دیسیپلین آهنین',
+      rules: [],
+      isArchived: false,
+      reportRead: false,
+      inheritedStreak: 0
+    },
     status: 'active',
     statusLabelFa: 'بدون چرخه فعال',
     elapsedDays: 0,
     remainingDays: 90,
-    totalCycleDays: 90,
     logsCount: 0,
     standardDaysCount: 0,
     burnedDaysCount: 0,
@@ -71,24 +81,23 @@ export function createEmptyCycleMetrics(): CycleMetrics {
     inactiveDaysCount: 0,
     incompleteDaysCount: 0,
     totalScore: 0,
+    disciplineScore: 0,
     disciplinePercentage: 0,
-    completionPercentage: 0,
+    disciplineLevel: '🛡️ انضباط آهنین',
     pureStreak: 0,
     maxPureStreak: 0,
+    inheritedStreak: 0,
     globalLiveStreak: 0,
-    allTimeMaxStreak: 0,
-    allTimeMaxScore: 0,
-    allTimeMaxStandardDays: 0,
-    currentRank: 'رونین (مبتدی)',
-    activeTheme: 'amber',
+    maxGlobalStreak: 0,
+    maxFailureRun: 0,
+    maxInactiveRun: 0,
+    maxIncompleteRun: 0,
+    dominantFailureReason: 'بدون شکست',
+    dominantFailureTime: 'بدون شکست',
     vulnerableHabits: [],
-    level: {
-      titleFa: 'رونین',
-      minPct: 0,
-      description: 'آغازگر مسیر دیسیپلین',
-      badgeColor: 'amber'
-    },
-    days: []
+    needsIntervention: false,
+    isCourtReady: false,
+    coachMessage: 'برای شروع، نخستین چرخه ۹۰ روزه خود را ایجاد و ثبت روزانه را آغاز کنید'
   };
 }
 

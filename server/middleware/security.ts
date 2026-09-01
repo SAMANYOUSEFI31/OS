@@ -89,16 +89,18 @@ export function setSecurityHeaders(req: Request, res: Response, next: NextFuncti
   }
 
   // Content Security Policy (CSP)
-    res.setHeader(
+  // Content Security Policy (CSP)
+  // Permissive frame-ancestors to support live iframe preview in AI Studio & local dev
+  res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' *; frame-ancestors 'self' *;"
   );
 
   // Prevent MIME-type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
 
-  // Anti-clickjacking
-  res.setHeader('X-Frame-Options', 'DENY');
+  // Anti-clickjacking (omit DENY to allow preview iframe)
+  // res.setHeader('X-Frame-Options', 'DENY');
 
   // Enable Browser XSS filtering
   res.setHeader('X-XSS-Protection', '1; mode=block');

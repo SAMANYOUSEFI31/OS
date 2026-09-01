@@ -288,7 +288,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-400">نام / شناسه کاربری:</span>
                     <span className="font-bold text-zinc-200">
-                      {userProfile.displayName || 'سامورایی بوشیدو'}
+                      {userProfile.name || 'سامورایی بوشیدو'}
                     </span>
                   </div>
 

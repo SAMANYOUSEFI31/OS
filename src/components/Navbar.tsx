@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Cycle, CycleMetrics, SystemSettings, UserProfile } from '../types';
 import { toPersianDigits } from '../utils/numberUtils';
@@ -52,6 +52,36 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isCycleDropdownOpen, setIsCycleDropdownOpen] = useState(false);
   const [confirmDeleteCycleId, setConfirmDeleteCycleId] = useState<string | null>(null);
+  const cycleDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Global click/touch/Escape outside listener for instant and reliable dismissal
+  useEffect(() => {
+    if (!isCycleDropdownOpen) return;
+
+    const handlePointerDownOutside = (e: PointerEvent | MouseEvent | TouchEvent) => {
+      if (cycleDropdownRef.current && !cycleDropdownRef.current.contains(e.target as Node)) {
+        setIsCycleDropdownOpen(false);
+        setConfirmDeleteCycleId(null);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsCycleDropdownOpen(false);
+        setConfirmDeleteCycleId(null);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDownOutside, true);
+    document.addEventListener('touchstart', handlePointerDownOutside, true);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside, true);
+      document.removeEventListener('touchstart', handlePointerDownOutside, true);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isCycleDropdownOpen]);
 
   // 3 Primary Canonical Tabs for Maximum Touch Ergonomics & Clean Hierarchy
   const mainTabs = [
@@ -90,12 +120,12 @@ export const Navbar: React.FC<NavbarProps> = ({
     bottomNavTouchStartRef.current = null;
 
     // Strict intentional threshold for bottom bar swipe:
-    // 1. Vector slope: deltaX dominates deltaY (slope > 1.3)
-    // 2. Clear movement >= 35px or quick flick >= 25px within 250ms
-    const isQuickFlick = elapsed < 250 && Math.abs(deltaX) >= 25;
+    // 1. Vector slope: deltaX dominates deltaY (slope > 1.25)
+    // 2. Clear movement >= 35px or quick flick >= 25px within 300ms
+    const isQuickFlick = elapsed < 300 && Math.abs(deltaX) >= 25;
     const isStandardSwipe = Math.abs(deltaX) >= 35;
 
-    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.3) {
+    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
       const tabOrder = ['battlefield', 'dashboard', 'profile'];
       const currentCanonicalTab = 
         activeTab === 'cycle' ? 'dashboard' :
@@ -171,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
 
               {/* Cycle Switcher Dropdown */}
-              <div className="relative min-w-0">
+              <div ref={cycleDropdownRef} className="relative min-w-0">
                 <button 
                   type="button"
                   onClick={() => setIsCycleDropdownOpen(!isCycleDropdownOpen)}

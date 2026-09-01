@@ -363,13 +363,13 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
     const elapsed = Date.now() - touchStartRef.current.time;
     touchStartRef.current = null;
 
-    // Strict intentional threshold:
-    // 1. Vector slope > 1.8 to strictly reject vertical scrolls
-    // 2. Clear deliberate movement (>= 65px) or swift flick (>= 45px under 280ms)
-    const isQuickFlick = elapsed < 280 && Math.abs(deltaX) >= 45;
-    const isStandardSwipe = Math.abs(deltaX) >= 65;
+    // Intentional ergonomic gesture detection (APCA / Stoic touch standard):
+    // 1. Vector slope: deltaX dominates deltaY (slope > 1.25) to avoid false triggers during vertical scrolling
+    // 2. Deliberate horizontal stroke (>= 40px) or rapid flick (>= 28px in < 320ms)
+    const isQuickFlick = elapsed < 320 && Math.abs(deltaX) >= 28;
+    const isStandardSwipe = Math.abs(deltaX) >= 40;
 
-    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.8) {
+    if ((isStandardSwipe || isQuickFlick) && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
       if (deltaX < 0) {
         // Swipe Left -> Next Day in RTL
         navigateDate(addDaysToDate(selectedDate, 1), 1);
@@ -382,7 +382,7 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
 
   return (
     <div 
-      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y min-h-[calc(100dvh-9rem)] flex-1 w-full min-h-full flex flex-col justify-start" 
+      className="space-y-4 sm:space-y-6 max-w-5xl mx-auto touch-pan-y min-h-[calc(100dvh-7.5rem)] flex-1 w-full min-h-full flex flex-col justify-start select-none" 
       dir="rtl"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -971,6 +971,12 @@ export const BattlefieldView: React.FC<BattlefieldViewProps> = ({
         </motion.div>
       </AnimatePresence>
       </div>
+
+      {/* 7. Ergonomic Bottom Gesture Catch Zone (Captures full-width swipes in empty space above bottom navbar) */}
+      <div 
+        className="flex-1 min-h-[64px] sm:min-h-[32px] w-full cursor-default select-none pointer-events-auto" 
+        aria-hidden="true" 
+      />
     </div>
   );
 };

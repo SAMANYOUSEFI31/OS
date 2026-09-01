@@ -879,25 +879,7 @@ app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRe
  * SERVER BOOT & STATIC SERVING
  * ========================================================================= */
 
-// UI (React build) — روی Vercel هم باید سرو شود وگرنه Cannot GET /
 const distPath = path.join(process.cwd(), 'dist');
-app.use(express.static(distPath));
-
-// هر مسیر غیر API → صفحه اصلی اپ
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-  res.sendFile(path.join(distPath, 'index.html'), (err) => {
-    if (err) {
-      console.error('[Static] index.html missing or unreadable:', err.message);
-      res.status(404).send('UI build not found (dist/index.html). Check Vercel build logs for vite build.');
-    }
-  });
-});
-
-// خطاهای API
-app.use(errorHandler);
 
 async function startServer() {
   await initializeDatabase();
@@ -909,7 +891,23 @@ async function startServer() {
       appType: 'spa',
     });
     app.use(vite.middlewares);
+  } else {
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      res.sendFile(path.join(distPath, 'index.html'), (err) => {
+        if (err) {
+          console.error('[Static] index.html missing or unreadable:', err.message);
+          res.status(404).send('UI build not found (dist/index.html). Check Vercel build logs for vite build.');
+        }
+      });
+    });
   }
+
+  // خطاهای API
+  app.use(errorHandler);
 
   if (!process.env.VERCEL) {
     const server = app.listen(PORT, '0.0.0.0', () => {
@@ -930,7 +928,17 @@ async function startServer() {
   }
 }
 
-if (!process.env.VERCEL) {
+if (process.env.VERCEL) {
+  initializeDatabase().catch(console.error);
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+  app.use(errorHandler);
+} else {
   startServer();
 }
 

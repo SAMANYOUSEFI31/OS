@@ -9,7 +9,8 @@
     "vercel-build": "prisma generate && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --outfile=api/index.js",
     "postinstall": "prisma generate",
     "start": "tsx server.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@prisma/client": "^6.4.0",
@@ -29,6 +30,8 @@
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.14.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.0.0",
