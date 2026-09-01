@@ -1,6 +1,13 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
-
+/**
+ * تبدیل خودکار اعداد فارسی و عربی به اعداد انگلیسی استاندارد
+ */
+export function toEnglishDigits(str: string = ''): string {
+  return str
+    .replace(/[۰-۹]/g, (d) => (d.charCodeAt(0) - 1776).toString())
+    .replace(/[٠-٩]/g, (d) => (d.charCodeAt(0) - 1632).toString());
+}
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 /** حالت تست روی Vercel بدون OTP/زرین‌پال واقعی */
@@ -84,8 +91,14 @@ export function isSuperAdminIdentifier(identifier?: string | null): boolean {
   if (!identifier || typeof identifier !== 'string') return false;
   const target = getSuperAdminIdentifier();
   if (!target) return false;
-  const a = Buffer.from(identifier.trim().toLowerCase(), 'utf8');
-  const b = Buffer.from(target.trim().toLowerCase(), 'utf8');
+
+  // تبدیل ورودی و مقدار هدف به اعداد انگلیسی و متن یکسان
+  const cleanInput = toEnglishDigits(identifier).trim().toLowerCase();
+  const cleanTarget = toEnglishDigits(target).trim().toLowerCase();
+
+  const a = Buffer.from(cleanInput, 'utf8');
+  const b = Buffer.from(cleanTarget, 'utf8');
+
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
