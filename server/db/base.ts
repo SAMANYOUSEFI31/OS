@@ -7,7 +7,7 @@ import {
   SUPER_ADMIN_NAME,
   isSuperAdminIdentifier,
   hashPassword
-} from '../security';
+} from '../security.js';
 
 // Instantiate Prisma client safely
 export let prisma: any = null;
