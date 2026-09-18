@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>بوشیدو - سامانه انضباط فردی و تسلط ۹۰ روزه</title>
     
     <!-- غیرفعال کردن تغییر رنگ اجباری سامسونگ و پشتیبانی دارک‌مود -->
@@ -29,12 +29,13 @@
     <link rel="apple-touch-icon" href="/icon-192.svg" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- فونت‌ها -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- فونت‌ها با بهینه‌سازی بارگذاری سریع، پیش‌اتصال امن و swap برای حذف کامل پرش و FOIT -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" media="all" />
   </head>
-  <body class="bg-[#09090b] text-zinc-100 selection:bg-[#E11D48] selection:text-white font-sans antialiased overflow-x-hidden">
+  <body class="surface-z0 text-role-primary selection:bg-rose selection:text-white font-sans antialiased overflow-x-hidden">
     <div id="root">
       <style>
         @keyframes bushidoPulse {
@@ -46,14 +47,68 @@
           to { opacity: 1; }
         }
       </style>
-      <div style="min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #09090b; color: #f4f4f5; text-align: center; padding: 1.5rem; user-select: none; animation: bushidoFadeIn 0.3s ease-out;">
+      <div style="min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #09090b; color: #f4f4f5; text-align: center; padding: 1.5rem; user-select: none; font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Arabic', Roboto, 'Tahoma', 'Arial', sans-serif; animation: bushidoFadeIn 0.3s ease-out;">
         <div style="width: 58px; height: 58px; border-radius: 18px; background-color: #E11D48; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; color: #ffffff; margin-bottom: 1.25rem; animation: bushidoPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;">
           武
         </div>
         <div style="font-size: 16px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.35rem; color: #f4f4f5;">بوشیدو</div>
-        <div style="font-size: 10px; color: #71717a; font-family: monospace; letter-spacing: 0.12em;">BUSHIDO DISCIPLINE OS</div>
+        <div style="font-size: 10px; color: #71717a; font-family: 'JetBrains Mono', ui-monospace, monospace; letter-spacing: 0.12em;">BUSHIDO DISCIPLINE OS</div>
+        <div id="bushido-slow-loader" style="display: none; margin-top: 1.5rem; flex-direction: column; align-items: center; gap: 0.5rem;">
+          <p style="font-size: 11px; color: #a1a1aa; margin: 0;">بارگذاری بیش از حد معمول طول کشید</p>
+          <button id="bushido-force-reload" style="padding: 0.4rem 0.8rem; background: #27272a; border: 1px solid #3f3f46; color: #f4f4f5; border-radius: 8px; font-size: 11px; cursor: pointer; font-family: inherit;">
+            پاک‌سازی کَش و بارگذاری مجدد
+          </button>
+        </div>
       </div>
     </div>
+    <script>
+      (function() {
+        // Early capture of beforeinstallprompt for desktop Chromium (Windows Chrome/Edge) and Android
+        window.addEventListener('beforeinstallprompt', function(e) {
+          e.preventDefault();
+          window.__bushido_deferred_prompt = e;
+        });
+
+        var slowTimer = setTimeout(function() {
+          var el = document.getElementById('bushido-slow-loader');
+          if (el) el.style.display = 'flex';
+        }, 5000);
+
+        function hardReset() {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(r) { r.unregister(); });
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function(keys) {
+              keys.forEach(function(k) { caches.delete(k); });
+            });
+          }
+          setTimeout(function() {
+            window.location.reload();
+          }, 200);
+        }
+
+        document.addEventListener('click', function(e) {
+          if (e.target && e.target.id === 'bushido-force-reload') {
+            hardReset();
+          }
+        });
+
+        // Catch stale chunk errors or syntax errors from HTML MIME-type mismatch
+        window.addEventListener('error', function(e) {
+          var msg = (e && e.message) ? e.message.toLowerCase() : '';
+          var isChunkOrSyntax = msg.indexOf('dynamically imported module') !== -1 ||
+                                msg.indexOf('unexpected token') !== -1 ||
+                                msg.indexOf('loading chunk') !== -1;
+          if (isChunkOrSyntax && !sessionStorage.getItem('bushido_auto_recovered')) {
+            sessionStorage.setItem('bushido_auto_recovered', 'true');
+            hardReset();
+          }
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

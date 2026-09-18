@@ -1,22 +1,67 @@
 @import "tailwindcss";
 
-/* قفل کردن تغییر رنگ اجباری مرورگر سامسونگ و حالت کنتراست بالا */
-html, body, #root, header, nav {
-  forced-color-adjust: none !important;
+/* پیکربندی فونت‌های سیستمی و فارسی برای Tailwind v4 جهت حذف پرش لود اول */
+@theme {
+  --font-sans: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Arabic', Roboto, 'Tahoma', 'Arial', sans-serif;
+  --font-mono: 'Vazirmatn', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-en: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* استفاده از گرادیان یکدست به جای رنگ تک‌بُعدی برای خنثی‌سازی موتور تشخیص پس‌زمینه سامسونگ */
-html, body, #root, header {
-  background-image: linear-gradient(to bottom, #09090b, #09090b) !important;
-  background-color: #09090b !important;
+html, body, #root {
+  background-image: linear-gradient(to bottom, #09090b, #09090b);
+  background-color: #09090b;
 }
 
 @media (prefers-color-scheme: dark) {
   :root, html, body, #root {
-    color-scheme: dark !important;
-    supported-color-schemes: dark !important;
-    background-color: #09090b !important;
-    color: #f4f4f5 !important;
+    color-scheme: dark;
+    supported-color-schemes: dark;
+    background-color: #09090b;
+    color: #f4f4f5;
+  }
+}
+
+/* =========================================================================
+ * FORCED-COLORS & HIGH CONTRAST ACCESSIBILITY ENHANCEMENTS
+ * Ensures WCAG & WHCM (Windows High Contrast Mode) full compliance without
+ * suppressing forced-color-adjust globally on html/body/#root/header/nav.
+ * ========================================================================= */
+@media (forced-colors: active) {
+  html, body, #root, header, nav, main {
+    background-image: none !important;
+    forced-color-adjust: auto;
+  }
+
+  /* Explicit visible focus outline for all focusable elements */
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Dialog panels and Modals */
+  [role="dialog"] {
+    border: 2px solid ButtonText !important;
+    background-color: Canvas !important;
+    color: CanvasText !important;
+  }
+
+  /* Buttons & Interactive Controls */
+  button, [role="button"], a {
+    border: 1px solid ButtonText;
+  }
+
+  /* Active navigation & current items */
+  [aria-current="page"],
+  [aria-current="true"],
+  [aria-selected="true"] {
+    border: 2px solid Highlight !important;
+    outline: 1px solid Highlight !important;
+  }
+
+  /* Status Badges, Pills & Indicators */
+  .animate-ping, .animate-pulse {
+    animation: none !important;
   }
 }
 
@@ -32,15 +77,15 @@ html {
   scroll-behavior: smooth;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
-  overflow-x: clip;
-  touch-action: pan-y;
+  scrollbar-gutter: stable;
+  touch-action: manipulation;
   width: 100%;
   max-width: 100%;
 }
 
 body {
   color-scheme: dark;
-  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'Vazirmatn', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Arabic', Roboto, 'Tahoma', 'Arial', sans-serif;
   font-feature-settings: "ss01" on, "tnum" on;
   background-color: #09090b;
   color: #f4f4f5;
@@ -49,20 +94,21 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   min-height: 100vh;
-  min-height: -webkit-fill-available;
+  min-height: 100dvh;
   overscroll-behavior-x: none;
   overscroll-behavior-y: auto;
-  overflow-x: clip;
-  touch-action: pan-y;
   width: 100%;
   max-width: 100%;
 }
 
 #root {
-  overflow-x: clip;
   width: 100%;
   max-width: 100%;
   position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* iOS Retina SVG & Icon crisp rendering fixes */
@@ -76,12 +122,12 @@ svg {
 }
 
 .font-mono {
-  font-family: 'Vazirmatn', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: 'Vazirmatn', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   font-feature-settings: "ss01" on, "tnum" on;
 }
 
 .font-en {
-  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 /* Obsidian Design Tokens with AMOLED & APCA Luminance Calibration */
@@ -106,6 +152,7 @@ svg {
   box-shadow: 0 10px 30px -10px rgba(225, 29, 72, 0.08);
 }
 
+/* Legacy Theme Glow Utilities (Documented as legacy visual debt; avoid expanding in new code) */
 .theme-glow {
   box-shadow: 0 0 25px var(--accent-glow);
 }
@@ -159,4 +206,27 @@ svg {
 
 .modal-safe-h {
   max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 1.5rem));
+}
+
+@keyframes flame-flicker {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  25% {
+    transform: scale(1.05) rotate(-2deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(0.95) rotate(1deg);
+    opacity: 0.95;
+  }
+  75% {
+    transform: scale(1.02) rotate(2deg);
+    opacity: 0.85;
+  }
+}
+
+.animate-flame-flicker {
+  animation: flame-flicker 3s ease-in-out infinite alternate;
 }

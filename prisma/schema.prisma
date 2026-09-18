@@ -3,9 +3,8 @@
 // Engineered according to BENCHMARKS.md for sub-10ms queries & zero data-orphan guarantee
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("POSTGRES_PRISMA_URL")
-  directUrl = env("POSTGRES_URL_NON_POOLING")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -57,6 +56,7 @@ model User {
   vipExpiresAt       DateTime?
   paymentRefId       String?
   isAdmin            Boolean        @default(false)
+  tokenVersion       Int            @default(0)
   nightOwlCutoffHour Int            @default(4)
   accentTheme        String         @default("amber")
   
@@ -87,6 +87,7 @@ model Cycle {
   isArchived      Boolean    @default(false)
   reportRead      Boolean    @default(false)
   verdict         Json?
+  revision        Int        @default(1)
   
   dailyLogs       DailyLog[]
   
@@ -96,6 +97,7 @@ model Cycle {
   @@index([userId])
   @@index([userId, isArchived])
   @@index([userId, startDate])
+  @@index([id, userId, revision])
 }
 
 model DailyLog {
@@ -106,6 +108,7 @@ model DailyLog {
   cycle          Cycle      @relation(fields: [cycleId], references: [id], onDelete: Cascade)
   date           String     // YYYY-MM-DD
   status         DayStatus  @default(STANDARD)
+  revision       Int        @default(1)
   
   wakeUp         Boolean    @default(false)
   workout        Boolean    @default(false)
@@ -121,6 +124,8 @@ model DailyLog {
   aiFeedback     String?
   notes          String?
   
+  lastClientOperationId String?
+  
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -130,20 +135,29 @@ model DailyLog {
   @@index([cycleId])
   @@index([userId, date])
   @@index([userId, cycleId])
+  @@index([id, userId, revision])
 }
 
 model OtpCode {
-  id         String    @id @default(cuid())
-  identifier String
-  code       String
-  expiresAt  DateTime
-  verified   Boolean   @default(false)
-  userId     String?
-  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime  @default(now())
+  id          String    @id @default(cuid())
+  identifier  String    // Canonical phone number (09XXXXXXXXX)
+  purpose     String    @default("PHONE_REGISTRATION") // PHONE_REGISTRATION | PASSWORD_RESET
+  codeHash    String
+  expiresAt   DateTime
+  verified    Boolean   @default(false)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lastSentAt  DateTime  @default(now())
+  consumedAt  DateTime?
+  userId      String?
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([identifier])
   @@index([identifier, verified])
+  @@index([identifier, purpose])
+  @@index([identifier, purpose, verified])
 }
 
 model Subscription {

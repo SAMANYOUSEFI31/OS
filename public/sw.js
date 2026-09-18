@@ -1,6 +1,7 @@
-// Bushido Discipline OS - Service Worker (Offline PWA Cache v2)
-const STATIC_CACHE_NAME = 'bushido-static-v2';
-const RUNTIME_CACHE_NAME = 'bushido-runtime-v2';
+// Bushido Discipline OS - Service Worker (Offline PWA Cache v5 - Hardened against stale normal-browser tab profile)
+const SW_VERSION = 'v5';
+const STATIC_CACHE_NAME = 'bushido-static-v5';
+const RUNTIME_CACHE_NAME = 'bushido-runtime-v5';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -39,10 +40,35 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys
           .filter((key) => key !== STATIC_CACHE_NAME && key !== RUNTIME_CACHE_NAME)
-          .map((key) => caches.delete(key))
+          .map((key) => {
+            console.log('[PWA] Purging outdated cache:', key);
+            return caches.delete(key);
+          })
       );
     }).then(() => self.clients.claim())
   );
+});
+
+// Listen for messages from the page (e.g. SKIP_WAITING, CLEAR_CACHE, or CHECK_VERSION)
+self.addEventListener('message', (event) => {
+  if (!event.data) return;
+
+  if (event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+  if (event.data.type === 'CLEAR_CACHE') {
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((k) => caches.delete(k)));
+    });
+  }
+  if (event.data.type === 'CHECK_VERSION' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({
+      type: 'SW_VERSION_RESPONSE',
+      version: SW_VERSION,
+      staticCache: STATIC_CACHE_NAME,
+      runtimeCache: RUNTIME_CACHE_NAME
+    });
+  }
 });
 
 // Fetch: Multi-strategy caching dispatch
@@ -55,7 +81,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. API Requests: Network Only with Graceful Offline JSON Fallback
+  // Bypass Vite dev server internal assets, dev modules, and HMR requests
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.includes('.vite/') ||
+    url.searchParams.has('t') ||
+    url.searchParams.has('import') ||
+    url.pathname.includes('hot-update')
+  ) {
+    return;
+  }
+
+  // 1. API Requests: Network Only with Graceful Offline JSON Fallback (Never cached as authority)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
       fetch(request).catch(() => {
@@ -99,21 +138,36 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 3. Vite Hashed Immutable Assets (/assets/*): Cache-First
-  if (url.pathname.startsWith('/assets/')) {
+  // 3. Same-Origin Scripts & Styles (Vite hashed bundles, JS, CSS): Network-First with Cache Fallback
+  // Prevents stale UI after Vercel deployments by always attempting network for scripts and stylesheets
+  const isScriptOrStyle = 
+    url.origin === self.location.origin && (
+      request.destination === 'script' ||
+      request.destination === 'style' ||
+      url.pathname.startsWith('/assets/') ||
+      url.pathname.endsWith('.js') ||
+      url.pathname.endsWith('.css')
+    );
+
+  if (isScriptOrStyle) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(request).then((networkResponse) => {
-          if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
+      fetch(request)
+        .then((networkResponse) => {
+          if (
+            networkResponse &&
+            networkResponse.status === 200 &&
+            !networkResponse.headers.get('content-type')?.includes('text/html')
+          ) {
             const copy = networkResponse.clone();
             caches.open(RUNTIME_CACHE_NAME).then((cache) => cache.put(request, copy));
           }
           return networkResponse;
-        });
-      })
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          if (cached) return cached;
+          return new Response('Asset offline unavailable', { status: 503 });
+        })
     );
     return;
   }
@@ -143,18 +197,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 5. Other Static Assets (Images, Icons, Scripts): Stale-While-Revalidate with Runtime Cache
-  const isStatic = 
+  // 5. Other Static Assets (Images, Icons, Favicons, SVGs, Manifest): Stale-While-Revalidate with Runtime Cache
+  const isStaticMedia = 
     url.origin === self.location.origin && (
-      request.destination === 'style' ||
-      request.destination === 'script' ||
       request.destination === 'image' ||
       url.pathname.endsWith('.svg') ||
       url.pathname.endsWith('.png') ||
-      url.pathname.endsWith('.json')
+      url.pathname.endsWith('.json') ||
+      url.pathname.endsWith('.ico')
     );
 
-  if (isStatic) {
+  if (isStaticMedia) {
     event.respondWith(
       caches.match(request).then((cachedResponse) => {
         if (cachedResponse) {

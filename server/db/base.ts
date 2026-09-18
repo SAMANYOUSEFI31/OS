@@ -19,30 +19,74 @@ export function setPrismaState(client: any, available: boolean) {
   isPrismaAvailable = available;
 }
 
+function cleanEnvString(val?: string | null): string | null {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim().replace(/^["']|["']$/g, '');
+  if (!trimmed || trimmed === 'undefined' || trimmed === 'null') return null;
+  return trimmed;
+}
+
 // Harmonize connection string variables for Prisma & Vercel / Neon / Supabase
 export function harmonizeDatabaseEnv(): string | null {
-  const dbUrl =
-    process.env.POSTGRES_PRISMA_URL ||
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_URL ||
-    process.env.DIRECT_URL ||
+  let dbUrl =
+    cleanEnvString(process.env.POSTGRES_PRISMA_URL) ||
+    cleanEnvString(process.env.DATABASE_URL) ||
+    cleanEnvString(process.env.POSTGRES_URL) ||
+    cleanEnvString(process.env.POSTGRES_URL_POOLED) ||
+    cleanEnvString(process.env.DATABASE_URL_POOLED) ||
+    cleanEnvString(process.env.DIRECT_URL) ||
+    cleanEnvString(process.env.PG_CONNECTION_STRING) ||
     null;
 
-  const directUrl =
-    process.env.POSTGRES_URL_NON_POOLING ||
-    process.env.DIRECT_URL ||
-    process.env.DATABASE_URL_UNPOOLED ||
-    dbUrl;
+  let directUrl =
+    cleanEnvString(process.env.POSTGRES_URL_NON_POOLING) ||
+    cleanEnvString(process.env.DIRECT_URL) ||
+    cleanEnvString(process.env.DATABASE_URL_UNPOOLED) ||
+    null;
 
+  // Discrete Postgres environment variable synthesis (e.g. Neon, Render, Supabase)
+  if (!dbUrl) {
+    const host = cleanEnvString(process.env.POSTGRES_HOST || process.env.PGHOST);
+    const user = cleanEnvString(process.env.POSTGRES_USER || process.env.PGUSER);
+    const pass = cleanEnvString(process.env.POSTGRES_PASSWORD || process.env.PGPASSWORD);
+    const db = cleanEnvString(process.env.POSTGRES_DATABASE || process.env.PGDATABASE);
+    const port = cleanEnvString(process.env.POSTGRES_PORT || process.env.PGPORT) || '5432';
+
+    if (host && user && db) {
+      const auth = pass ? `${encodeURIComponent(user)}:${encodeURIComponent(pass)}` : encodeURIComponent(user);
+      dbUrl = `postgresql://${auth}@${host}:${port}/${db}?sslmode=require`;
+    }
+  }
+
+  // Neon-specific direct URL derivation if directUrl is missing or identical to pooled URL
   if (dbUrl) {
-    if (!process.env.POSTGRES_PRISMA_URL) process.env.POSTGRES_PRISMA_URL = dbUrl;
-    if (!process.env.DATABASE_URL) process.env.DATABASE_URL = dbUrl;
-    if (!process.env.POSTGRES_URL_NON_POOLING && directUrl) process.env.POSTGRES_URL_NON_POOLING = directUrl;
-    if (!process.env.DIRECT_URL && directUrl) process.env.DIRECT_URL = directUrl;
+    // If Neon URL lacks sslmode, ensure sslmode=require
+    if (dbUrl.includes('neon.tech') && !dbUrl.includes('sslmode=')) {
+      dbUrl += dbUrl.includes('?') ? '&sslmode=require' : '?sslmode=require';
+    }
+
+    if (!directUrl) {
+      if (dbUrl.includes('-pooler.') && dbUrl.includes('neon.tech')) {
+        // Derive Neon unpooled directUrl by stripping -pooler
+        directUrl = dbUrl.replace('-pooler.', '.');
+      } else {
+        directUrl = dbUrl;
+      }
+    }
+
+    process.env.POSTGRES_PRISMA_URL = dbUrl;
+    process.env.DATABASE_URL = dbUrl;
+    process.env.POSTGRES_URL = dbUrl;
+    process.env.POSTGRES_URL_NON_POOLING = directUrl;
+    process.env.DIRECT_URL = directUrl;
+    process.env.DATABASE_URL_UNPOOLED = directUrl;
   }
 
   return dbUrl;
 }
+
+// Initial environment harmonization at module load time
+harmonizeDatabaseEnv();
 
 // In-Memory / File Persistent Store Fallback (Ensures 100% operational guarantee)
 export interface DBUser {
@@ -54,6 +98,7 @@ export interface DBUser {
   tier: string;
   isVip: boolean;
   isAdmin?: boolean;
+  tokenVersion?: number;
   nightOwlCutoffHour?: number;
   accentTheme?: string;
   vipSince?: string | null;
@@ -75,6 +120,7 @@ export interface DBCycle {
   isArchived: boolean;
   reportRead: boolean;
   verdict?: any;
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +130,7 @@ export interface DBDailyLog {
   userId: string;
   cycleId: string;
   date: string;
+  lastClientOperationId?: string | null;
   wakeUp: boolean;
   workout: boolean;
   study: boolean;
@@ -96,19 +143,70 @@ export interface DBDailyLog {
   countermeasure?: string | null;
   aiFeedback?: string | null;
   notes?: string | null;
+  revision: number;
   createdAt: string;
   updatedAt: string;
 }
 
+export class ConcurrencyConflictError extends Error {
+  code = 'CONFLICT' as const;
+  entityType: 'CYCLE' | 'DAILY_LOG';
+  entityId: string;
+  currentRevision: number;
+  expectedRevision?: number;
+
+  constructor(options: {
+    entityType: 'CYCLE' | 'DAILY_LOG';
+    entityId: string;
+    currentRevision: number;
+    expectedRevision?: number;
+    message?: string;
+  }) {
+    super(options.message || 'Concurrency conflict: record has been modified by another client');
+    this.name = 'ConcurrencyConflictError';
+    this.code = 'CONFLICT';
+    this.entityType = options.entityType;
+    this.entityId = options.entityId;
+    this.currentRevision = options.currentRevision;
+    this.expectedRevision = options.expectedRevision;
+  }
+}
+
+export class PreconditionRequiredError extends Error {
+  code = 'PRECONDITION_REQUIRED' as const;
+  entityType: 'CYCLE' | 'DAILY_LOG';
+  entityId?: string;
+
+  constructor(options: {
+    entityType: 'CYCLE' | 'DAILY_LOG';
+    entityId?: string;
+    message?: string;
+  }) {
+    super(options.message || `Precondition Required: expectedRevision must be provided for ${options.entityType}${options.entityId ? ` (${options.entityId})` : ''}.`);
+    this.name = 'PreconditionRequiredError';
+    this.code = 'PRECONDITION_REQUIRED';
+    this.entityType = options.entityType;
+    this.entityId = options.entityId;
+  }
+}
+
 export interface DBOtpCode {
   id: string;
-  identifier: string;
-  code: string;
+  identifier: string; // Canonical phone number (09XXXXXXXXX)
+  purpose: string;
+  codeHash: string;
   expiresAt: string;
   verified: boolean;
+  attempts: number;
+  maxAttempts: number;
+  lastSentAt: string;
+  consumedAt?: string | null;
   userId?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
+
+export type DBSubscriptionStatus = 'PENDING' | 'SUCCESS' | 'FAILED';
 
 export interface DBSubscription {
   id: string;
@@ -118,7 +216,7 @@ export interface DBSubscription {
   authority: string;
   refId?: string | null;
   cardPan?: string | null;
-  status: string;
+  status: DBSubscriptionStatus;
   description?: string | null;
   expiresAt?: string | null;
   createdAt: string;
@@ -147,13 +245,39 @@ export function loadLocalStore(): LocalStore {
     const primaryPath = getStorageFilePath();
     if (fs.existsSync(primaryPath)) {
       const data = fs.readFileSync(primaryPath, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.cycles)) {
+          parsed.cycles.forEach((c: any) => {
+            if (typeof c.revision !== 'number' || c.revision < 1) c.revision = 1;
+          });
+        }
+        if (Array.isArray(parsed.dailyLogs)) {
+          parsed.dailyLogs.forEach((l: any) => {
+            if (typeof l.revision !== 'number' || l.revision < 1) l.revision = 1;
+          });
+        }
+      }
+      return parsed;
     }
     // Also check cwd fallback if /tmp doesn't have it yet
     const cwdPath = path.join(process.cwd(), 'bushido_local_db.json');
     if (primaryPath !== cwdPath && fs.existsSync(cwdPath)) {
       const data = fs.readFileSync(cwdPath, 'utf-8');
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.cycles)) {
+          parsed.cycles.forEach((c: any) => {
+            if (typeof c.revision !== 'number' || c.revision < 1) c.revision = 1;
+          });
+        }
+        if (Array.isArray(parsed.dailyLogs)) {
+          parsed.dailyLogs.forEach((l: any) => {
+            if (typeof l.revision !== 'number' || l.revision < 1) l.revision = 1;
+          });
+        }
+      }
+      return parsed;
     }
   } catch (e) {
     // Silent safe parse fallback
@@ -213,7 +337,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
   const starterCycle: DBCycle = {
     id: `cycle-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     userId,
-    title: 'چرخه ۱ — فونداسیون اراده و دیسیپلین آهنین',
+    title: 'چرخه ۱ (نمونه) — فونداسیون اراده و دیسیپلین آهنین',
     startDate: cycleStart,
     endDate: cycleEnd,
     targetTheme: 'تسلط بر سحرخیزی، ۱۰۰ ساعت کار عمیق و ثبات در ورزش روزانه',
@@ -226,6 +350,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
     ],
     isArchived: false,
     reportRead: false,
+    revision: 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
@@ -249,6 +374,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
         hardTask: true,
         specialMission: true,
         notes: 'تمرکز بالا روی وظایف روزانه و شروع عالی صبح',
+        revision: 1,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -268,6 +394,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
         failureTime: 'وسط روز',
         autopsyNotes: 'سفر کاری اضطراری و عدم دسترسی به امکانات عادی. ریتم فریز شد.',
         countermeasure: 'حفظ استانداردهای ذهنی و ژورنال‌نویسی شبانه در شرایط بحران.',
+        revision: 1,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -288,6 +415,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
         autopsyNotes: 'اتلاف وقت در شبکه‌های اجتماعی در ساعات اولیه صبح باعث به تعویق افتادن کار سخت شد.',
         countermeasure: 'قانون صفر دسترسی: گوشی قبل از ساعت ۹ صبح در اتاق دیگر قفل می‌شود.',
         aiFeedback: 'افت اصلی ناشی از تصمیم‌گیری واکنشی به جای کنشگرانه بوده است.',
+        revision: 1,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -304,6 +432,7 @@ export function seedUserData(userId: string): { cycle: DBCycle; logs: DBDailyLog
         hardTask: true,
         specialMission: i % 3 === 0,
         notes: i % 4 === 0 ? 'انرژی و تمرکز فوق‌العاده. تسلط کامل بر زمان.' : undefined,
+        revision: 1,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -360,9 +489,6 @@ export function ensureDefaultAdminAndUsers() {
       updatedAt: nowStr
     };
     memoryStore.users.unshift(adminUser);
-    const seed = seedUserData(adminUser.id);
-    memoryStore.cycles.push(seed.cycle);
-    memoryStore.dailyLogs.push(...seed.logs);
   } else if (adminHashedPass && existingAdmin) {
     existingAdmin.id = 'admin-master-001';
     if (SUPER_ADMIN_PHONE) existingAdmin.phoneNumber = SUPER_ADMIN_PHONE;

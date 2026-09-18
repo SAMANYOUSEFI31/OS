@@ -3,6 +3,7 @@
 ## Project Reference
 - Official Design System: See `/DESIGN_SYSTEM.md` for complete color tokens, affordance rules, icon sizing hierarchy, typography, and responsive standards.
 - Universal Benchmarks & AI Decision Protocol: See `/BENCHMARKS.md` for sound ergonomics, motion physics, and RTL balance rules.
+- Calculations, Metrics & Formulas Engine: See `/ADMIN_METRICS_AND_LOGIC.md` for complete mathematical logic, formulas, conversion funnels, cohorts, and discipline scoring algorithms.
 
 ## Core Rules for All Future Edits
 1. **Typography & Layout**:
@@ -33,12 +34,12 @@
    - Primary Text: `#f4f4f5` (`text-zinc-100` / `text-white`), Secondary: `#a1a1aa` (`text-zinc-400` / `text-slate-300`).
    - Amber (`amber-400` / `#fbbf24`): Mastery 10/10, AI judgment, VIP actions, cumulative total score (`Award`).
    - Emerald (`emerald-400` / `#34d399`): Standard Day 8/10 (5/5 checks), streak vitality (`CheckCircle2`).
-   - Fiery Rose (`rose-400` / `#fb7185`): Pure continuous streak, historical streak peak (`Flame`). (Immutable semantic token across all themes).
+   - Tactical Orange / Flame (`orange-400` / `#fb923c` & `#f97316`): Pure continuous streak, historical streak peak (`Flame`). (Immutable semantic token across all themes, backed by full 50-950 primitive scale).
    - Crimson / Alert Red (`red-400` / `red-500`): Open debts, behavior locks, critical autopsy alerts (`AlertOctagon`).
    - Blue (`blue-400` / `#60a5fa`): Personal freeze, excused pauses (`Snowflake`).
    - Violet (`purple-400` / `#c084fc`): Resolved autopsy cases (`ShieldCheck`).
 8. **Discipline Holy Trinity & Universal Streak Invariance**:
-   - All-time Hall of Records, current cycle metrics, and Top Hub Bar must share identical icon & color tokens: Streak (`Flame` with `text-rose-400 bg-rose-500/10 border-rose-500/20`), Standard Days (`CheckCircle2` with `text-emerald-400`), and Total Score (`Award` with `text-amber-400`).
+   - All-time Hall of Records, current cycle metrics, and Top Hub Bar must share identical icon & color tokens: Streak (`Flame` with `text-orange bg-orange-subtle border-orange-subtle`), Standard Days (`CheckCircle2` with `text-emerald`), and Total Score (`Award` with `text-amber`).
    - User accent theme selection NEVER recolors the semantic Pure Streak flame.
 9. **Modal & Container Copy Contrast Rule**:
    - Multi-line body copy and explanatory descriptions must use neutral text (`text-zinc-300` / `text-slate-300`), NEVER saturated colored text. Saturated semantic colors are strictly reserved for icons, titles, metric badges, and status pills.
@@ -46,3 +47,30 @@
    - Section headers (e.g. Coach Banner, Hall of Records master box, Settings groups, Guide sections) must strictly use neutral zinc icons (`text-zinc-200` or `text-zinc-300`). Saturated semantic colors (rose, emerald, amber, red, purple, blue) are strictly reserved for actual state indicators and metric cards (Discipline Holy Trinity), never for static container titles.
 11. **Direct Milestone State Feedback (No Redundant Toasts)**:
    - Day milestones (8/10 Standard Day and 10/10 Mastery Day) are directly reflected in the Battlefield daily score badge and audio chime. Redundant floating toast banners are eliminated for a dignified, stoic user experience.
+12. **Iconography & Visual Noise Heuristics**:
+   - Section headers on Z1 get a single neutral zinc icon on the title, and helper badges on the left are pure typography (no icons).
+   - Date and relative markers (e.g. "روز جاری نبرد") are pure typography without redundant calendar icons.
+   - Action buttons avoid nested duplicate score/reward pills if the reward is already declared in the header.
+13. **Gauge Segment Geometric Uniformity**:
+   - 10-segment score gauge pills MUST share 100% identical dimensions, borders, and `transition-colors` (avoid `transition-all` or adding/removing borders that cause height jumps or white border flashes).
+14. **Anti-Boxification, Seamless Surfaces & Border Governance**:
+   - **تفکیک قطعی کادرهای استاندارد مجاز از قفس‌های سیمی ممنوع (Permitted Curved Cards vs. Banned Wireframes)**:
+     - **کارت‌های اصلی استاندارد با کرو نرم و بردر ظریف کاملاً مجاز و الزامی هستند**: کانتینرهای سطح ۱ ($Z_1$) با شعاع‌های خمیده و کرو نرم (`radius-card: 14px`، `radius-component: 12px`، `radius-modal: 18px`) و تک‌حاشیه بسیار ظریف و ملایم استاندارد (`border-standard` / `border-zinc-800` / `#27272a`) ستون فقرات سیستم طراحی بوشیدو هستند (مانند کادر شاخص و سطح انضباط، کادر پایه‌های ۵ گانه عادات، کادرهای KPI، و پنل‌های تله‌متری). این کادرها هرگز نباید حذف شوند.
+     - **آنچه اکیداً ممنوع است (Banned Harsh Wireframes)**: ۱. کشیدن کادرهای مستطیلی با زاویه‌های تیز ۹۰ درجه بدون کرو (`rounded-none` یا رادیوس‌های نامتناسب)، ۲. خطوط برش سراسری افقی/عمودی تند داخل یک کارت (`border-t`, `border-b`) که سطح کارت را شبیه دفترچه خط‌دار سیمی می‌کند، ۳. کادربندی‌های تو در تو خط‌دار (کشیدن کادر بردردار درون کادر بردردار دیگر برای تک‌تک متن‌ها یا میله‌های نمودار)، ۴. حاشیه‌های سفید تند و درخشان (`border-white` یا `border-zinc-400`).
+   - **تفکیک داخلی یکپارچه (Seamless Internal Surfaces)**: تفکیک زیربخش‌ها در داخل یک کارت ($Z_1$) باید از طریق سطوح نوری تیره ملایم ($Z_2$)، گپ و پدینگ متقارن، و تایپوگرافی سلسله‌مراتبی انجام شود، نه کشیدن خطوط بردر اضافه در اطراف هر المان خرد.
+   - **نمودارها**: نمودارها باید دارای ساختاری شناور و ارگانیک با خطوط منحنی رِند و نرم (Smooth Spline / Bezier Curves) و فیل گرادیان ملایم باشند، نه ستون‌های تکه‌تکه در کادرهای خط‌کشی‌شده.
+   - کانتینرهای ثانویه ($Z_2$) هرگز نباید دارای هاور دروغین (`hover:border-*`) یا نشانگر اشاره‌گر روی محتوای غیرکلیکی باشند.
+15. **Radio & Switch Indicator Geometric Stability**:
+   - Selection indicators and radio pills must maintain 100% identical outer dimensions (e.g. `w-4 h-4`) in both active and inactive states to eliminate layout shifts. State transitions must strictly use `transition-colors`.
+16. **Semantic Token Exclusivity in Autopsy & State Overlays**:
+   - Failure reasons and time-of-failure options must NEVER use Amber (reserved for 10/10 Mastery, Coach, & Score) or Emerald (reserved for 8/10 Standard Day). Standard failure reasons use Debt red (`bg-debt-subtle border-debt text-debt`), and excused pauses use Freeze blue (`bg-blue-subtle border-blue text-blue`).
+17. **Danger Zone & Destructive Action Restraint**:
+   - Destructive actions must avoid harsh, loud white borders. Use restrained crimson accents (`border-debt-subtle/40`) with safe initial focus on cancellation.
+18. **Modal Scroll Containment & Keyboard Accessibility**:
+   - All modal overlays must employ `useBodyScrollLock` to prevent background body scroll bleed, support `Escape` key dismissal, and preserve tactile focus hygiene.
+19. **Zero Relic & Dead UI Policy**:
+   - Prune legacy multi-theme remnants, redundant decorative badges, and inactive controls. Every pixel and control must have active functional purpose.
+20. **Admin Dashboard Architecture & Tab Governance**:
+   - The Admin View is strictly consolidated into 3 unified sub-tabs: `analytics` (Growth, Conversion Funnel, Cohorts, and Spline Trend), `users` (User database, RBAC roles, impersonation), and `subscriptions` (Transactions audit, Financial KPIs, payment gateway telemetry).
+   - Retention metrics (Active fighters ratio, cycle completion health, churn risk, and lifecycle cohorts) are natively integrated into the `analytics` sub-tab. Never create a separate or redundant 4th tab for retention.
+

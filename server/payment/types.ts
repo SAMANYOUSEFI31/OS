@@ -1,0 +1,73 @@
+/**
+ * Provider-Neutral Payment Architecture Core - Types & Interfaces
+ * Phase 5A: Provider-Neutral Payment Integrity Core
+ */
+
+export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED';
+
+export type PaymentFailureClassification =
+  | 'DEFINITIVE_REJECTION'
+  | 'RETRYABLE_ERROR'
+  | 'AMBIGUOUS_RESULT';
+
+export interface PaymentRequestParams {
+  userId: string;
+  planId: string;
+  amount: number;
+  description?: string;
+}
+
+export interface PaymentRequestResult {
+  authority: string;
+  paymentUrl: string;
+  amount: number;
+  planId: string;
+  mode: string;
+}
+
+export interface PaymentVerifyParams {
+  authority: string;
+  expectedAmount: number;
+}
+
+export interface SuccessfulPaymentVerificationResult {
+  success: true;
+  status: 'SUCCESS';
+  refId: string;
+  cardPan?: string | null;
+  errorCode?: never;
+  errorMessageFa?: string;
+  retryable?: false;
+  failureClassification?: never;
+}
+
+export interface FailedPaymentVerificationResult {
+  success: false;
+  status: 'FAILED';
+  refId?: never;
+  cardPan?: never;
+  errorCode?: string;
+  errorMessageFa?: string;
+  retryable: boolean;
+  failureClassification: PaymentFailureClassification;
+}
+
+export type PaymentVerificationResult =
+  | SuccessfulPaymentVerificationResult
+  | FailedPaymentVerificationResult;
+
+export interface NormalizedPaymentError {
+  code: string;
+  messageFa: string;
+  retryable: boolean;
+  failureClassification?: PaymentFailureClassification;
+}
+
+export interface PaymentGatewayAdapter {
+  name: string;
+  mode: string;
+  requestPayment(params: PaymentRequestParams): Promise<PaymentRequestResult>;
+  buildRedirectUrl(authority: string): string;
+  verifyPayment(params: PaymentVerifyParams): Promise<PaymentVerificationResult>;
+  normalizeProviderError(error: unknown): NormalizedPaymentError;
+}

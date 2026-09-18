@@ -1,102 +1,209 @@
 /**
- * Bushido Discipline OS - Design System Tokens & Base Utility Classes
- * Conforms to APCA Luminance Benchmarks, Obsidian Dark Theme & PWA Standards (Items C1 & F7)
+ * Bushido Discipline OS - Design System Master Tokens & Governance SSOT
+ * Conforms to APCA Luminance Benchmarks, Obsidian Dark Theme & Strict Semantic Hierarchy
+ * Single Source of Truth for Primitives, Semantics, Spacing, Radius, Motion, and Component Contracts
  */
 
 :root {
   /* =========================================================================
-   * 1. OBSIDIAN NEUTRAL SURFACE PALETTE (Dark/Stoic Canvas)
+   * 1. OBSIDIAN NEUTRAL SURFACE PALETTE (Z-Axis Dark/Stoic Canvas)
+   * Staging by luminance deltas (1% - 3%)
    * ========================================================================= */
-  --color-canvas-root: #09090b;        /* Main App Background (Obsidian Black) */
-  --color-card-elevated: #121215;      /* Elevated Card Containers (Level 1) */
-  --color-card-inner: #18181b;         /* Sub-Containers & Nested Boxes (Level 2) */
-  --color-card-floating: #16161a;      /* Floating Tooltips & Popups */
-  
-  --color-border-subtle: #27272a;      /* Standard Card & Component Borders */
+  --color-canvas-root: #09090b;        /* Main App Background (Obsidian Black - Z0) */
+  --color-shell-chrome: rgba(9, 9, 11, 0.92); /* Stoic Smoky Obsidian Glass: Unified Top Header & Floating Bottom Nav (92% Alpha) */
+  --color-shell-chrome-rgb: 9, 9, 11;
+  --color-card-elevated: #121215;      /* Elevated Card Containers (Level 1 - Z1) */
+  --color-card-elevated-alt: #131215;  /* Documented Z1 alias for subtle elevation */
+  --color-card-inner: #18181b;         /* Sub-Containers & Inputs (Level 2 - Z2) */
+  --color-card-inner-nested: #0c0b0e;  /* Documented nested alias for embedded panels */
+  --color-card-floating: #1c1c21;      /* Floating Modals, Sheets & Menus (Level 3 - Z3) */
+
+  /* =========================================================================
+   * 2. BORDERS & DIVIDERS (1px Single Subtle Line - Anti-Wireframing)
+   * ========================================================================= */
+  --color-border-subtle: #27272a;      /* Standard 1px Subtle Border */
   --color-border-hover: #3f3f46;       /* Hover State Borders */
+  --color-border-active: #52525b;      /* Active State / Focus Borders */
   --color-border-muted: #1c1c20;       /* Muted Internal Dividers */
 
   /* =========================================================================
-   * 2. SEMANTIC ACCENT PALETTE (Brand Truth & Status Tokens)
+   * 3. SEMANTIC ACCENT PALETTE (Exclusive Semantic Ownership)
+   * One single role each across the entire application — no overlap or reuse
    * ========================================================================= */
-  /* Bushido Crimson (Brand Core & Accent) */
+  /* Discipline Crimson: Brand Identity, Primary Commitments & Navigation Focus */
   --color-accent-primary: #E11D48;
   --color-accent-primary-rgb: 225, 29, 72;
   --color-accent-primary-hover: #BE123C;
   --color-accent-primary-light: #FB7185;
+  --color-accent-primary-subtle: rgba(225, 29, 72, 0.12);
+  --color-accent-primary-border: rgba(225, 29, 72, 0.35);
 
-  /* Samurai Amber (Mastery 10/10, AI Sensei, Total Score, VIP) */
+  /* Samurai Amber: Mastery (10/10), AI Sensei, Total Score, VIP Tier (NEVER normal success) */
   --color-accent-amber: #FBBF24;
   --color-accent-amber-rgb: 251, 191, 36;
   --color-accent-amber-bg: rgba(251, 191, 36, 0.1);
   --color-accent-amber-border: rgba(251, 191, 36, 0.25);
 
-  /* Vitality Emerald (Standard Day 8/10, Checks, Habit Fidelity) */
+  /* Vitality Emerald: Completed Execution / Habit Done / Healthy Consistency (8/10, 5/5) */
   --color-accent-emerald: #34D399;
   --color-accent-emerald-rgb: 52, 211, 153;
   --color-accent-emerald-bg: rgba(52, 211, 153, 0.1);
   --color-accent-emerald-border: rgba(52, 211, 153, 0.25);
 
-  /* Fiery Rose (Pure Continuous Streak - Immutable Token) */
+  /* =========================================================================
+   * PRIMITIVE SCALE: TACTICAL ORANGE / EMBER (50 - 950)
+   * Complete 10-step perceptual ramp for Pure Streak Vitality, Momentum & Fire
+   * ========================================================================= */
+  --color-orange-50:  #fff7ed;
+  --color-orange-100: #ffedd5;
+  --color-orange-200: #fed7aa;
+  --color-orange-300: #fdba74;
+  --color-orange-400: #fb923c; /* High-contrast light tint for dark canvas (APCA Lc > 75) */
+  --color-orange-500: #f97316; /* Tactical Flame Core Benchmark (APCA Lc > 65) */
+  --color-orange-600: #ea580c; /* Deep Ember / Active State */
+  --color-orange-700: #c2410c;
+  --color-orange-800: #9a3412;
+  --color-orange-900: #7c2d12;
+  --color-orange-950: #431407; /* Deepest Sub-surface / Flame Base */
+
+  /* Tactical Ember / Flame Orange: Active Pure Streak & Momentum only (Immutable Token) */
+  --color-accent-orange: #f97316;
+  --color-accent-orange-rgb: 249, 115, 22;
+  --color-accent-orange-light: #fb923c;
+  --color-accent-orange-deep: #ea580c;
+  --color-accent-orange-bg: rgba(249, 115, 22, 0.12);
+  --color-accent-orange-border: rgba(249, 115, 22, 0.28);
+
+  /* Semantic Aliases for Pure Streak Flame (Holy Trinity: Streak = Flame Orange) */
+  --color-streak-flame: var(--color-accent-orange-light);
+  --color-streak-flame-core: var(--color-accent-orange);
+  --color-streak-flame-bg: var(--color-accent-orange-bg);
+  --color-streak-flame-border: var(--color-accent-orange-border);
+
+  /* Fiery Rose: Legacy Rose alias preserved for backward compatibility */
   --color-accent-rose: #FB7185;
   --color-accent-rose-rgb: 251, 113, 133;
   --color-accent-rose-bg: rgba(251, 113, 133, 0.1);
   --color-accent-rose-border: rgba(251, 113, 133, 0.25);
 
-  /* Honor Crimson / Alert Red (Open Debts, Behavior Locks, Failures) */
+  /* Form Input & Note-Taking Neutral Focus State (Zero False Error Tint) */
+  --color-input-border-focus: #a1a1aa; /* Crisp Zinc 400 / Matte White-Zinc - Dignified Neutral Focus */
+  --color-input-ring-focus: rgba(244, 244, 245, 0.12); /* Soft neutral luminous ring - Zero Crimson/Error Halo */
+
+  /* Debt Red / Honor Crimson: Open Debts, Failures, Burned Days, Behavior Locks */
   --color-accent-red: #F87171;
+  --color-accent-red-deep: #EF4444;
   --color-accent-red-rgb: 248, 113, 113;
   --color-accent-red-bg: rgba(127, 29, 29, 0.3);
   --color-accent-red-border: rgba(248, 113, 113, 0.4);
 
-  /* Frost Blue (Personal Emergency Freeze) */
+  /* Frost Blue: Freeze / Emergency Pause / Excused Pause */
   --color-accent-blue: #60A5FA;
   --color-accent-blue-rgb: 96, 165, 250;
   --color-accent-blue-bg: rgba(96, 165, 250, 0.1);
   --color-accent-blue-border: rgba(96, 165, 250, 0.25);
 
-  /* Bushido Violet (Resolved Autopsy Cases, Deep Analysis) */
+  /* Bushido Violet: Retrospective / Autopsy / Post-Action Review */
   --color-accent-purple: #C084FC;
   --color-accent-purple-rgb: 192, 132, 252;
   --color-accent-purple-bg: rgba(192, 132, 252, 0.1);
   --color-accent-purple-border: rgba(192, 132, 252, 0.25);
 
   /* =========================================================================
-   * 3. TYPOGRAPHY & APCA LUMINANCE SCALE
+   * 4. TYPOGRAPHY & APCA LUMINANCE SCALE
    * ========================================================================= */
-  --color-text-primary: #F4F4F5;       /* Headings & Values (APCA Lc = 104) */
-  --color-text-secondary: #A1A1AA;     /* Body & Subtitles (APCA Lc = 78) */
-  --color-text-muted: #71717A;         /* Captions & Phantom Labels (APCA Lc = 60) */
+  --color-text-primary: #F4F4F5;       /* Headings, Critical Numbers & Values (APCA Lc = 104) */
+  --color-text-secondary: #A1A1AA;     /* Body, Explanatory & Subtitles (APCA Lc = 78) */
+  --color-text-muted: #71717A;         /* Captions, Phantom Labels, Secondary Denominators (APCA Lc = 60) */
   --color-text-disabled: #52525B;      /* Disabled States */
 
   /* =========================================================================
-   * 4. GEOMETRIC RADIUS HIERARCHY (Nested Radius Rule)
+   * 5. GEOMETRIC RADIUS HIERARCHY (Scale: 4 / 6 / 8 / 12 / 14 / 20 / 9999px)
+   * Formula: Inner Radius = Outer Radius - Padding
    * ========================================================================= */
-  --radius-outer-modal: 1.5rem;        /* 24px - Modals & Outer Canvas Cards */
-  --radius-card-level1: 1.25rem;       /* 20px - Main Bento & Section Cards */
-  --radius-card-level2: 1rem;          /* 16px - Inner Containers & Habit Cards */
-  --radius-button: 0.75rem;            /* 12px - Interactive Action Buttons */
-  --radius-badge: 0.5rem;              /* 8px - Status Badges & Chips */
-  --radius-pill: 9999px;              /* Full Capsule Pill */
+  --radius-micro: 4px;                 /* 4px - Mini checkboxes, sub-elements */
+  --radius-badge: 6px;                 /* 6px - Small inline tags & micro chips */
+  --radius-control: 8px;               /* 8px - Badges, status chips, matrix cells */
+  --radius-component: 12px;           /* 12px - Action buttons, icon boxes, inputs */
+  --radius-card: 14px;                /* 14px - Habit cards, elevated containers */
+  --radius-modal: 20px;               /* 20px - Floating modals, sheets & menus */
+  --radius-capsule: 9999px;           /* 9999px - Capsule pills & scrollbars */
+
+  /* Aliases for backwards compatibility */
+  --radius-xs: var(--radius-micro);
+  --radius-sm: var(--radius-badge);
+  --radius-md: var(--radius-control);
+  --radius-lg: var(--radius-component);
+  --radius-xl: var(--radius-card);
+  --radius-2xl: var(--radius-modal);
+  --radius-3xl: 24px;
+  --radius-pill: var(--radius-capsule);
 
   /* =========================================================================
-   * 5. ELEVATION, GLOW & SHADOW EFFECTS
+   * 6. SPACING GRID (4px Base Metric)
+   * Gaps strictly: 4 / 8 / 16 / 24 / 32px
    * ========================================================================= */
-  --glow-crimson: rgba(225, 29, 72, 0.3);
-  --glow-crimson-subtle: rgba(225, 29, 72, 0.12);
-  --glow-amber: rgba(251, 191, 36, 0.25);
-  --glow-emerald: rgba(52, 211, 153, 0.25);
+  --spacing-base: 4px;
+  --spacing-1: 4px;                    /* 4px */
+  --spacing-2: 8px;                    /* 8px */
+  --spacing-3: 12px;                   /* 12px */
+  --spacing-4: 16px;                   /* 16px */
+  --spacing-5: 20px;                   /* 20px */
+  --spacing-6: 24px;                   /* 24px */
+  --spacing-8: 32px;                   /* 32px */
+
+  /* Gap Specific Scale Tokens */
+  --gap-4: 4px;
+  --gap-8: 8px;
+  --gap-16: 16px;
+  --gap-24: 24px;
+  --gap-32: 32px;
+
+  /* =========================================================================
+   * 7. LAYOUT BOUNDS
+   * ========================================================================= */
+  --layout-content-max: 1024px;        /* Standard content max width (max-w-5xl) */
+  --layout-wide-max: 1152px;           /* Wide dashboard max width (max-w-6xl) */
+
+  /* =========================================================================
+   * 8. MOTION PHYSICS & ANIMATION TIMINGS
+   * Instant (100ms), Fast (150ms), Regular (200ms), Deliberate (300ms)
+   * ========================================================================= */
+  --duration-instant: 100ms;           /* 100ms - Micro-toggles, tactile clicks */
+  --duration-fast: 150ms;              /* 150ms - Buttons, cards, input interactions */
+  --duration-regular: 200ms;           /* 200ms - Heatmap filtering, tab switching */
+  --duration-deliberate: 300ms;         /* 300ms - Modals, drawer sheets, large views */
+
+  /* Aliases for backwards compatibility */
+  --duration-normal: var(--duration-regular);
+  --duration-slow: var(--duration-deliberate);
   
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-tactical: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* =========================================================================
+   * 9. ELEVATION & SHADOW EFFECTS (Luminance-First Stoic Lighting)
+   * Standard allowed shadow: 0 1px 2px rgba(0,0,0,0.15)
+   * Heavy shadows & colored glows are legacy debt — do not expand in new UI
+   * ========================================================================= */
+  --shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.15);
   --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.8);
   --shadow-dropdown: 0 20px 40px -15px rgba(0, 0, 0, 0.9);
   --shadow-ruby-hover: 0 10px 30px -10px rgba(225, 29, 72, 0.15);
 
+  /* Legacy ambient glow variables (document as legacy debt) */
+  --glow-crimson: rgba(225, 29, 72, 0.16);
+  --glow-crimson-subtle: rgba(225, 29, 72, 0.08);
+  --glow-amber: rgba(251, 191, 36, 0.16);
+  --glow-emerald: rgba(52, 211, 153, 0.16);
+
   /* =========================================================================
-   * 6. Z-INDEX SCALE
+   * 10. Z-INDEX SCALE
    * ========================================================================= */
   --z-base: 0;
   --z-card: 10;
   --z-card-inner: 20;
+  --z-sticky-subtab: 30;
   --z-sticky-header: 40;
   --z-mobile-nav: 40;
   --z-toast: 50;
@@ -104,27 +211,407 @@
   --z-modal-content: 100;
 
   /* =========================================================================
-   * 7. MOTION PHYSICS & ANIMATION TIMINGS
-   * ========================================================================= */
-  --duration-fast: 150ms;
-  --duration-normal: 200ms;
-  --duration-slow: 300ms;
-  
-  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-tactical: cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* =========================================================================
-   * 8. PWA STANDALONE SAFE-AREA INSETS
+   * 11. PWA STANDALONE SAFE-AREA INSETS & SHELL OFFSETS
    * ========================================================================= */
   --safe-area-top: max(0.5rem, env(safe-area-inset-top, 0px));
   --safe-area-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+  --keyboard-inset-bottom: env(keyboard-inset-height, 0px);
+  --navbar-height-mobile: 3.5rem;
+  --navbar-height-desktop: 4rem;
+  --header-offset-mobile: calc(var(--safe-area-top) + var(--navbar-height-mobile));
+  --header-offset-desktop: calc(var(--safe-area-top) + var(--navbar-height-desktop));
 }
 
 /* =========================================================================
- * BASE UTILITY CLASSES & COMPONENT EXTENSIONS
+ * GOVERNANCE SEMANTIC UTILITY CLASSES & COMPONENT CONTRACTS
  * ========================================================================= */
 
-/* Obsidian Surface Backgrounds */
+/* Surface Level Utilities (Z-Axis Luminance Hierarchy) */
+.surface-z0 {
+  background-color: var(--color-canvas-root) !important;
+}
+
+.surface-shell {
+  background-color: var(--color-shell-chrome) !important;
+  backdrop-filter: blur(20px) saturate(190%);
+  -webkit-backdrop-filter: blur(20px) saturate(190%);
+  background-image: none !important;
+}
+
+/* Sticky Sub-Tab Bar Container & Positioning */
+.sticky-subtab-bar {
+  position: sticky !important;
+  top: var(--header-offset-mobile) !important;
+  z-index: var(--z-sticky-subtab) !important;
+}
+
+@media (min-width: 640px) {
+  .sticky-subtab-bar {
+    top: var(--header-offset-desktop) !important;
+  }
+}
+
+.surface-z1 {
+  background-color: var(--color-card-elevated) !important;
+}
+
+.surface-z2 {
+  background-color: var(--color-card-inner) !important;
+}
+
+.surface-z3 {
+  background-color: var(--color-card-floating) !important;
+}
+
+/* Modal & Dropdown Backdrop Utilities */
+.surface-backdrop-modal {
+  background-color: rgba(9, 9, 11, 0.85) !important;
+}
+
+.surface-backdrop-dropdown {
+  background-color: rgba(9, 9, 11, 0.35) !important;
+}
+
+/* Virtual Keyboard Resilience Container for Modals & Interactive Overlays */
+.modal-overlay-resilient {
+  max-height: 100dvh !important;
+  max-height: 100svh !important;
+  padding-bottom: max(var(--safe-area-bottom), var(--keyboard-inset-bottom)) !important;
+  scroll-padding-bottom: max(var(--safe-area-bottom), var(--keyboard-inset-bottom), 1.5rem) !important;
+}
+
+.modal-dialog-resilient {
+  max-height: min(92dvh, calc(100dvh - var(--safe-area-top) - max(var(--safe-area-bottom), var(--keyboard-inset-bottom)) - 1rem)) !important;
+}
+
+/* Surface Pseudo-Class State Utilities (Technical Gap Fix) */
+.hover\:surface-z1:hover {
+  background-color: var(--color-card-elevated) !important;
+}
+
+.hover\:surface-z2:hover {
+  background-color: var(--color-card-inner) !important;
+}
+
+.hover\:surface-z3:hover {
+  background-color: var(--color-card-floating) !important;
+}
+
+.active\:surface-z2:active {
+  background-color: var(--color-card-inner) !important;
+}
+
+.active\:surface-z3:active {
+  background-color: var(--color-card-floating) !important;
+}
+
+.hover\:bg-amber-subtle:hover {
+  background-color: var(--color-accent-amber-bg) !important;
+}
+
+.hover\:bg-debt-subtle:hover {
+  background-color: var(--color-accent-red-bg) !important;
+}
+
+/* Standard Border Utilities */
+.border-standard {
+  border: 1px solid var(--color-border-subtle) !important;
+}
+
+.border-subtle {
+  border: 1px solid var(--color-border-muted) !important;
+}
+
+.border-hover:hover {
+  border-color: var(--color-border-hover) !important;
+}
+
+.border-active {
+  border-color: var(--color-border-active) !important;
+}
+
+/* Standard Divider Utilities */
+.divide-standard > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--color-border-subtle) !important;
+}
+
+.divide-subtle > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--color-border-muted) !important;
+}
+
+/* Text Role Luminance Utilities */
+.text-role-primary {
+  color: var(--color-text-primary) !important;
+}
+
+.bg-role-secondary { background-color: var(--color-text-secondary) !important; }
+
+.text-role-secondary {
+  color: var(--color-text-secondary) !important;
+}
+
+.text-role-muted {
+  color: var(--color-text-muted) !important;
+}
+
+.text-role-disabled {
+  color: var(--color-text-disabled) !important;
+}
+
+.text-canvas-root {
+  color: var(--color-canvas-root) !important;
+}
+
+.bg-text-muted {
+  background-color: var(--color-text-muted) !important;
+}
+
+.ring-offset-canvas-root {
+  --tw-ring-offset-color: var(--color-canvas-root) !important;
+}
+
+/* Semantic Accent Text Roles */
+.text-crimson {
+  color: var(--color-accent-primary) !important;
+}
+
+.text-amber {
+  color: var(--color-accent-amber) !important;
+}
+
+.text-emerald {
+  color: var(--color-accent-emerald) !important;
+}
+
+.text-orange {
+  color: var(--color-accent-orange-light) !important;
+}
+
+.text-streak {
+  color: var(--color-streak-flame) !important;
+}
+
+.text-rose {
+  color: var(--color-accent-rose) !important;
+}
+
+.text-debt {
+  color: var(--color-accent-red) !important;
+}
+
+.text-blue {
+  color: var(--color-accent-blue) !important;
+}
+
+.text-purple {
+  color: var(--color-accent-purple) !important;
+}
+
+/* Semantic Accent Background Roles (Solid & Subtle) */
+.bg-crimson {
+  background-color: var(--color-accent-primary) !important;
+}
+
+.bg-crimson-subtle {
+  background-color: var(--color-accent-primary-subtle) !important;
+}
+
+.bg-amber {
+  background-color: var(--color-accent-amber) !important;
+}
+
+.bg-amber-subtle {
+  background-color: var(--color-accent-amber-bg) !important;
+}
+
+.bg-emerald {
+  background-color: var(--color-accent-emerald) !important;
+}
+
+.bg-emerald-subtle {
+  background-color: var(--color-accent-emerald-bg) !important;
+}
+
+.bg-orange {
+  background-color: var(--color-accent-orange) !important;
+}
+
+.bg-orange-subtle {
+  background-color: var(--color-accent-orange-bg) !important;
+}
+
+.bg-streak-subtle {
+  background-color: var(--color-streak-flame-bg) !important;
+}
+
+.bg-rose {
+  background-color: var(--color-accent-rose) !important;
+}
+.bg-rose-subtle {
+  background-color: var(--color-accent-rose-bg) !important;
+}
+
+.bg-debt {
+  background-color: var(--color-accent-red-deep) !important;
+}
+
+.bg-debt-subtle {
+  background-color: var(--color-accent-red-bg) !important;
+}
+
+.bg-blue {
+  background-color: var(--color-accent-blue) !important;
+}
+
+.bg-blue-subtle {
+  background-color: var(--color-accent-blue-bg) !important;
+}
+
+.bg-purple {
+  background-color: var(--color-accent-purple) !important;
+}
+
+.bg-purple-subtle {
+  background-color: var(--color-accent-purple-bg) !important;
+}
+
+/* Semantic Accent Border Roles (Solid & Subtle) */
+.border-crimson {
+  border-color: var(--color-accent-primary) !important;
+}
+
+.border-crimson-subtle {
+  border-color: var(--color-accent-primary-border) !important;
+}
+
+.border-amber {
+  border-color: var(--color-accent-amber) !important;
+}
+
+.border-amber-subtle {
+  border-color: var(--color-accent-amber-border) !important;
+}
+
+.border-emerald {
+  border-color: var(--color-accent-emerald) !important;
+}
+
+.border-emerald-subtle {
+  border-color: var(--color-accent-emerald-border) !important;
+}
+
+.border-orange {
+  border-color: var(--color-accent-orange) !important;
+}
+
+.border-orange-subtle {
+  border-color: var(--color-accent-orange-border) !important;
+}
+
+.border-streak-subtle {
+  border-color: var(--color-streak-flame-border) !important;
+}
+
+.border-rose {
+  border-color: var(--color-accent-rose) !important;
+}
+
+.border-rose-subtle {
+  border-color: var(--color-accent-rose-border) !important;
+}
+
+.border-debt {
+  border-color: var(--color-accent-red) !important;
+}
+
+.border-debt-subtle {
+  border-color: var(--color-accent-red-border) !important;
+}
+
+.border-blue {
+  border-color: var(--color-accent-blue) !important;
+}
+
+.border-blue-subtle {
+  border-color: var(--color-accent-blue-border) !important;
+}
+
+.border-purple {
+  border-color: var(--color-accent-purple) !important;
+}
+
+.border-purple-subtle {
+  border-color: var(--color-accent-purple-border) !important;
+}
+
+/* Semantic Spacing & Gap Utilities (4px Grid Discrete Steps) */
+.gap-token-4 {
+  gap: var(--gap-4) !important;
+}
+
+.gap-token-8 {
+  gap: var(--gap-8) !important;
+}
+
+.gap-token-16 {
+  gap: var(--gap-16) !important;
+}
+
+.gap-token-24 {
+  gap: var(--gap-24) !important;
+}
+
+.gap-token-32 {
+  gap: var(--gap-32) !important;
+}
+
+/* Semantic Radius Utilities */
+.radius-micro {
+  border-radius: var(--radius-micro) !important;
+}
+
+.radius-badge {
+  border-radius: var(--radius-badge) !important;
+}
+
+.radius-control {
+  border-radius: var(--radius-control) !important;
+}
+
+.radius-component {
+  border-radius: var(--radius-component) !important;
+}
+
+.radius-card {
+  border-radius: var(--radius-card) !important;
+}
+
+.radius-modal {
+  border-radius: var(--radius-modal) !important;
+}
+
+.radius-capsule {
+  border-radius: var(--radius-capsule) !important;
+}
+
+/* Semantic Motion Utilities */
+.motion-instant {
+  transition-duration: var(--duration-instant) !important;
+}
+
+.motion-fast {
+  transition-duration: var(--duration-fast) !important;
+}
+
+.motion-regular {
+  transition-duration: var(--duration-regular) !important;
+}
+
+.motion-deliberate {
+  transition-duration: var(--duration-deliberate) !important;
+}
+
+/* Backward-Compatible Obsidian Surface Classes (Preserved for Active Components) */
 .bg-card-obsidian {
   background-color: var(--color-card-elevated) !important;
 }
@@ -139,7 +626,7 @@
 
 /* Interactive Ruby Hover Effect */
 .card-hover-ruby {
-  transition: all var(--duration-normal) var(--ease-tactical);
+  transition: all var(--duration-fast) var(--ease-tactical);
 }
 
 .card-hover-ruby:hover {
@@ -147,7 +634,7 @@
   box-shadow: var(--shadow-ruby-hover) !important;
 }
 
-/* Theme Glow Utilities */
+/* Legacy Theme Glow Utilities (Avoid expanding in new UI) */
 .theme-glow {
   box-shadow: 0 0 25px var(--glow-crimson) !important;
 }
@@ -157,7 +644,7 @@
 }
 
 .theme-border {
-  border-color: rgba(225, 29, 72, 0.4) !important;
+  border-color: var(--color-accent-primary-border) !important;
 }
 
 .theme-text {
@@ -169,7 +656,204 @@
 }
 
 .theme-bg-subtle {
-  background-color: var(--glow-crimson-subtle) !important;
+  background-color: var(--color-accent-primary-subtle) !important;
+}
+
+/* Focus Ring Helper (Tactical 2px visible ring, respects APCA & dark background) */
+.focus-ring-tactical:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--color-canvas-root), 0 0 0 4px var(--color-accent-primary-border) !important;
+}
+
+/* Neutral Input Focus Ring Helper (Matte white/zinc focus ring for inputs and textareas - Zero False Error Halo) */
+.focus-ring-neutral:focus-visible,
+.focus-ring-neutral:focus {
+  outline: none !important;
+  border-color: var(--color-input-border-focus) !important;
+  box-shadow: 0 0 0 2px var(--color-canvas-root), 0 0 0 4px var(--color-input-ring-focus) !important;
+}
+
+/* Button Contract Utility Classes */
+.btn-contract-primary {
+  background-color: var(--color-accent-primary) !important;
+  color: #ffffff !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-primary:hover {
+  background-color: var(--color-accent-primary-hover) !important;
+}
+
+.btn-contract-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-primary:disabled,
+.btn-contract-primary.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.btn-contract-mastery {
+  background-color: var(--color-accent-amber) !important;
+  color: #09090b !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-mastery:hover {
+  filter: brightness(1.05);
+}
+
+.btn-contract-mastery:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-mastery:disabled,
+.btn-contract-mastery.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.btn-contract-secondary {
+  background-color: var(--color-card-inner) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  color: var(--color-text-primary) !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-secondary:hover {
+  border-color: var(--color-border-hover) !important;
+  background-color: var(--color-card-floating) !important;
+}
+
+.btn-contract-secondary:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-secondary:disabled,
+.btn-contract-secondary.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+.btn-contract-ghost {
+  background-color: transparent !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-ghost:hover {
+  background-color: var(--color-card-inner) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.btn-contract-ghost:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-ghost:disabled,
+.btn-contract-ghost.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+/* 5. Danger / Destructive Action Button Contracts */
+.btn-contract-danger {
+  background-color: var(--color-accent-red-deep) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--color-accent-red-deep) !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-danger:hover {
+  background-color: #dc2626 !important;
+  border-color: #dc2626 !important;
+  filter: brightness(1.08);
+}
+
+.btn-contract-danger:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-danger:disabled,
+.btn-contract-danger.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+/* Danger Subtle (Surface Trigger: restrained idle, turns crimson on hover) */
+.btn-contract-danger-subtle {
+  background-color: var(--color-card-inner) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  color: var(--color-text-secondary) !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-danger-subtle:hover {
+  background-color: var(--color-accent-red-bg) !important;
+  border-color: var(--color-accent-red-border) !important;
+  color: var(--color-accent-red) !important;
+}
+
+.btn-contract-danger-subtle:active {
+  transform: scale(0.98);
+  background-color: rgba(239, 68, 68, 0.25) !important;
+}
+
+.btn-contract-danger-subtle:disabled,
+.btn-contract-danger-subtle.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
+/* Danger Ghost (Transparent Trigger: e.g. table rows & compact menus) */
+.btn-contract-danger-ghost {
+  background-color: transparent !important;
+  color: var(--color-text-muted) !important;
+  border-radius: var(--radius-component) !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+}
+
+.btn-contract-danger-ghost:hover {
+  background-color: var(--color-accent-red-bg) !important;
+  color: var(--color-accent-red) !important;
+}
+
+.btn-contract-danger-ghost:active {
+  transform: scale(0.98);
+}
+
+.btn-contract-danger-ghost:disabled,
+.btn-contract-danger-ghost.is-disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
 }
 
 /* Glassmorphism Backdrop Blur */
@@ -180,12 +864,12 @@
 
 /* Font Feature Settings for Numbers & Persian Typography */
 .font-mono {
-  font-family: 'Vazirmatn', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-family: 'Vazirmatn', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace !important;
   font-feature-settings: "ss01" on, "tnum" on !important;
 }
 
 .font-en {
-  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
 }
 
 /* PWA Safe-Area Spacing Utilities */
@@ -213,9 +897,200 @@
 
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-subtle);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-capsule);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-border-hover);
+}
+
+/* =========================================================================
+ * 12. SEMANTIC COMPONENT ENTITIES (Master Scalable Design Governance)
+ * Single Source of Truth for Entity Styles across all Views & Modals
+ * ========================================================================= */
+
+/* Master Hero & Overview Containers */
+.entity-hero-panel {
+  background-color: var(--color-card-elevated) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: var(--radius-modal) !important;
+  box-shadow: var(--shadow-subtle) !important;
+}
+
+/* Habit Card Component Entity */
+.entity-card-habit {
+  background-color: var(--color-card-elevated) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: var(--radius-card) !important;
+  min-height: 44px !important;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.entity-card-habit:hover {
+  border-color: var(--color-border-hover) !important;
+}
+
+.entity-card-habit:active {
+  transform: scale(0.99);
+}
+
+.entity-card-habit.is-checked-standard {
+  border-color: var(--color-accent-emerald-border) !important;
+  box-shadow: var(--shadow-subtle) !important;
+}
+
+.entity-card-habit.is-checked-mastery {
+  border-color: var(--color-accent-amber-border) !important;
+  box-shadow: var(--shadow-subtle) !important;
+}
+
+.entity-card-habit:disabled,
+.entity-card-habit.is-locked {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+}
+
+/* Circular Checkmark / Touch Stamp Entity inside Habit Cards */
+.entity-stamp-target {
+  background-color: var(--color-card-inner) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: var(--radius-capsule) !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+  flex-shrink: 0;
+}
+
+.entity-stamp-target.is-checked-standard {
+  border-color: var(--color-accent-emerald-border) !important;
+  color: var(--color-accent-emerald) !important;
+}
+
+.entity-stamp-target.is-checked-mastery {
+  border-color: var(--color-accent-amber-border) !important;
+  color: var(--color-accent-amber) !important;
+}
+
+/* Inset Input Well & Form Textarea Entity */
+.entity-input-well {
+  background-color: var(--color-card-elevated) !important;
+  border: 1px solid var(--color-border-standard) !important;
+  border-radius: var(--radius-card) !important;
+  color: var(--color-text-primary) !important;
+  transition: border-color var(--duration-fast) var(--ease-tactical) !important;
+}
+
+.entity-input-well:hover:not(:disabled) {
+  border-color: var(--color-border-hover) !important;
+}
+
+.entity-input-well:focus {
+  outline: none !important;
+  border-color: var(--color-input-border-focus) !important;
+  box-shadow: 0 0 0 2px var(--color-canvas-root), 0 0 0 4px var(--color-input-ring-focus) !important;
+}
+
+.entity-input-well:disabled {
+  opacity: 0.6 !important;
+  cursor: not-allowed !important;
+}
+
+/* Metric / Stats Bento Card Entity (Strictly read-only display) */
+.entity-metric-card {
+  background-color: var(--color-card-elevated) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: var(--radius-card) !important;
+  box-shadow: var(--shadow-subtle) !important;
+}
+
+/* Nested Inner Well Metric Card (for Z2 inside Z1 - strictly read-only display) */
+.entity-metric-card-nested {
+  background-color: var(--color-card-inner) !important;
+  border: 1px solid var(--color-border-subtle) !important;
+  border-radius: var(--radius-card) !important;
+}
+
+/* Status Pill & Telemetry Badge (Strict Non-Clickable) */
+.entity-status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 1.625rem; /* 26px */
+  border-radius: var(--radius-capsule) !important;
+  padding: 0 0.6875rem !important;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  cursor: default;
+}
+
+.entity-telemetry-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  height: 1.625rem; /* 26px */
+  border-radius: var(--radius-capsule) !important;
+  padding: 0 0.6875rem !important;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  cursor: default;
+  border: none !important;
+  background-color: var(--color-card-inner) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* Precision Meter Gauge Track */
+.entity-gauge-track {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.125rem 0 !important;
+}
+
+/* Tactical Interactive Button Entity */
+.entity-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 44px;
+  border-radius: var(--radius-component) !important;
+  font-weight: 700;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+  transition: all var(--duration-fast) var(--ease-tactical) !important;
+}
+
+.entity-action-btn:active {
+  transform: scale(0.98);
+}
+
+/* Accessibility: Global Reduced Motion Compliance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

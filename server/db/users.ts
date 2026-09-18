@@ -9,8 +9,10 @@ import {
 import {
   SUPER_ADMIN_PHONE,
   SUPER_ADMIN_EMAIL,
-  isSuperAdminIdentifier
+  isSuperAdminIdentifier,
+  allowTestShortcuts
 } from '../security';
+import { normalizePhoneNumber } from '../utils/phone';
 
 export function normalizeIdentifier(val: string): string {
   if (!val) return '';
@@ -29,6 +31,7 @@ function mapPrismaUser(user: any): DBUser {
   if (!user) return user;
   return {
     ...user,
+    tokenVersion: user.tokenVersion !== undefined && user.tokenVersion !== null ? user.tokenVersion : 0,
     vipSince: user.vipSince instanceof Date ? user.vipSince.toISOString() : user.vipSince,
     vipExpiresAt: user.vipExpiresAt instanceof Date ? user.vipExpiresAt.toISOString() : user.vipExpiresAt,
     createdAt: user.createdAt instanceof Date ? user.createdAt.toISOString() : user.createdAt,
@@ -52,7 +55,37 @@ export async function findUserById(id: string): Promise<DBUser | null> {
   return found || null;
 }
 
+export async function findUserByPhoneNumber(phone: string): Promise<DBUser | null> {
+  const canonicalPhone = normalizePhoneNumber(phone);
+  if (!canonicalPhone) return null;
+
+  if (isPrismaAvailable && prisma) {
+    try {
+      const user = await prisma.user.findFirst({
+        where: { phoneNumber: canonicalPhone }
+      });
+      if (user) return mapPrismaUser(user);
+    } catch (e) {
+      console.warn('[Database] Prisma findUserByPhoneNumber failed, falling back to local store:', e);
+    }
+  }
+
+  const found = memoryStore.users.find(u => {
+    if (!u.phoneNumber) return false;
+    const uPhoneNorm = normalizePhoneNumber(u.phoneNumber);
+    return uPhoneNorm === canonicalPhone || u.phoneNumber === canonicalPhone;
+  });
+
+  return found || null;
+}
+
 export async function findUserByIdentifier(identifier: string): Promise<DBUser | null> {
+  const canonicalPhone = normalizePhoneNumber(identifier);
+  if (canonicalPhone) {
+    const byPhone = await findUserByPhoneNumber(canonicalPhone);
+    if (byPhone) return byPhone;
+  }
+
   const normalized = normalizeIdentifier(identifier);
   
   if (isPrismaAvailable && prisma) {
@@ -85,6 +118,8 @@ export async function createUser(data: {
   tier?: string;
   isVip?: boolean;
   isAdmin?: boolean;
+  tokenVersion?: number;
+  withStarterCycle?: boolean;
 }): Promise<DBUser> {
   const now = new Date().toISOString();
   const id = `user-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -92,9 +127,27 @@ export async function createUser(data: {
   const cleanEmail = data.email ? normalizeIdentifier(data.email) : undefined;
   const cleanPhone = data.phoneNumber ? normalizeIdentifier(data.phoneNumber) : undefined;
 
+  // Enforce unique phone / email in fallback store
+  if (cleanPhone) {
+    const existingPhone = memoryStore.users.find(u => u.phoneNumber === cleanPhone);
+    if (existingPhone) {
+      const err: any = new Error(`User with phone ${cleanPhone} already exists`);
+      err.code = 'P2002';
+      throw err;
+    }
+  }
+  if (cleanEmail) {
+    const existingEmail = memoryStore.users.find(u => u.email === cleanEmail);
+    if (existingEmail) {
+      const err: any = new Error(`User with email ${cleanEmail} already exists`);
+      err.code = 'P2002';
+      throw err;
+    }
+  }
+
   const isMasterAccount = isSuperAdminIdentifier(cleanEmail) || isSuperAdminIdentifier(cleanPhone);
   const isFirstUser = memoryStore.users.length === 0;
-  const isAdmin = isMasterAccount ? true : (data.isAdmin !== undefined ? data.isAdmin : isFirstUser);
+  const isAdmin = isMasterAccount ? true : (data.isAdmin !== undefined ? data.isAdmin : (allowTestShortcuts() ? isFirstUser : false));
   const isVip = isMasterAccount ? true : Boolean(data.isVip);
 
   const newUser: DBUser = {
@@ -106,6 +159,7 @@ export async function createUser(data: {
     tier: isMasterAccount ? 'vip_samurai' : (data.tier || (isVip ? 'vip_samurai' : 'free')),
     isVip,
     isAdmin,
+    tokenVersion: data.tokenVersion !== undefined && data.tokenVersion !== null ? data.tokenVersion : 0,
     nightOwlCutoffHour: 4,
     accentTheme: 'amber',
     vipSince: isVip ? now : null,
@@ -127,6 +181,7 @@ export async function createUser(data: {
           tier: newUser.tier,
           isVip: newUser.isVip,
           isAdmin: newUser.isAdmin,
+          tokenVersion: newUser.tokenVersion,
           nightOwlCutoffHour: newUser.nightOwlCutoffHour,
           accentTheme: newUser.accentTheme,
           vipSince: newUser.vipSince ? new Date(newUser.vipSince) : null,
@@ -142,10 +197,12 @@ export async function createUser(data: {
 
   memoryStore.users.push(newUser);
 
-  // Automatically seed starter cycle and logs for new registered user in local fallback
-  const seed = seedUserData(newUser.id);
-  memoryStore.cycles.push(seed.cycle);
-  memoryStore.dailyLogs.push(...seed.logs);
+  // Seed starter cycle and logs only if explicitly requested (e.g. initial demo setup)
+  if (data.withStarterCycle) {
+    const seed = seedUserData(newUser.id);
+    memoryStore.cycles.push(seed.cycle);
+    memoryStore.dailyLogs.push(...seed.logs);
+  }
 
   saveLocalStore();
   return newUser;
@@ -167,6 +224,12 @@ export async function updateUser(
     safeData.isVip = true;
     safeData.tier = 'vip_samurai';
   }
+
+  // Hardened Identity & Creation Immutability:
+  // Explicitly prevent mutation of id, userId, or createdAt under all circumstances
+  delete safeData.id;
+  delete safeData.userId;
+  delete safeData.createdAt;
 
   if (isPrismaAvailable && prisma) {
     try {
@@ -193,11 +256,31 @@ export async function updateUser(
   memoryStore.users[idx] = {
     ...memoryStore.users[idx],
     ...safeData,
+    id: existingUser.id,
+    createdAt: existingUser.createdAt,
     updatedAt: now
   };
 
   saveLocalStore();
   return memoryStore.users[idx];
+}
+
+export async function deleteUser(id: string): Promise<boolean> {
+  if (isPrismaAvailable && prisma) {
+    try {
+      await prisma.user.delete({ where: { id } });
+      memoryStore.users = memoryStore.users.filter(u => u.id !== id);
+      saveLocalStore();
+      return true;
+    } catch (e) {
+      console.warn('[Database] Prisma deleteUser failed, removing from local store:', e);
+    }
+  }
+
+  const prevLen = memoryStore.users.length;
+  memoryStore.users = memoryStore.users.filter(u => u.id !== id);
+  saveLocalStore();
+  return memoryStore.users.length < prevLen;
 }
 
 // -------------------------------------------------------------

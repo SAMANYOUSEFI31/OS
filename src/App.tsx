@@ -3,154 +3,281 @@ import React, {
   useEffect, 
   useMemo, 
   useCallback, 
-  useRef, 
-  Suspense, 
-  lazy, 
-  Component, 
-  ErrorInfo, 
-  ReactNode 
+  useRef,
+  Suspense
 } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem } from './types';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
+import { Cycle, DailyLog, SystemSettings, UserProfile, AdminUserItem, OfflineQueueItem } from './types';
 import { createInitialSystemState, GUEST_USER_PROFILE } from './data/initialData';
-import { computeCycleMetrics, createEmptyCycleMetrics } from './engine/bushidoCalculations';
-import { getLogicalTodayDate, addDaysToDate } from './utils/dateUtils';
-import { applyAccentTheme } from './utils/themeUtils';
+import { computeCycleMetrics, createEmptyCycleMetrics, computeDailyProperties } from './engine/bushidoCalculations';
+import { getLogicalTodayDate, addDaysToDate } from './shared/utils/dateUtils';
+import { applyAccentTheme } from './shared/utils/themeUtils';
 import { 
   loadStoredSystemState, 
   saveSystemStateDebounced, 
   flushPendingStorageSave, 
-  TOKEN_KEY 
-} from './utils/storageUtils';
-import { Navbar } from './components/Navbar';
-import { AutopsyModal } from './components/AutopsyModal';
-import { PaymentModal } from './components/PaymentModal';
-import { AuthModal } from './components/AuthModal';
-import { CreateCycleModal } from './components/CreateCycleModal';
-import { Toast, ToastItem, ToastType } from './components/Toast';
-import { RotateCcw, AlertTriangle, Eye, ShieldCheck, RefreshCw } from 'lucide-react';
+  cancelPendingStorageSave,
+  TOKEN_KEY,
+  getScopedStorageKey,
+  getScopedDemoConsumedKey,
+  getActiveAccountId,
+  setActiveAccountId,
+  normalizeUserId,
+  transitionAccountState,
+  resetAccountState,
+  buildExportPayload,
+  safeGetLocalStorage,
+  safeSetLocalStorage,
+  safeRemoveLocalStorage,
+  safeGetSessionStorage,
+  safeSetSessionStorage,
+  safeRemoveSessionStorage,
+  resolveBackendSyncDecision,
+  migrateLegacyGlobalQueue,
+  enqueueOfflineMutation,
+  normalizeQueueOwner,
+  isGuestQueueOwner,
+  shouldQueueOfflineMutation
+} from './sync/storageUtils';
+import {
+  getOfflineQueue,
+  parseSafeConflictDetails,
+  recordClientConflict,
+  getRuntimeInFlightCount,
+  getUnreplayableQueueItems,
+  clearFailedQueueItems
+} from './sync/offlineQueueUtils';
+import {
+  applyOptimisticLogUpdate,
+  rollbackOptimisticLogUpdate,
+  applyOptimisticCycleUpdate,
+  rollbackOptimisticCycleUpdate,
+  rollbackOptimisticCycleDelete,
+  rollbackOptimisticCycleCreate,
+  prepareDirectLogPayload,
+  prepareDirectCyclePayload,
+  verifyActiveAccount,
+  safeMergeReconciledLogs,
+  safeMergeReconciledCycles,
+  applyReplayItemToActiveState,
+  executeDirectDailyLogMutation,
+  executeDirectCreateCycleMutation,
+  executeDirectUpdateCycleMutation,
+  executeDirectDeleteCycleMutation
+} from './sync/directMutationUtils';
+import {
+  deriveUnresolvedDebtLogs,
+  convertVirtualDebtLogForMutation
+} from './features/autopsy/debtAutopsyUtils';
+import { reconcileBootState } from './sync/syncReconciliation';
+import { emitSyncDiagnostic } from './sync/syncDiagnostics';
+import { 
+  createSyncOrchestrator, 
+  SyncTrigger, 
+  SyncOrchestrator,
+  SyncRunOutcome,
+  bindBootAuthAndRequestSync
+} from './sync/syncOrchestrator';
+import {
+  performVisibilityRefetch,
+  setupVisibilityRefetchListeners
+} from './sync/visibilitySyncUtils';
+import {
+  IMPERSONATOR_TOKEN_KEY,
+  IMPERSONATING_USER_KEY,
+  validateAdminTokenForExit,
+  processExitImpersonationOutcome,
+  buildExitImpersonationSuccessState,
+  buildExitImpersonationRevokedState,
+  executeLogoutDuringImpersonation
+} from './sync/impersonationUtils';
+import { Navbar } from './shared/components/layout/Navbar';
+import { BattlefieldView } from './features/battlefield/BattlefieldView';
+import { ViewLoadingSkeleton } from './shared/components/feedback/ViewLoadingSkeleton';
+import { AutopsyModal } from './features/autopsy/AutopsyModal';
+import { PaymentModal } from './features/payment/PaymentModal';
+import { AuthModal } from './features/auth/AuthModal';
+import { CreateCycleModal } from './features/cycles/CreateCycleModal';
+import { DisciplineRulesModal } from './features/court/DisciplineRulesModal';
+import { ResetConfirmationModal } from './features/cycles/ResetConfirmationModal';
+import { FirstRunTour } from './features/tour/FirstRunTour';
+import { PwaInstallBanner } from './shared/components/pwa/PwaInstallBanner';
+import { IosInstallTip } from './shared/components/pwa/IosInstallTip';
+import { isTourSeen, markTourSeen, resetTourSeen, markFirstValueAchieved } from './sync/storageUtils';
+import { ErrorBoundary } from './shared/components/feedback/ErrorBoundary';
+import { useBodyScrollLock } from './shared/hooks/useBodyScrollLock';
+import { Toast, ToastItem, ToastType } from './shared/components/feedback/Toast';
+import { toPersianDigits } from './shared/utils/numberUtils';
+import { resolveTabFromPath, getPathForTab, normalizePathname, shouldPushTab } from './app/routing/routerUtils';
+import { RotateCcw, Eye, ShieldCheck } from 'lucide-react';
 import './styles/tokens.css';
 
-// Lazy loading heavy views for optimized initial load (LCP & Code Splitting)
-const BattlefieldView = lazy(() => import('./components/BattlefieldView').then(m => ({ default: m.BattlefieldView })));
-const CycleDashboardView = lazy(() => import('./components/CycleDashboardView').then(m => ({ default: m.CycleDashboardView })));
-const ArchivesView = lazy(() => import('./components/ArchivesView').then(m => ({ default: m.ArchivesView })));
-const ProfileSettingsView = lazy(() => import('./components/ProfileSettingsView').then(m => ({ default: m.ProfileSettingsView })));
-const AdminView = lazy(() => import('./components/AdminView').then(m => ({ default: m.AdminView })));
-
-interface ErrorBoundaryProps {
-  children: ReactNode;
-}
-
-interface ErrorBoundaryState {
-  hasError: boolean;
-  error: Error | null;
-}
-
-class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-  };
-
-  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { hasError: true, error };
-  }
-
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    console.error('[Bushido ErrorBoundary] Uncaught runtime error:', error, errorInfo);
-  }
-
-  private handleReload = (): void => {
-    this.setState({ hasError: false, error: null });
-    window.location.reload();
-  };
-
-  public render(): ReactNode {
-    if (this.state.hasError) {
-      return (
-        <div className="min-h-screen bg-[#09090b] text-zinc-100 flex items-center justify-center p-4 dir-rtl">
-          <div className="max-w-md w-full bg-[#121215] border border-red-500/30 rounded-3xl p-6 text-center space-y-4 shadow-2xl">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400">
-              <AlertTriangle className="w-7 h-7" />
-            </div>
-            <h2 className="text-lg font-bold text-zinc-100">خطایی در اجرای برنامه رخ داد</h2>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              سامانه بوشیدو با یک خطای غیرمنتظره رندرینگ مواجه شده است. برای جلوگیری از بازگشت به حالت ناپایدار، می‌توانید صفحه را مجدداً بارگذاری کنید.
-            </p>
-            {this.state.error && (
-              <div className="text-[11px] font-mono dir-ltr bg-black/60 p-3 rounded-xl text-red-300 overflow-x-auto text-left border border-zinc-800">
-                {this.state.error.toString()}
-              </div>
-            )}
-            <button
-              onClick={this.handleReload}
-              className="w-full py-3 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-red-600/20"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>بارگذاری مجدد سامانه</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
-const TabLoadingFallback: React.FC = () => (
-  <div className="flex-1 flex flex-col items-center justify-center min-h-[350px] w-full gap-3">
-    <div className="w-8 h-8 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
-    <span className="text-xs text-zinc-400 font-medium">در حال بارگذاری بخش بوشیدو...</span>
-  </div>
+// Lazy load secondary heavy views to minimize initial bundle size and optimize startup performance
+const CycleDashboardView = React.lazy(() => 
+  import('./features/dashboard/CycleDashboardView').then(m => ({ default: m.CycleDashboardView }))
+);
+const ArchivesView = React.lazy(() => 
+  import('./features/archives/ArchivesView').then(m => ({ default: m.ArchivesView }))
+);
+const ProfileSettingsView = React.lazy(() => 
+  import('./features/profile/ProfileSettingsView').then(m => ({ default: m.ProfileSettingsView }))
+);
+const AdminView = React.lazy(() => 
+  import('./features/admin/AdminView').then(m => ({ default: m.AdminView }))
 );
 
 export default function App() {
   const [authToken, setAuthToken] = useState<string | null>(() => {
+    return safeGetLocalStorage(TOKEN_KEY);
+  });
+
+  const [impersonatingUser, setImpersonatingUser] = useState<AdminUserItem | null>(() => {
     try {
-      return localStorage.getItem(TOKEN_KEY);
+      const stored = safeGetSessionStorage('bushido_impersonating_user');
+      return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
-
-  const [impersonatingUser, setImpersonatingUser] = useState<AdminUserItem | null>(null);
-  const [impersonatorAdminToken, setImpersonatorAdminToken] = useState<string | null>(null);
+  const [impersonatorAdminToken, setImpersonatorAdminToken] = useState<string | null>(() => {
+    return safeGetSessionStorage('bushido_impersonator_token');
+  });
 
   const [systemState, setSystemState] = useState<{
     cycles: Cycle[];
     logs: DailyLog[];
     settings: SystemSettings;
     userProfile: UserProfile;
-  }>(() => loadStoredSystemState());
+  }>(() => {
+    const token = safeGetLocalStorage(TOKEN_KEY);
+    const activeAcc = getActiveAccountId();
+    return loadStoredSystemState(token ? activeAcc : null);
+  });
 
   const [activeCycleId, setActiveCycleId] = useState<string>(() => {
-    return systemState.cycles[0]?.id || 'cycle-1';
+    return systemState.cycles[0]?.id || '';
   });
 
   const [selectedDate, setSelectedDate] = useState<string>(() => getLogicalTodayDate());
-  const [activeTab, setActiveTab] = useState<string>('battlefield');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return resolveTabFromPath(window.location.pathname).tab;
+    }
+    return 'battlefield';
+  });
+
+  const navigateTab = useCallback((nextTab: string, options?: { replace?: boolean }) => {
+    const replace = options?.replace ?? false;
+    const targetPath = getPathForTab(nextTab);
+    if (typeof window !== 'undefined') {
+      const needsPush = shouldPushTab(window.location.pathname, nextTab);
+      if (needsPush || replace) {
+        const historyState = { tab: nextTab, inApp: true };
+        if (replace) {
+          window.history.replaceState(historyState, '', targetPath);
+        } else {
+          window.history.pushState(historyState, '', targetPath);
+        }
+      }
+    }
+    setActiveTab(nextTab);
+  }, []);
+
+  // Phase R1B: Router popstate synchronization for browser back/forward buttons and mobile edge-swipe back
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePopState = () => {
+      const resolved = resolveTabFromPath(window.location.pathname);
+      if (!resolved.isKnown) {
+        window.history.replaceState({ tab: resolved.tab, inApp: true }, '', resolved.canonicalPath);
+      }
+      // When user triggers browser Back to switch sections, dismiss open modals cleanly
+      setIsPaymentModalOpen(false);
+      setIsAuthModalOpen(false);
+      setIsCreateCycleModalOpen(false);
+      setIsDisciplineRulesOpen(false);
+      setIsResetConfirmOpen(false);
+      setAutopsyTargetLog(null);
+      setActiveTab(resolved.tab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Phase R1B: Initial load uses replace so the first history entry is clean without creating an extra history item
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const resolved = resolveTabFromPath(window.location.pathname);
+    const cleanPath = resolved.isKnown 
+      ? (window.location.pathname === '/' ? '/' : resolved.canonicalPath) 
+      : '/battlefield';
+    window.history.replaceState({ tab: resolved.tab, inApp: true }, '', cleanPath);
+  }, []);
   const [autopsyTargetLog, setAutopsyTargetLog] = useState<DailyLog | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCreateCycleModalOpen, setIsCreateCycleModalOpen] = useState(false);
+  const [isDisciplineRulesOpen, setIsDisciplineRulesOpen] = useState(false);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
+
+  const currentOwnerId = authToken ? (systemState.userProfile?.id || getActiveAccountId()) : null;
+
+  // Session first-value state: tracks if user performed at least one habit tick in current session
+  const [hasSessionFirstValue, setHasSessionFirstValue] = useState<boolean>(false);
+
+  // First-run coach-mark tour state: show on battlefield for new users/demo sessions
+  const [isTourOpen, setIsTourOpen] = useState<boolean>(() => {
+    const ownerId = safeGetLocalStorage(TOKEN_KEY) ? getActiveAccountId() : null;
+    return !isTourSeen(ownerId) && systemState.cycles.length > 0;
+  });
+
+  useEffect(() => {
+    if (!isTourSeen(currentOwnerId) && systemState.cycles.length > 0) {
+      setIsTourOpen(true);
+    }
+  }, [currentOwnerId, systemState.cycles.length]);
+
+  const handleTourComplete = useCallback(() => {
+    setIsTourOpen(false);
+    markTourSeen(currentOwnerId);
+  }, [currentOwnerId]);
+
+  const handleTourSkip = useCallback(() => {
+    setIsTourOpen(false);
+    markTourSeen(currentOwnerId);
+  }, [currentOwnerId]);
+
+  const handleReplayTour = useCallback(() => {
+    resetTourSeen(currentOwnerId);
+    navigateTab('battlefield');
+    setIsTourOpen(true);
+  }, [currentOwnerId, navigateTab]);
+
+  const isAnyModalOpen = isPaymentModalOpen || isAuthModalOpen || isCreateCycleModalOpen || isDisciplineRulesOpen || isResetConfirmOpen || autopsyTargetLog !== null;
+
+  useBodyScrollLock(isResetConfirmOpen);
 
   // UX Standard: Automatically reset scroll to top when switching main tabs
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
   }, [activeTab]);
 
-  const showAppToast = useCallback((msg: string, type: ToastType = 'success', duration = 2500) => {
+  const showAppToast = useCallback((
+    msg: string,
+    type: ToastType = 'success',
+    duration = 2500,
+    action?: { label: string; onClick: () => void }
+  ) => {
     if (toastTimeoutRef.current) {
       clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
       toastTimeoutRef.current = null;
     }
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    setToasts([{ id, message: msg, type, duration }]);
+    setToasts([{ id, message: msg, type, duration, action }]);
     toastTimeoutRef.current = setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
       toastTimeoutRef.current = null;
@@ -167,6 +294,7 @@ export default function App() {
 
   // Cleanup toast timer on unmount
   useEffect(() => {
+    migrateLegacyGlobalQueue();
     return () => {
       if (toastTimeoutRef.current) {
         clearTimeout(toastTimeoutRef.current as NodeJS.Timeout);
@@ -189,114 +317,438 @@ export default function App() {
     }
   }, [systemState.cycles, activeCycleId]);
 
-  // Debounced non-blocking async persistence to eliminate main thread freeze on mobile
+  // Debounced non-blocking async persistence scoped to active account
   useEffect(() => {
-    saveSystemStateDebounced(systemState, 350);
+    saveSystemStateDebounced(systemState, systemState.userProfile?.id, 350);
     const theme = systemState.userProfile?.accentTheme || systemState.settings?.accentTheme || 'amber';
     applyAccentTheme(theme);
   }, [systemState]);
 
-  // Auto-login to Admin on first fresh session if no token and not explicitly logged out
+  const activeAccountRef = useRef<string | null>(systemState.userProfile?.id || null);
   useEffect(() => {
-    const initDefaultAdminIfNeeded = async () => {
-      const currentToken = localStorage.getItem(TOKEN_KEY);
-      const isExplicitLogout = sessionStorage.getItem('bushido_explicit_logout') === 'true';
-      if (!currentToken && !isExplicitLogout) {
-        try {
-          const res = await fetch('/api/auth/quick-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role: 'admin' })
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.token && data.user) {
-              localStorage.setItem(TOKEN_KEY, data.token);
-              setAuthToken(data.token);
-              setSystemState(prev => ({
-                ...prev,
-                userProfile: {
-                  ...prev.userProfile,
-                  ...data.user,
-                  isVip: Boolean(data.user.isVip),
-                  isAdmin: Boolean(data.user.isAdmin)
-                }
-              }));
-            }
-          }
-        } catch (err) {
-          console.warn('Auto admin login fallback:', err);
-        }
-      }
-    };
+    activeAccountRef.current = systemState.userProfile?.id || null;
+  }, [systemState.userProfile?.id]);
 
-    initDefaultAdminIfNeeded();
+  const authTokenRef = useRef<string | null>(authToken);
+  useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
+
+  const showAppToastRef = useRef(showAppToast);
+  useEffect(() => {
+    showAppToastRef.current = showAppToast;
+  }, [showAppToast]);
+
+  const systemStateRef = useRef(systemState);
+  useEffect(() => {
+    systemStateRef.current = systemState;
+  }, [systemState]);
+
+  const latestLogsRef = useRef<DailyLog[]>(systemState.logs);
+  useEffect(() => {
+    latestLogsRef.current = systemState.logs;
+  }, [systemState.logs]);
+
+  // Monotonic local mutation generation tracking per (ownerId:date) to protect rapid successive habit taps from stale rollbacks or older out-of-order server responses
+  const logMutationGenerationsRef = useRef<Map<string, number>>(new Map());
+  // Active in-flight local habit mutation counter to coordinate with visibility refetch
+  const inFlightLogMutationsRef = useRef<number>(0);
+
+  const lastRemotePullTimestampRef = useRef<number>(0);
+  const isVisibilityRefetchInFlightRef = useRef<boolean>(false);
+  const requestSyncRef = useRef<((trigger: SyncTrigger, targetOwnerId?: string | null, targetToken?: string | null, force?: boolean) => Promise<SyncRunOutcome>) | null>(null);
+
+  const checkAndOfferQueueRepair = useCallback((ownerId?: string | null) => {
+    const unreplayable = getUnreplayableQueueItems(ownerId);
+    if (unreplayable.length > 0) {
+      showAppToastRef.current(
+        `تعداد ${toPersianDigits(unreplayable.length)} مورد از تغییرات آفلاین به سرور ارسال نشد. جهت بازنشانی صف و همگام‌سازی مجدد، «تعمیر همگام‌سازی» را انتخاب کنید یا به ثبت آفلاین ادامه دهید.`,
+        'warning',
+        8000,
+        {
+          label: 'تعمیر همگام‌سازی',
+          onClick: () => {
+            const { clearedCount } = clearFailedQueueItems(ownerId);
+            showAppToastRef.current(
+              `صف همگام‌سازی بازنشانی شد (${toPersianDigits(clearedCount)} مورد قدیمی بایگانی گردید). در حال تلاش مجدد...`,
+              'success',
+              3000
+            );
+            requestSyncRef.current?.('MANUAL_FORCE', ownerId, undefined, true);
+          }
+        }
+      );
+    }
   }, []);
 
-  // Fetch user profile and backend data on mount or token change
+  const handleAppItemSuccess = useCallback((item: OfflineQueueItem, serverResult?: any) => {
+    if (!verifyActiveAccount(activeAccountRef.current, item.ownerId)) {
+      return;
+    }
+    setSystemState(prev => {
+      const nextState = applyReplayItemToActiveState(
+        { cycles: prev.cycles, logs: prev.logs },
+        item,
+        serverResult
+      );
+      return {
+        ...prev,
+        cycles: nextState.cycles,
+        logs: nextState.logs
+      };
+    });
+  }, []);
+
+  const handleAppSyncResult = useCallback((outcome: SyncRunOutcome) => {
+    if (
+      outcome.status === 'COMPLETED' &&
+      outcome.syncedCount > 0 &&
+      !outcome.stoppedDueToAccountChange &&
+      !outcome.stoppedDueToLockLoss &&
+      !outcome.stoppedDueToAuth
+    ) {
+      showAppToastRef.current(
+        `همگام‌سازی ابری با موفقیت انجام شد (${toPersianDigits(outcome.syncedCount)} تغییر ذخیره شد).`,
+        'success'
+      );
+    }
+
+    if (outcome.failedCount > 0) {
+      checkAndOfferQueueRepair(activeAccountRef.current);
+    } else if (outcome.status === 'FAILED') {
+      showAppToastRef.current(
+        'همگام‌سازی با سرور به دلیل اختلال ارتباط انجام نشد؛ داده‌ها در دستگاه محفوظ است. اتصال اینترنت را بررسی کنید یا دوباره تلاش فرمایید.',
+        'warning',
+        7000,
+        {
+          label: 'تلاش مجدد',
+          onClick: () => {
+            requestSyncRef.current?.('MANUAL_FORCE', outcome.ownerId, undefined, true);
+          }
+        }
+      );
+    } else if (outcome.status === 'SKIPPED_OFFLINE' && outcome.triggers.includes('MANUAL_FORCE')) {
+      showAppToastRef.current(
+        'دستگاه در وضعیت آفلاین است؛ امکان ارسال تغییرات وجود ندارد. اتصال اینترنت را بررسی کنید یا در حالت آفلاین ادامه دهید.',
+        'info',
+        6000,
+        {
+          label: 'بررسی مجدد',
+          onClick: () => {
+            requestSyncRef.current?.('MANUAL_FORCE', outcome.ownerId, undefined, true);
+          }
+        }
+      );
+    }
+  }, [checkAndOfferQueueRepair]);
+
+  const syncOrchestratorRef = useRef<SyncOrchestrator | null>(null);
+  if (!syncOrchestratorRef.current) {
+    // Single sync orchestrator gateway delegating to replayAccountOfflineQueue with full coalescing
+    syncOrchestratorRef.current = createSyncOrchestrator({
+      currentActiveAccountResolver: () => activeAccountRef.current,
+      isOnlineResolver: () => typeof navigator === 'undefined' || navigator.onLine,
+      defaultItemSuccessCallback: handleAppItemSuccess,
+      defaultResultCallback: handleAppSyncResult
+    });
+  }
+  const syncOrchestrator = syncOrchestratorRef.current;
+
+  const requestSync = useCallback((
+    trigger: SyncTrigger,
+    targetOwnerId?: string | null,
+    targetToken?: string | null,
+    force = false
+  ) => {
+    const ownerId = targetOwnerId !== undefined ? targetOwnerId : activeAccountRef.current;
+    const token = targetToken !== undefined ? targetToken : (authTokenRef.current || safeGetLocalStorage(TOKEN_KEY));
+
+    return syncOrchestrator.requestSync({
+      trigger,
+      targetOwnerId: ownerId,
+      targetToken: token,
+      force,
+      currentActiveAccountResolver: () => activeAccountRef.current,
+      onItemSuccess: handleAppItemSuccess,
+      onResult: handleAppSyncResult
+    });
+  }, [syncOrchestrator, handleAppItemSuccess, handleAppSyncResult]);
+
   useEffect(() => {
-    const fetchBackendData = async () => {
+    requestSyncRef.current = requestSync;
+  }, [requestSync]);
+
+  useEffect(() => {
+    let onlineTimer: any = null;
+    const handleOnline = () => {
+      if (onlineTimer) clearTimeout(onlineTimer);
+      onlineTimer = setTimeout(() => {
+        requestSync('NETWORK_ONLINE');
+      }, 300);
+    };
+    window.addEventListener('online', handleOnline);
+    return () => {
+      if (onlineTimer) clearTimeout(onlineTimer);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [requestSync]);
+
+  // Fetch user profile and backend data on mount or token change (parallelized without duplicate waterfalls)
+  useEffect(() => {
+    let isCancelled = false;
+
+    const syncBootData = async () => {
       try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (authToken) {
-          headers['Authorization'] = `Bearer ${authToken}`;
+        let currentToken = authToken;
+        const isExplicitLogout = safeGetSessionStorage('bushido_explicit_logout') === 'true';
+
+        // 1. If no token and not explicitly logged out, perform quick-login first so we only fetch cycles/logs once with proper auth
+        if (!currentToken && !isExplicitLogout) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2500);
+            const res = await fetch('/api/auth/quick-login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: 'admin' }),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.token && data.user) {
+                currentToken = data.token;
+                safeSetLocalStorage(TOKEN_KEY, data.token);
+                setActiveAccountId(data.user.id);
+                activeAccountRef.current = data.user.id;
+                authTokenRef.current = data.token;
+                setAuthToken(data.token);
+              }
+            }
+          } catch (err) {
+            console.warn('Auto admin login fallback (running locally):', err);
+          }
         }
 
-        // Fetch User profile if logged in
-        if (authToken) {
-          const userRes = await fetch('/api/auth/me', { headers });
+        if (isCancelled) return;
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (currentToken) {
+          headers['Authorization'] = `Bearer ${currentToken}`;
+        }
+
+        // 2. Fetch User Profile, Cycles, and Logs CONCURRENTLY in parallel (Promise.all)
+        const [userRes, cyclesRes, logsRes] = await Promise.all([
+          currentToken ? fetch('/api/auth/me', { headers }).catch(() => null) : Promise.resolve(null),
+          fetch('/api/cycles', { headers }).catch(() => null),
+          fetch('/api/logs', { headers }).catch(() => null)
+        ]);
+
+        if (isCancelled) return;
+
+        let fetchedUserProfile: Partial<UserProfile> | null = null;
+        if (userRes) {
           if (userRes.ok) {
             const userData = await userRes.json();
-            if (userData.user) {
-              setSystemState(prev => ({
-                ...prev,
-                userProfile: {
-                  ...prev.userProfile,
-                  ...userData.user,
-                  isVip: !!userData.user.isVip,
-                  isAdmin: !!userData.user.isAdmin
-                }
-              }));
+            if (userData?.user) {
+              setActiveAccountId(userData.user.id);
+              activeAccountRef.current = userData.user.id;
+              authTokenRef.current = currentToken;
+              fetchedUserProfile = {
+                ...userData.user,
+                isVip: Boolean(userData.user.isVip),
+                isAdmin: Boolean(userData.user.isAdmin)
+              };
             }
-          } else {
-            // Token expired or invalid
-            localStorage.removeItem(TOKEN_KEY);
+          } else if (userRes.status === 401) {
+            safeRemoveLocalStorage(TOKEN_KEY);
+            setActiveAccountId(null);
+            activeAccountRef.current = null;
+            authTokenRef.current = null;
             setAuthToken(null);
           }
         }
 
-        // Fetch Cycles
-        const cyclesRes = await fetch('/api/cycles', { headers });
-        if (cyclesRes.ok) {
+        let apiCycles: Cycle[] | null = null;
+        if (cyclesRes && cyclesRes.ok) {
           const cyclesData = await cyclesRes.json();
           const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
           if (Array.isArray(cyclesList)) {
-            setSystemState(prev => ({
-              ...prev,
-              cycles: cyclesList
-            }));
+            apiCycles = cyclesList;
           }
         }
 
-        // Fetch Daily Logs
-        const logsRes = await fetch('/api/logs', { headers });
-        if (logsRes.ok) {
+        let apiLogs: DailyLog[] | null = null;
+        if (logsRes && logsRes.ok) {
           const logsData = await logsRes.json();
           const logsList = Array.isArray(logsData) ? logsData : (logsData?.logs || []);
-          if (Array.isArray(logsList) && logsList.length > 0) {
-            setSystemState(prev => ({
-              ...prev,
-              logs: logsList
-            }));
+          if (Array.isArray(logsList)) {
+            apiLogs = logsList;
           }
+        }
+
+        if (isCancelled) return;
+
+        const activeUserId = fetchedUserProfile?.id || (currentToken ? getActiveAccountId() : null);
+        const scopedDemoKey = getScopedDemoConsumedKey(activeUserId);
+        const isDemoConsumed = safeGetLocalStorage(scopedDemoKey) === 'true';
+
+        // Load only the active owner's offline queue
+        const ownerQueue = activeUserId && !isGuestQueueOwner(activeUserId)
+          ? getOfflineQueue(activeUserId)
+          : [];
+
+        // Safe Boot Reconciliation with Pending Offline Mutations
+        const reconciled = reconcileBootState({
+          authenticatedOwnerId: activeUserId,
+          remoteCycles: apiCycles,
+          remoteLogs: apiLogs,
+          remoteUserProfile: fetchedUserProfile,
+          currentLocalState: {
+            cycles: systemState.cycles,
+            logs: systemState.logs,
+            userProfile: systemState.userProfile
+          },
+          pendingQueue: ownerQueue,
+          isDemoConsumed
+        });
+
+        if (isCancelled) return;
+
+        // Revalidate active identity before committing state (prevent stale boot commitment)
+        const currentActiveOwner = normalizeQueueOwner(activeAccountRef.current);
+        if (activeUserId && currentActiveOwner !== normalizeQueueOwner(activeUserId)) {
+          emitSyncDiagnostic({
+            eventType: 'RECONCILIATION_DISCARDED_STALE',
+            timestamp: Date.now(),
+            outcomeStatus: 'DISCARDED_STALE',
+            errorCategory: 'ACCOUNT_CHANGE',
+            safeReason: 'ACCOUNT_CHANGED'
+          });
+          console.warn(`[SyncReconciliation] Discarding boot hydration for ${activeUserId}; active account changed to ${currentActiveOwner}`);
+          return;
+        }
+
+        if (reconciled.shouldMarkDemoConsumed) {
+          safeSetLocalStorage(scopedDemoKey, 'true');
+        }
+
+        const { cycles: reconciledCycles, logs: reconciledLogs, userProfile: reconciledProfile, nextActiveCycleId } = reconciled;
+
+        // 3. Batch apply all state updates simultaneously to avoid cascading re-renders
+        if (reconciledProfile || reconciledCycles !== null || reconciledLogs !== null) {
+          setSystemState(prev => ({
+            ...prev,
+            userProfile: reconciledProfile ? { ...prev.userProfile, ...reconciledProfile } : prev.userProfile,
+            cycles: reconciledCycles !== null ? reconciledCycles : prev.cycles,
+            logs: reconciledLogs !== null ? reconciledLogs : prev.logs
+          }));
+
+          if (nextActiveCycleId) {
+            setActiveCycleId(prev => {
+              if (!prev || (reconciledCycles && !reconciledCycles.some(c => c.id === prev))) {
+                return nextActiveCycleId!;
+              }
+              return prev;
+            });
+          }
+        }
+
+        // Replay identity binding: Replay starts after verified auth identity from /api/auth/me
+        if (fetchedUserProfile?.id && currentToken) {
+          lastRemotePullTimestampRef.current = Date.now();
+          bindBootAuthAndRequestSync({
+            verifiedUserId: fetchedUserProfile.id,
+            verifiedToken: currentToken,
+            activeAccountRef,
+            authTokenRef,
+            setActiveAccountId,
+            requestSync
+          });
+        }
+
+        if (fetchedUserProfile?.id) {
+          checkAndOfferQueueRepair(fetchedUserProfile.id);
         }
       } catch (err) {
         console.warn('Backend sync warning (running in offline/local fallback):', err);
       }
     };
 
-    fetchBackendData();
-  }, [authToken]);
+    syncBootData();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [authToken, requestSync]);
+
+  // Remote pull on visibility is for multi-device catch-up, not realtime.
+  useEffect(() => {
+    const handleVisibilityRefetch = () => {
+      performVisibilityRefetch({
+        getCurrentActiveOwnerId: () => activeAccountRef.current,
+        getCurrentAuthToken: () => authTokenRef.current || safeGetLocalStorage(TOKEN_KEY),
+        getCurrentLocalState: () => ({
+          cycles: systemStateRef.current.cycles,
+          logs: systemStateRef.current.logs,
+          userProfile: systemStateRef.current.userProfile
+        }),
+        onApplyReconciledState: (reconciled, targetOwnerId) => {
+          if (!verifyActiveAccount(activeAccountRef.current, targetOwnerId)) {
+            return;
+          }
+          const { cycles: reconciledCycles, logs: reconciledLogs, userProfile: reconciledProfile, nextActiveCycleId } = reconciled;
+          if (reconciledProfile || reconciledCycles !== null || reconciledLogs !== null) {
+            setSystemState(prev => {
+              const nextCycles = reconciledCycles !== null
+                ? safeMergeReconciledCycles(prev.cycles, reconciledCycles)
+                : prev.cycles;
+              const nextLogs = reconciledLogs !== null
+                ? safeMergeReconciledLogs(prev.logs, reconciledLogs)
+                : prev.logs;
+              latestLogsRef.current = nextLogs;
+              return {
+                ...prev,
+                userProfile: reconciledProfile ? { ...prev.userProfile, ...reconciledProfile } : prev.userProfile,
+                cycles: nextCycles,
+                logs: nextLogs
+              };
+            });
+
+            if (nextActiveCycleId) {
+              setActiveCycleId(prev => {
+                if (!prev || (reconciledCycles && !reconciledCycles.some(c => c.id === prev))) {
+                  return nextActiveCycleId!;
+                }
+                return prev;
+              });
+            }
+          }
+        },
+        requestSyncReplay: async (ownerId, token) => {
+          const queue = getOfflineQueue(ownerId);
+          if (queue.length > 0) {
+            await requestSync('NETWORK_ONLINE', ownerId, token);
+          }
+        },
+        getLastPullTimestamp: () => lastRemotePullTimestampRef.current,
+        setLastPullTimestamp: (ts) => {
+          lastRemotePullTimestampRef.current = ts;
+        },
+        isInFlight: () => isVisibilityRefetchInFlightRef.current,
+        setIsInFlight: (val) => {
+          isVisibilityRefetchInFlightRef.current = val;
+        },
+        hasInFlightMutations: () => getRuntimeInFlightCount() > 0 || inFlightLogMutationsRef.current > 0 || logMutationGenerationsRef.current.size > 0
+      });
+    };
+
+    const cleanup = setupVisibilityRefetchListeners({
+      onTriggerRefetch: handleVisibilityRefetch
+    });
+
+    return cleanup;
+  }, [requestSync]);
 
   const currentCycle = useMemo(() => {
     return systemState.cycles.find(c => c.id === activeCycleId) || systemState.cycles[0] || null;
@@ -311,66 +763,328 @@ export default function App() {
     return computeCycleMetrics(currentCycle, systemState.logs, systemState.cycles, logicalToday);
   }, [currentCycle, systemState.logs, systemState.cycles, logicalToday, emptyMetrics]);
 
-  const handleUpdateLog = useCallback(async (updatedLog: DailyLog) => {
-    // 1. Optimistic UI update
-    setSystemState(prev => {
-      const existingIdx = prev.logs.findIndex(l => l.date === updatedLog.date);
-      let newLogs: DailyLog[];
-      if (existingIdx >= 0) {
-        newLogs = [...prev.logs];
-        newLogs[existingIdx] = updatedLog;
-      } else {
-        newLogs = [...prev.logs, updatedLog];
-      }
-      return {
-        ...prev,
-        logs: newLogs
-      };
-    });
+  // Authoritative list of all past unresolved debt logs in the active cycle for autopsy modal, carousel and navbar
+  const unresolvedDebtLogs: DailyLog[] = useMemo(() => {
+    return deriveUnresolvedDebtLogs(currentCycle, systemState.logs, logicalToday);
+  }, [currentCycle, systemState.logs, logicalToday]);
 
-    // 2. Background sync with backend
+  const handleUpdateLog = useCallback(async (incomingLog: DailyLog) => {
+    inFlightLogMutationsRef.current += 1;
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+      // Phase 3A: Detect user-driven habit tick for first-value PWA install milestone
+      const hasAnyHabitTicked = Boolean(
+        incomingLog.wakeUp ||
+        incomingLog.workout ||
+        incomingLog.study ||
+        incomingLog.journal ||
+        incomingLog.hardTask ||
+        incomingLog.specialMission
+      );
+      if (hasAnyHabitTicked) {
+        setHasSessionFirstValue(true);
+        markFirstValueAchieved(systemState.userProfile?.id);
       }
 
-      await fetch('/api/logs', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          ...updatedLog,
-          cycleId: updatedLog.cycleId || activeCycleId
-        })
+      const currentLogs = latestLogsRef.current || systemState.logs;
+      // Convert virtual placeholder into established DailyLog mutation input before state update or mutation
+      const updatedLog = convertVirtualDebtLogForMutation(incomingLog, activeCycleId, currentLogs);
+
+      // 1. Capture confirmed baseline before mutation for truthful rollback
+      const existingLog = currentLogs.find(l => l.date === updatedLog.date) || null;
+      const previousConfirmedSnapshot = existingLog ? { ...existingLog } : null;
+
+      const ownerId = systemState.userProfile?.id;
+      const initialOwner = ownerId;
+
+      // Track monotonic generation for this specific (ownerId:date) to guarantee newer rapid taps are never overwritten
+      const genKey = `${normalizeQueueOwner(ownerId)}:${updatedLog.date}`;
+      const nextGen = (logMutationGenerationsRef.current.get(genKey) || 0) + 1;
+      logMutationGenerationsRef.current.set(genKey, nextGen);
+      const thisMutationGen = nextGen;
+
+      // Optimistic UI update: unmark isSynced during in-flight state and sync latestLogsRef immediately
+      setSystemState(prev => {
+        const { nextLogs } = applyOptimisticLogUpdate(prev.logs, updatedLog);
+        latestLogsRef.current = nextLogs;
+        return {
+          ...prev,
+          logs: nextLogs
+        };
       });
-    } catch (e) {
-      console.warn('Failed to sync log to server backend (saved locally):', e);
+
+      const result = await executeDirectDailyLogMutation({
+        updatedLog,
+        existingLog,
+        ownerId,
+        authToken,
+        activeCycleId,
+        activeAccountRef
+      });
+
+      if (result.status === 'IGNORED_NO_AUTH_NO_QUEUE' || result.status === 'QUEUED_OFFLINE' || result.status === 'ACCOUNT_SWITCHED') {
+        return;
+      }
+
+      const currentLatestGen = logMutationGenerationsRef.current.get(genKey) || 0;
+      const hasNewerLocalMutation = currentLatestGen > thisMutationGen;
+
+      if (result.status === 'STORAGE_WRITE_FAILED') {
+        if (!hasNewerLocalMutation) {
+          setSystemState(prev => {
+            if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+            const nextLogs = rollbackOptimisticLogUpdate(prev.logs, updatedLog.date, previousConfirmedSnapshot);
+            latestLogsRef.current = nextLogs;
+            return {
+              ...prev,
+              logs: nextLogs
+            };
+          });
+          showAppToast(result.messageFa || 'خطا در ذخیره‌سازی محلی. تغییرات اعمال نشد.', 'warning');
+        }
+        return;
+      }
+
+      if (result.status === 'INVALID_PRECONDITION') {
+        if (!hasNewerLocalMutation) {
+          setSystemState(prev => {
+            if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+            const nextLogs = rollbackOptimisticLogUpdate(prev.logs, updatedLog.date, previousConfirmedSnapshot);
+            latestLogsRef.current = nextLogs;
+            return {
+              ...prev,
+              logs: nextLogs
+            };
+          });
+          showAppToast(result.messageFa, 'warning');
+        }
+        requestSync('MANUAL_FORCE', ownerId, authToken, true);
+        return;
+      }
+
+      if (result.status === 'SUCCESS') {
+        setSystemState(prev => {
+          if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+          if (hasNewerLocalMutation || result.hasNewerIntent) {
+            // A newer local edit is still pending, keep optimistic state with updated server revision
+            const nextLogs = prev.logs.map(l => {
+              if (l.date === updatedLog.date) {
+                return {
+                  ...l,
+                  revision: result.serverLog.revision,
+                  isSynced: false
+                };
+              }
+              return l;
+            });
+            latestLogsRef.current = nextLogs;
+            return {
+              ...prev,
+              logs: nextLogs
+            };
+          }
+          const nextLogs = prev.logs.map(l => l.date === updatedLog.date ? { ...l, ...result.serverLog, isSynced: true } : l);
+          latestLogsRef.current = nextLogs;
+          return {
+            ...prev,
+            logs: nextLogs
+          };
+        });
+        if (hasNewerLocalMutation || result.hasNewerIntent) {
+          // Trigger sync to dispatch the newer pending mutation
+          requestSync('NETWORK_ONLINE', ownerId, authToken);
+        }
+        return;
+      }
+
+      if (result.status === 'CONFLICT') {
+        if (!hasNewerLocalMutation) {
+          setSystemState(prev => {
+            if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+            const nextLogs = rollbackOptimisticLogUpdate(prev.logs, updatedLog.date, previousConfirmedSnapshot);
+            latestLogsRef.current = nextLogs;
+            return {
+              ...prev,
+              logs: nextLogs
+            };
+          });
+          showAppToast(result.conflictDetails.messageFa, 'warning');
+        }
+        requestSync('NETWORK_ONLINE', ownerId, authToken, true);
+        return;
+      }
+
+      if (result.status === 'INVALID_SUCCESS_RESPONSE') {
+        console.warn('[DailyLog Mutation] Invalid success response, state remains unconfirmed:', result.errorMsg);
+        return;
+      }
+
+      if (result.status === 'FORBIDDEN' || result.status === 'VALIDATION_ERROR' || result.status === 'ENTITY_MISSING') {
+        if (!hasNewerLocalMutation) {
+          setSystemState(prev => {
+            if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+            const nextLogs = rollbackOptimisticLogUpdate(prev.logs, updatedLog.date, previousConfirmedSnapshot);
+            latestLogsRef.current = nextLogs;
+            return {
+              ...prev,
+              logs: nextLogs
+            };
+          });
+          const errorMsgFa = result.status === 'FORBIDDEN'
+            ? 'دسترسی غیرمجاز. تغییرات ذخیره نشد.'
+            : result.status === 'ENTITY_MISSING'
+            ? 'گزارش یا چرخه مورد نظر یافت نشد.'
+            : 'داده‌های ارسالی نامعتبر است.';
+          showAppToast(errorMsgFa, 'error');
+        }
+        console.warn('[DailyLog Mutation] Non-retryable error, quarantined and rolled back:', result);
+        return;
+      }
+
+      if (result.status === 'AUTH_REQUIRED') {
+        console.warn('[DailyLog Mutation] Auth required, mutation preserved in queue for re-auth:', result);
+        return;
+      }
+
+      if (result.status === 'RATE_LIMITED' || result.status === 'SERVER_RETRYABLE' || result.status === 'NETWORK_ERROR') {
+        console.warn('[DailyLog Mutation] Preserved in durable write-ahead queue for retry:', result);
+        return;
+      }
+    } finally {
+      inFlightLogMutationsRef.current = Math.max(0, inFlightLogMutationsRef.current - 1);
+      if (inFlightLogMutationsRef.current === 0) {
+        logMutationGenerationsRef.current.clear();
+      }
     }
-  }, [authToken, activeCycleId]);
+  }, [authToken, activeCycleId, systemState.logs, systemState.userProfile?.id, showAppToast, requestSync]);
 
   const handleUpdateCycle = useCallback(async (updatedCycle: Cycle) => {
+    // 1. Capture confirmed baseline before mutation for truthful rollback
+    const existingCycle = systemState.cycles.find(c => c.id === updatedCycle.id) || null;
+    const previousConfirmedSnapshot = existingCycle ? { ...existingCycle } : null;
+
     setSystemState(prev => ({
       ...prev,
-      cycles: prev.cycles.map(c => c.id === updatedCycle.id ? updatedCycle : c)
+      cycles: applyOptimisticCycleUpdate(prev.cycles, updatedCycle).nextCycles
     }));
 
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+    const ownerId = systemState.userProfile?.id;
+    const initialOwner = ownerId;
 
-      await fetch(`/api/cycles/${updatedCycle.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(updatedCycle)
-      });
-    } catch (e) {
-      console.warn('Failed to sync cycle update to server:', e);
+    const result = await executeDirectUpdateCycleMutation({
+      updatedCycle,
+      existingCycle,
+      ownerId,
+      authToken,
+      activeAccountRef
+    });
+
+    if (result.status === 'IGNORED_NO_AUTH_NO_QUEUE') {
+      return;
     }
-  }, [authToken]);
+
+    if (result.status === 'STORAGE_WRITE_FAILED') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        return {
+          ...prev,
+          cycles: rollbackOptimisticCycleUpdate(prev.cycles, updatedCycle.id, previousConfirmedSnapshot)
+        };
+      });
+      showAppToast(result.messageFa, 'error');
+      return;
+    }
+
+    if (result.status === 'INVALID_PRECONDITION') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        return {
+          ...prev,
+          cycles: rollbackOptimisticCycleUpdate(prev.cycles, updatedCycle.id, previousConfirmedSnapshot)
+        };
+      });
+      showAppToast('نسخه معتبر چرخه یافت نشد. همگام‌سازی مجدد با سرور انجام می‌شود.', 'warning');
+      requestSync('MANUAL_FORCE', ownerId, authToken, true);
+      return;
+    }
+
+    if (result.status === 'QUEUED_OFFLINE') {
+      return;
+    }
+
+    if (result.status === 'ACCOUNT_SWITCHED') {
+      return;
+    }
+
+    if (result.status === 'SUCCESS') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        if (result.hasNewerIntent) {
+          return prev;
+        }
+        return {
+          ...prev,
+          cycles: prev.cycles.map(c => c.id === updatedCycle.id ? { ...c, ...result.serverCycle, isSynced: true } : c)
+        };
+      });
+      if (result.hasNewerIntent) {
+        requestSync('NETWORK_ONLINE', ownerId, authToken);
+      }
+      return;
+    }
+
+    if (result.status === 'CONFLICT') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        return {
+          ...prev,
+          cycles: rollbackOptimisticCycleUpdate(prev.cycles, updatedCycle.id, previousConfirmedSnapshot)
+        };
+      });
+      showAppToast(result.conflictDetails.messageFa, 'warning');
+      requestSync('NETWORK_ONLINE', ownerId, authToken, true);
+      return;
+    }
+
+    if (result.status === 'INVALID_SUCCESS_RESPONSE') {
+      console.warn('[Cycle Mutation] Invalid success response, state remains unconfirmed:', result.errorMsg);
+      return;
+    }
+
+    if (result.status === 'FORBIDDEN' || result.status === 'VALIDATION_ERROR' || result.status === 'ENTITY_MISSING') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        return {
+          ...prev,
+          cycles: rollbackOptimisticCycleUpdate(prev.cycles, updatedCycle.id, previousConfirmedSnapshot)
+        };
+      });
+      console.warn('[Cycle Mutation] Non-retryable error, quarantined and rolled back:', result);
+      return;
+    }
+
+    if (result.status === 'AUTH_REQUIRED') {
+      console.warn('[Cycle Mutation] Auth required, mutation preserved in queue for re-auth:', result);
+      return;
+    }
+
+    if (result.status === 'RATE_LIMITED' || result.status === 'SERVER_RETRYABLE' || result.status === 'NETWORK_ERROR') {
+      console.warn('[Cycle Mutation] Preserved in durable write-ahead queue for retry:', result);
+      return;
+    }
+  }, [authToken, systemState.cycles, systemState.userProfile?.id, showAppToast, requestSync]);
 
   const handleDeleteCycle = useCallback(async (cycleId: string) => {
+    // Explicit deletion permanently marks starter demo as consumed to prevent re-seeding
+    const scopedDemoKey = getScopedDemoConsumedKey(systemState.userProfile?.id);
+    safeSetLocalStorage(scopedDemoKey, 'true');
+
+    const targetCycle = systemState.cycles.find(c => c.id === cycleId) || null;
+    const targetLogs = systemState.logs.filter(l => l.cycleId === cycleId);
+    const previousActiveCycleId = activeCycleId;
+
+    const ownerId = systemState.userProfile?.id;
+    const initialOwner = ownerId;
+
     // 1. Calculate remaining cycles first
     const remainingCycles = systemState.cycles.filter(c => c.id !== cycleId);
     const remainingLogs = systemState.logs.filter(l => l.cycleId !== cycleId);
@@ -383,7 +1097,6 @@ export default function App() {
         logs: []
       }));
       setActiveCycleId('');
-      showAppToast('چرخه با موفقیت حذف شد. می‌توانید چرخه جدیدی تعریف کنید.', 'info');
     } else {
       setSystemState(prev => ({
         ...prev,
@@ -394,46 +1107,228 @@ export default function App() {
         setActiveCycleId(remainingCycles[0].id);
         setSelectedDate(remainingCycles[0].startDate);
       }
-      showAppToast('چرخه مورد نظر با موفقیت حذف شد.', 'success');
     }
 
-    try {
-      const headers: Record<string, string> = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      await fetch(`/api/cycles/${cycleId}`, {
-        method: 'DELETE',
-        headers
-      });
-    } catch (e) {
-      console.warn('Failed to sync cycle deletion to server:', e);
+    const result = await executeDirectDeleteCycleMutation({
+      cycleId,
+      existingCycle: targetCycle,
+      ownerId,
+      authToken,
+      activeAccountRef
+    });
+
+    if (result.status === 'IGNORED_NO_AUTH_NO_QUEUE') {
+      // Unauthenticated / guest state: show success toast directly
+      showAppToast(remainingCycles.length === 0 ? 'چرخه با موفقیت حذف شد. می‌توانید چرخه جدیدی تعریف کنید.' : 'چرخه مورد نظر با موفقیت حذف شد.', 'success');
+      return;
     }
-  }, [authToken, activeCycleId, systemState.cycles, systemState.logs, showAppToast]);
+
+    if (result.status === 'STORAGE_WRITE_FAILED') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        const { nextCycles, nextLogs } = rollbackOptimisticCycleDelete(
+          prev.cycles,
+          prev.logs,
+          cycleId,
+          targetCycle,
+          targetLogs
+        );
+        return {
+          ...prev,
+          cycles: nextCycles,
+          logs: nextLogs
+        };
+      });
+      if (previousActiveCycleId === cycleId) {
+        setActiveCycleId(cycleId);
+      }
+      showAppToast(result.messageFa, 'error');
+      return;
+    }
+
+    if (result.status === 'INVALID_PRECONDITION') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        const { nextCycles, nextLogs } = rollbackOptimisticCycleDelete(
+          prev.cycles,
+          prev.logs,
+          cycleId,
+          targetCycle,
+          targetLogs
+        );
+        return {
+          ...prev,
+          cycles: nextCycles,
+          logs: nextLogs
+        };
+      });
+      if (previousActiveCycleId === cycleId) {
+        setActiveCycleId(cycleId);
+      }
+      showAppToast('نسخه معتبر چرخه برای حذف یافت نشد. همگام‌سازی مجدد با سرور انجام می‌شود.', 'warning');
+      requestSync('MANUAL_FORCE', ownerId, authToken, true);
+      return;
+    }
+
+    if (result.status === 'QUEUED_OFFLINE') {
+      showAppToast('حذف چرخه در صف آفلاین ذخیره شد و پس از اتصال به سرور اعمال خواهد شد.', 'info');
+      return;
+    }
+
+    if (result.status === 'ACCOUNT_SWITCHED') {
+      return;
+    }
+
+    if (result.status === 'SUCCESS') {
+      showAppToast(remainingCycles.length === 0 ? 'چرخه با موفقیت حذف شد. می‌توانید چرخه جدیدی تعریف کنید.' : 'چرخه مورد نظر با موفقیت حذف شد.', 'success');
+      return;
+    }
+
+    if (result.status === 'CONFLICT') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        const { nextCycles, nextLogs } = rollbackOptimisticCycleDelete(
+          prev.cycles,
+          prev.logs,
+          cycleId,
+          targetCycle,
+          targetLogs
+        );
+        return {
+          ...prev,
+          cycles: nextCycles,
+          logs: nextLogs
+        };
+      });
+      if (previousActiveCycleId === cycleId) {
+        setActiveCycleId(cycleId);
+      }
+      showAppToast(result.conflictDetails.messageFa || 'حذف چرخه به دلیل تغییر در دستگاه دیگر رد شد. داده‌های چرخه بازگردانی شدند.', 'error');
+      requestSync('NETWORK_ONLINE', ownerId, authToken, true);
+      return;
+    }
+
+    if (result.status === 'FORBIDDEN' || result.status === 'VALIDATION_ERROR' || result.status === 'ENTITY_MISSING') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        const { nextCycles, nextLogs } = rollbackOptimisticCycleDelete(
+          prev.cycles,
+          prev.logs,
+          cycleId,
+          targetCycle,
+          targetLogs
+        );
+        return {
+          ...prev,
+          cycles: nextCycles,
+          logs: nextLogs
+        };
+      });
+      if (previousActiveCycleId === cycleId) {
+        setActiveCycleId(cycleId);
+      }
+      console.warn('[Delete Cycle Mutation] Non-retryable error, quarantined and rolled back:', result);
+      return;
+    }
+
+    if (result.status === 'AUTH_REQUIRED') {
+      console.warn('[Delete Cycle Mutation] Auth required, mutation preserved in queue for re-auth:', result);
+      return;
+    }
+
+    if (result.status === 'RATE_LIMITED' || result.status === 'SERVER_RETRYABLE' || result.status === 'NETWORK_ERROR') {
+      showAppToast('درخواست حذف چرخه ذخیره شد و پس از رفع اختلال شبکه به سرور ارسال می‌شود.', 'info');
+      return;
+    }
+  }, [authToken, activeCycleId, systemState.cycles, systemState.logs, systemState.userProfile?.id, showAppToast, requestSync]);
 
   const handleUpdateUserProfile = useCallback(async (updatedProfile: UserProfile) => {
+    const previousProfile = systemState.userProfile ? { ...systemState.userProfile } : null;
+
     setSystemState(prev => ({
       ...prev,
       userProfile: updatedProfile
     }));
 
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+    const ownerId = systemState.userProfile?.id;
+    const initialOwner = ownerId;
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
+    }
 
-      await fetch('/api/user/profile', {
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/user/profile', {
         method: 'PUT',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(updatedProfile)
       });
+
+      // Post-fetch Account Switch Verification before applying result
+      if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) {
+        return;
+      }
+
+      if (res.ok) {
+        // Profile updated successfully
+      } else if (res.status === 409 || res.status === 428) {
+        const conflictJson = await res.json().catch(() => null);
+        const parsedConflict = parseSafeConflictDetails(res.status, conflictJson, 'USER_PROFILE', updatedProfile.id);
+        recordClientConflict(ownerId, {
+          mutationType: 'UPDATE_PROFILE',
+          entityType: parsedConflict.entityType,
+          entityId: parsedConflict.entityId,
+          conflictType: parsedConflict.conflictType,
+          statusCode: parsedConflict.statusCode,
+          messageFa: parsedConflict.messageFa,
+          clientPayload: updatedProfile
+        });
+
+        // Rollback profile on conflict
+        setSystemState(prev => {
+          if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+          return {
+            ...prev,
+            userProfile: previousProfile || prev.userProfile
+          };
+        });
+
+        showAppToast(parsedConflict.messageFa, 'warning');
+        requestSync('NETWORK_ONLINE', ownerId, authToken, true);
+      } else {
+        enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+        showAppToast('تغییرات نمایه در صف آفلاین ذخیره شد و پس از اتصال به سرور همگام می‌شود.', 'info');
+      }
     } catch (e) {
       console.warn('Failed to sync user profile:', e);
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+      showAppToast('تغییرات نمایه در دستگاه ذخیره شد و با برقراری مجدد اینترنت به سرور ارسال خواهد شد.', 'info');
     }
-  }, [authToken]);
+  }, [authToken, systemState.userProfile, showAppToast, requestSync]);
 
   const handleCreateNewCycle = useCallback(async (title: string, startDate: string, targetTheme: string) => {
+    const ownerId = systemState.userProfile?.id;
+    const initialOwner = ownerId;
+    const scopedDemoKey = getScopedDemoConsumedKey(initialOwner);
+    const previousDemoConsumed = safeGetLocalStorage(scopedDemoKey);
+    
+    // Capture baseline synchronously from current render state before optimistic transition
+    const previousCyclesSnapshot: Cycle[] = systemState.cycles.map(c => ({ ...c }));
+    const previousLogsSnapshot: DailyLog[] = systemState.logs.map(l => ({ ...l }));
+    const previousActiveCycleId = activeCycleId;
+    const previousSelectedDate = selectedDate;
+    const previousActiveTab = activeTab;
+
+    safeSetLocalStorage(scopedDemoKey, 'true');
+
     const newCycle: Cycle = {
       id: `cycle-${Date.now()}`,
       title,
@@ -445,29 +1340,129 @@ export default function App() {
       reportRead: false
     };
 
-    setSystemState(prev => ({
-      ...prev,
-      cycles: [...prev.cycles, newCycle]
-    }));
+    setSystemState(prev => {
+      // Filter out starter demo cycle & logs so user starts on clean slate
+      const nonDemoCycles = prev.cycles.filter(c => c.id !== 'cycle-1' && !c.title.includes('(نمونه)'));
+      const nonDemoLogs = prev.logs.filter(l => l.cycleId !== 'cycle-1');
+      return {
+        ...prev,
+        cycles: [...nonDemoCycles, newCycle],
+        logs: nonDemoLogs
+      };
+    });
+    
     setActiveCycleId(newCycle.id);
     setSelectedDate(startDate);
-    setActiveTab('battlefield');
+    navigateTab('battlefield');
 
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+    const result = await executeDirectCreateCycleMutation({
+      newCycle,
+      ownerId,
+      authToken,
+      activeAccountRef
+    });
+
+    const doRollback = () => {
+      if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return;
+
+      if (previousDemoConsumed === null) {
+        safeRemoveLocalStorage(scopedDemoKey);
+      } else {
+        safeSetLocalStorage(scopedDemoKey, previousDemoConsumed);
       }
 
-      await fetch('/api/cycles', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(newCycle)
+      setSystemState(prev => {
+        const { nextCycles, nextLogs } = rollbackOptimisticCycleCreate(
+          prev.cycles,
+          prev.logs,
+          newCycle.id,
+          previousCyclesSnapshot,
+          previousLogsSnapshot
+        );
+        return {
+          ...prev,
+          cycles: nextCycles,
+          logs: nextLogs
+        };
       });
-    } catch (e) {
-      console.warn('Failed to save cycle to server:', e);
+
+      setActiveCycleId(previousActiveCycleId);
+      setSelectedDate(previousSelectedDate);
+      navigateTab(previousActiveTab, { replace: true });
+    };
+
+    if (result.status === 'IGNORED_NO_AUTH_NO_QUEUE') {
+      showAppToast('چرخه جدید با موفقیت ایجاد شد.', 'success');
+      return;
     }
-  }, [authToken, cycleMetrics?.pureStreak]);
+
+    if (result.status === 'STORAGE_WRITE_FAILED') {
+      doRollback();
+      showAppToast(result.messageFa, 'error');
+      return;
+    }
+
+    if (result.status === 'INVALID_PRECONDITION') {
+      doRollback();
+      showAppToast(result.messageFa, 'warning');
+      return;
+    }
+
+    if (result.status === 'QUEUED_OFFLINE') {
+      showAppToast('چرخه جدید در صف آفلاین ذخیره شد و پس از اتصال به سرور همگام می‌شود.', 'info');
+      return;
+    }
+
+    if (result.status === 'ACCOUNT_SWITCHED') {
+      return;
+    }
+
+    if (result.status === 'SUCCESS') {
+      setSystemState(prev => {
+        if (!verifyActiveAccount(activeAccountRef.current, initialOwner)) return prev;
+        if (result.hasNewerIntent) {
+          return prev;
+        }
+        return {
+          ...prev,
+          cycles: prev.cycles.map(c => c.id === newCycle.id ? { ...c, ...result.serverCycle, isSynced: true } : c)
+        };
+      });
+      showAppToast('چرخه جدید با موفقیت ایجاد شد.', 'success');
+      if (result.hasNewerIntent) {
+        requestSync('NETWORK_ONLINE', ownerId, authToken);
+      }
+      return;
+    }
+
+    if (result.status === 'CONFLICT') {
+      doRollback();
+      showAppToast(result.conflictDetails.messageFa, 'warning');
+      requestSync('NETWORK_ONLINE', ownerId, authToken, true);
+      return;
+    }
+
+    if (result.status === 'INVALID_SUCCESS_RESPONSE') {
+      console.warn('[Create Cycle Mutation] Invalid success response, state remains unconfirmed:', result.errorMsg);
+      return;
+    }
+
+    if (result.status === 'FORBIDDEN' || result.status === 'VALIDATION_ERROR' || result.status === 'ENTITY_MISSING') {
+      doRollback();
+      console.warn('[Create Cycle Mutation] Non-retryable error, quarantined and rolled back:', result);
+      return;
+    }
+
+    if (result.status === 'AUTH_REQUIRED') {
+      console.warn('[Create Cycle Mutation] Auth required, mutation preserved in queue for re-auth:', result);
+      return;
+    }
+
+    if (result.status === 'RATE_LIMITED' || result.status === 'SERVER_RETRYABLE' || result.status === 'NETWORK_ERROR') {
+      showAppToast('چرخه ایجاد شد و پس از رفع اختلال ارتباط با سرور، همگام‌سازی تکمیل می‌شود.', 'info');
+      return;
+    }
+  }, [authToken, cycleMetrics?.pureStreak, systemState.userProfile?.id, systemState.cycles, systemState.logs, activeCycleId, selectedDate, activeTab, showAppToast, requestSync]);
 
   const handleUpdateSettings = useCallback(async (updatedSettings: SystemSettings) => {
     setSystemState(prev => ({
@@ -477,20 +1472,20 @@ export default function App() {
   }, []);
 
   const handleExportData = () => {
-    const data = {
-      cycles: systemState.cycles,
-      logs: systemState.logs,
-      settings: systemState.settings,
-      userProfile: systemState.userProfile,
-      exportedAt: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bushido-discipline-backup-${logicalToday}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const data = buildExportPayload(systemState);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bushido-discipline-backup-${logicalToday}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showAppToast('فایل پشتیبان داده‌ها با موفقیت ایجاد و دانلود شد.', 'success');
+    } catch (err) {
+      console.error('Export error:', err);
+      showAppToast('ایجاد فایل پشتیبان ناموفق بود؛ لطفاً دسترسی مرورگر را بررسی کرده و مجدداً تلاش فرمایید.', 'error');
+    }
   };
 
   const handleResetData = () => {
@@ -498,65 +1493,38 @@ export default function App() {
   };
 
   const handleConfirmReset = () => {
-    flushPendingStorageSave();
-    const fresh = createInitialSystemState();
-    setSystemState(fresh);
-    setActiveCycleId(fresh.cycles[0].id);
+    const { freshState, activeCycleId } = resetAccountState(systemState.userProfile);
+    setSystemState(freshState);
+    setActiveCycleId(activeCycleId);
     setSelectedDate(getLogicalTodayDate());
     setIsResetConfirmOpen(false);
     showAppToast('داده‌های سامانه با موفقیت به مقادیر اولیه بوشیدو بازنشانی شد.');
   };
 
-  const handleImportData = (dataStr: string) => {
-    try {
-      const parsed = JSON.parse(dataStr);
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        Array.isArray(parsed.cycles) &&
-        Array.isArray(parsed.logs) &&
-        parsed.settings &&
-        typeof parsed.settings === 'object'
-      ) {
-        if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
-          parsed.userProfile = createInitialSystemState().userProfile;
-        }
-
-        // Sanitize imported cycles and logs to guarantee structural integrity
-        parsed.cycles = parsed.cycles.filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string' && typeof c.startDate === 'string');
-        parsed.logs = parsed.logs.filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string');
-
-        if (parsed.cycles.length === 0) {
-          showAppToast('فایل پشتیبان باید حداقل دارای یک چرخه معتبر باشد.', 'error');
-          return;
-        }
-
-        flushPendingStorageSave();
-        setSystemState(parsed);
-        setActiveCycleId(parsed.cycles[0].id);
-        showAppToast('اطلاعات پشتیبان با موفقیت بازیابی شد.');
-      } else {
-        showAppToast('فرمت ساختار فایل پشتیبان نامعتبر است.', 'error');
-      }
-    } catch {
-      showAppToast('خطا در تجزیه فایل JSON.', 'error');
-    }
-  };
-
   const handleAuthSuccess = (token: string, user: UserProfile) => {
-    sessionStorage.removeItem('bushido_explicit_logout');
-    localStorage.setItem(TOKEN_KEY, token);
+    safeRemoveSessionStorage('bushido_explicit_logout');
+    safeSetLocalStorage(TOKEN_KEY, token);
     setAuthToken(token);
-    setSystemState(prev => ({
-      ...prev,
-      userProfile: user
-    }));
+
+    const transition = transitionAccountState({
+      currentSystemState: systemState,
+      targetUserId: user.id,
+      targetUserProfile: user
+    });
+    setSystemState(transition.nextState);
+    if (transition.nextState.cycles.length > 0) {
+      setActiveCycleId(transition.nextActiveCycleId);
+    }
     showAppToast(`با موفقیت وارد حساب «${user.name || 'کاربر'}» شدید.`);
+    // Explicit binding: Replay verified target user queue through single orchestrator gateway
+    activeAccountRef.current = user.id;
+    authTokenRef.current = token;
+    requestSync('AUTH_SUCCESS', user.id, token);
   };
 
   const handleQuickLogin = async (role: 'admin' | 'test_user') => {
     try {
-      sessionStorage.removeItem('bushido_explicit_logout');
+      safeRemoveSessionStorage('bushido_explicit_logout');
       const res = await fetch('/api/auth/quick-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -564,30 +1532,38 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok && data.token && data.user) {
-        localStorage.setItem(TOKEN_KEY, data.token);
+        safeSetLocalStorage(TOKEN_KEY, data.token);
         setAuthToken(data.token);
-        setSystemState(prev => ({
-          ...prev,
-          userProfile: {
-            ...prev.userProfile,
+        const transition = transitionAccountState({
+          currentSystemState: systemState,
+          targetUserId: data.user.id,
+          targetUserProfile: {
             ...data.user,
             isVip: Boolean(data.user.isVip),
             isAdmin: Boolean(data.user.isAdmin)
           }
-        }));
+        });
+        setSystemState(transition.nextState);
+        if (transition.nextState.cycles.length > 0) {
+          setActiveCycleId(transition.nextActiveCycleId);
+        }
         showAppToast(role === 'admin' ? 'به عنوان مدیر ارشد سیستم وارد شدید.' : 'به عنوان کاربر تستی وارد شدید.');
+        // Explicit binding: Replay verified target user queue through single orchestrator gateway
+        activeAccountRef.current = data.user.id;
+        authTokenRef.current = data.token;
+        requestSync('QUICK_LOGIN_SUCCESS', data.user.id, data.token);
       } else {
-        showAppToast(data.error || 'خطا در ورود سریع');
+        showAppToast(data.messageFa || data.error || 'ورود سریع در این محیط غیرفعال است.', 'error');
       }
     } catch (e) {
       console.error('Quick login error:', e);
-      showAppToast('خطا در برقراری ارتباط');
+      showAppToast('ارتباط با سرور برای ورود سریع برقرار نشد؛ لطفاً اتصال اینترنت را بررسی کرده و مجدداً تلاش نمایید.', 'error');
     }
   };
 
   const handleImpersonateUser = async (targetUser: AdminUserItem) => {
     try {
-      const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
+      const currentToken = authToken || safeGetLocalStorage(TOKEN_KEY);
       if (!currentToken) return;
 
       const res = await fetch('/api/admin/impersonate', {
@@ -603,72 +1579,129 @@ export default function App() {
       if (res.ok && data.token && data.user) {
         setImpersonatorAdminToken(currentToken);
         setImpersonatingUser(targetUser);
-        localStorage.setItem(TOKEN_KEY, data.token);
+        safeSetSessionStorage('bushido_impersonator_token', currentToken);
+        safeSetSessionStorage('bushido_impersonating_user', JSON.stringify(targetUser));
+        safeSetLocalStorage(TOKEN_KEY, data.token);
         setAuthToken(data.token);
-        setSystemState(prev => ({
-          ...prev,
-          userProfile: {
-            ...prev.userProfile,
+        const transition = transitionAccountState({
+          currentSystemState: systemState,
+          targetUserId: data.user.id,
+          targetUserProfile: {
             ...data.user,
             isVip: Boolean(data.user.isVip),
             isAdmin: Boolean(data.user.isAdmin)
           }
-        }));
-        setActiveTab('battlefield');
+        });
+        setSystemState(transition.nextState);
+        if (transition.nextState.cycles.length > 0) {
+          setActiveCycleId(transition.nextActiveCycleId);
+        }
+        navigateTab('battlefield');
         showAppToast(`در حال شبیه‌سازی و مشاهده سامانه از دید: «${data.user.name}»`);
+        // Explicit binding: Replay target user's queue through single orchestrator gateway
+        activeAccountRef.current = data.user.id;
+        authTokenRef.current = data.token;
+        requestSync('IMPERSONATION_START', data.user.id, data.token);
       } else {
-        showAppToast(data.error || 'خطا در سوییچ به کاربر');
+        showAppToast(data.messageFa || data.error || 'خطا در سوییچ به کاربر');
       }
     } catch (e) {
       console.error('Impersonate user error:', e);
-      showAppToast('خطا در برقراری ارتباط با سرور');
+      showAppToast('امکان دریافت اطلاعات کاربر از سرور میسر نشد؛ لطفاً اتصال اینترنت را بررسی کرده و دوباره تلاش فرمایید.', 'error');
     }
   };
 
   const handleExitImpersonation = async () => {
-    if (!impersonatorAdminToken) return;
-    try {
-      localStorage.setItem(TOKEN_KEY, impersonatorAdminToken);
-      setAuthToken(impersonatorAdminToken);
+    const adminToken = impersonatorAdminToken || safeGetSessionStorage(IMPERSONATOR_TOKEN_KEY);
+    if (!adminToken) return;
+
+    // 1. Read saved Admin token & validate through /api/auth/me BEFORE modifying local state
+    const outcome = await validateAdminTokenForExit(adminToken);
+    const result = processExitImpersonationOutcome(outcome, systemState);
+
+    if (result.action === 'SUCCESS_TRANSITION') {
+      // 2. Validation succeeds:
+      // - Transition back to verified Admin account
+      // - Replace active token
+      // - Clear impersonation metadata
+      // - Replay only Admin queue
+      // - Display success
+      setAuthToken(result.newAuthToken!);
       setImpersonatingUser(null);
-      const res = await fetch('/api/auth/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${impersonatorAdminToken}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setSystemState(prev => ({
-            ...prev,
-            userProfile: {
-              ...prev.userProfile,
-              ...data.user,
-              isVip: Boolean(data.user.isVip),
-              isAdmin: Boolean(data.user.isAdmin)
-            }
-          }));
-        }
-      }
       setImpersonatorAdminToken(null);
-      setActiveTab('admin');
-      showAppToast('به حساب مدیریت بازگشتید.');
-    } catch (e) {
-      console.error('Exit impersonation error:', e);
+      if (result.nextSystemState) {
+        setSystemState(result.nextSystemState);
+      }
+      if (result.nextActiveCycleId) {
+        setActiveCycleId(result.nextActiveCycleId);
+      }
+
+      if (outcome.status === 'SUCCESS') {
+        // Replay only the Admin's own queue through single orchestrator gateway
+        activeAccountRef.current = outcome.adminUser.id;
+        authTokenRef.current = outcome.adminToken;
+        requestSync('IMPERSONATION_EXIT', outcome.adminUser.id, outcome.adminToken);
+
+        // Notify server of exit for audit trail (non-authoritative metadata)
+        fetch('/api/admin/impersonate/exit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${outcome.adminToken}`
+          },
+          body: JSON.stringify({ targetUserId: impersonatingUser?.id || null })
+        }).catch(() => {});
+      }
+
+      navigateTab('admin');
+      showAppToast(result.messageFa);
+      return;
     }
+
+    if (result.action === 'REVOKED_SIGN_OUT') {
+      // Validation fails due to confirmed auth rejection or invalid Admin identity:
+      // - Do NOT display a success message
+      // - Clear unsafe authentication and impersonation state
+      // - Return to a signed-out state
+      // - Require authentication again
+      activeAccountRef.current = null;
+      authTokenRef.current = null;
+      syncOrchestrator.cancelPendingSync();
+      setAuthToken(null);
+      setImpersonatingUser(null);
+      setImpersonatorAdminToken(null);
+      if (result.nextSystemState) {
+        setSystemState(result.nextSystemState);
+      }
+      if (result.nextActiveCycleId) {
+        setActiveCycleId(result.nextActiveCycleId);
+      }
+
+      setIsAuthModalOpen(true);
+      showAppToast(result.messageFa);
+      return;
+    }
+
+    // For PRESERVE_RETRYABLE (TEMPORARY_SERVER_ERROR and NETWORK_ERROR) or NO_OP:
+    // - Do NOT destroy the only recoverable Admin token prematurely
+    // - Do NOT clear impersonation metadata
+    // - Do NOT change active account
+    // - Do NOT claim that exit succeeded
+    // - Show a retryable Persian error message
+    showAppToast(result.messageFa);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.setItem('bushido_explicit_logout', 'true');
+    activeAccountRef.current = null;
+    authTokenRef.current = null;
+    lastRemotePullTimestampRef.current = 0;
+    syncOrchestrator.cancelPendingSync();
+    const transition = executeLogoutDuringImpersonation(systemState);
     setAuthToken(null);
     setImpersonatingUser(null);
     setImpersonatorAdminToken(null);
-    setSystemState(prev => ({
-      ...prev,
-      userProfile: GUEST_USER_PROFILE
-    }));
+    setSystemState(transition.nextState);
+    setActiveCycleId(transition.nextActiveCycleId);
     setIsAuthModalOpen(false);
     showAppToast('با موفقیت از حساب کاربری خارج شدید.');
   };
@@ -685,34 +1718,60 @@ export default function App() {
 
   const handleDashboardSelectDate = useCallback((d: string) => {
     handleSelectDate(d);
-    setActiveTab('battlefield');
-  }, [handleSelectDate]);
+    navigateTab('battlefield');
+  }, [handleSelectDate, navigateTab]);
 
   const handleDashboardNavigateTab = useCallback((tab: string) => {
-    setActiveTab(tab);
-  }, []);
+    navigateTab(tab);
+  }, [navigateTab]);
+
+  const shouldReduceMotion = useReducedMotion();
+  const pageMotion = useMemo(() => {
+    if (shouldReduceMotion) {
+      return {
+        initial: { opacity: 1 },
+        animate: { opacity: 1 },
+        exit: { opacity: 1 },
+        transition: { duration: 0 }
+      };
+    }
+    return {
+      initial: { opacity: 0, y: 6 },
+      animate: { opacity: 1, y: 0 },
+      exit: { opacity: 0, y: -6 },
+      transition: { duration: 0.18, ease: 'easeOut' as const }
+    };
+  }, [shouldReduceMotion]);
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#09090b] text-zinc-100 flex flex-col w-full max-w-full selection:bg-amber-500 selection:text-black pt-safe">
+      <div className="min-h-screen surface-z0 text-role-primary flex flex-col w-full max-w-full selection:bg-amber selection:text-canvas-root">
+        {/* Skip Link for direct keyboard navigation to main content */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:right-3 focus:z-[100] focus:px-4 focus:py-2.5 focus:bg-amber focus:text-canvas-root focus:font-black focus:text-xs focus:radius-component focus:shadow-subtle focus-ring-tactical transition-none"
+        >
+          پرش به محتوای اصلی
+        </a>
+
         {/* Top Banner when Admin is Impersonating a User */}
         {impersonatingUser && (
-          <div className="bg-sky-950 border-b border-sky-500/50 py-2.5 px-4 sticky top-0 z-50 shadow-2xl backdrop-blur-md">
+          <div className="bg-blue-subtle border-b border-blue py-2.5 px-4 sticky top-0 z-50 shadow-subtle backdrop-blur-md">
             <div className="max-w-7xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs">
-              <div className="flex items-center gap-2 text-sky-200 font-bold">
-                <Eye className="w-4 h-4 text-sky-400 animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 text-blue font-bold">
+                <Eye className="w-4 h-4 text-blue animate-pulse motion-reduce:animate-none shrink-0" />
                 <span>
                   حالت شبیه‌سازی کاربر: در حال بررسی سامانه از دید «{impersonatingUser.name}»
                 </span>
-                <span className="text-[10px] bg-sky-900/80 text-sky-300 border border-sky-500/40 px-2 py-0.5 rounded-md font-mono hidden md:inline-block">
+                <span className="text-[10px] surface-z1 text-blue border border-blue-subtle px-2 py-0.5 radius-capsule font-mono hidden md:inline-block">
                   {impersonatingUser.id}
                 </span>
               </div>
               <button
                 onClick={handleExitImpersonation}
-                className="bg-sky-500 hover:bg-sky-400 text-zinc-950 font-black text-xs px-3.5 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-md shrink-0 active:scale-95"
+                className="bg-blue hover:brightness-110 text-canvas-root font-black text-xs px-3.5 py-1.5 radius-component transition cursor-pointer flex items-center gap-1.5 shadow-subtle shrink-0 active:scale-95 focus-ring-tactical"
               >
-                <ShieldCheck className="w-4 h-4 text-zinc-950" />
+                <ShieldCheck className="w-4 h-4 text-canvas-root" />
                 <span>بازگشت به حساب مدیریت</span>
               </button>
             </div>
@@ -722,11 +1781,12 @@ export default function App() {
         {/* Top Hub Bar */}
         <Navbar
           activeTab={activeTab}
-          onSelectTab={setActiveTab}
+          onSelectTab={navigateTab}
           cycles={systemState.cycles}
           currentCycle={currentCycle}
           onSelectCycle={c => setActiveCycleId(c.id)}
           metrics={cycleMetrics}
+          unresolvedDebtCount={unresolvedDebtLogs.length}
           settings={systemState.settings}
           userProfile={systemState.userProfile}
           onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
@@ -734,34 +1794,22 @@ export default function App() {
           onOpenNewCycleModal={() => setIsCreateCycleModalOpen(true)}
           onDeleteCycle={handleDeleteCycle}
           onOpenDebtAutopsy={() => {
-            const firstDebt = systemState.logs.find(l => {
-              if (l.date >= logicalToday) return false;
-              const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
-              const isStd = habitKeys.every(k => l[k]);
-              const isFrozen = l.failureReason === 'دلایل شخصی';
-              const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
-              return !isStd && !isResolved;
-            });
-            if (firstDebt) {
-              setAutopsyTargetLog(firstDebt);
+            if (unresolvedDebtLogs.length > 0) {
+              setAutopsyTargetLog(unresolvedDebtLogs[0]);
             } else {
-              setActiveTab('battlefield');
+              navigateTab('battlefield');
             }
           }}
         />
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 pt-2.5 sm:pt-6 pb-20 sm:pb-8 min-w-0 flex flex-col">
-          <Suspense fallback={<TabLoadingFallback />}>
-            <AnimatePresence mode="wait">
+        <main id="main-content" tabIndex={-1} className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-3 sm:pt-6 pb-32 lg:pb-16 min-w-0 outline-none">
+          <AnimatePresence mode="wait">
               {activeTab === 'battlefield' && (
                 <motion.div
                   key="battlefield"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex-1 flex flex-col w-full min-h-full"
+                  {...pageMotion}
+                  className="w-full"
                 >
                   <BattlefieldView
                     currentCycle={currentCycle}
@@ -772,9 +1820,9 @@ export default function App() {
                     onSelectDate={handleSelectDate}
                     onUpdateLog={handleUpdateLog}
                     onOpenAutopsy={log => setAutopsyTargetLog(log)}
-                    onNavigateToArchives={() => setActiveTab('archives')}
+                    onNavigateToArchives={() => navigateTab('archives')}
                     onOpenCreateCycle={() => setIsCreateCycleModalOpen(true)}
-                    onNavigateToHabitsGuide={() => setActiveTab('profile')}
+                    onNavigateToHabitsGuide={() => navigateTab('profile')}
                   />
                 </motion.div>
               )}
@@ -782,135 +1830,126 @@ export default function App() {
               {(activeTab === 'dashboard' || activeTab === 'cycle') && (
                 <motion.div
                   key="dashboard"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex-1 flex flex-col w-full min-h-full"
+                  {...pageMotion}
+                  className="w-full"
                 >
-                  <CycleDashboardView
-                    currentCycle={currentCycle}
-                    metrics={cycleMetrics}
-                    logs={systemState.logs}
-                    cycles={systemState.cycles}
-                    allTimeSettings={dashboardAllTimeSettings}
-                    onSelectDate={handleDashboardSelectDate}
-                    onNavigateTab={handleDashboardNavigateTab}
-                  />
+                  <Suspense fallback={<ViewLoadingSkeleton title="در حال بارگذاری اتاق فرماندهی و نمودارهای چرخه..." />}>
+                    <CycleDashboardView
+                      currentCycle={currentCycle}
+                      metrics={cycleMetrics}
+                      logs={systemState.logs}
+                      cycles={systemState.cycles}
+                      allTimeSettings={dashboardAllTimeSettings}
+                      onSelectDate={handleDashboardSelectDate}
+                      onNavigateTab={handleDashboardNavigateTab}
+                      onOpenCreateCycle={() => setIsCreateCycleModalOpen(true)}
+                    />
+                  </Suspense>
                 </motion.div>
               )}
 
               {(activeTab === 'archives' || activeTab === 'database' || activeTab === 'court') && (
                 <motion.div
                   key="archives"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex-1 flex flex-col w-full min-h-full"
+                  {...pageMotion}
+                  className="w-full"
                 >
-                  <ArchivesView
-                    cycles={systemState.cycles}
-                    currentCycle={currentCycle}
-                    logs={systemState.logs}
-                    metrics={cycleMetrics}
-                    onSelectCycle={c => setActiveCycleId(c.id)}
-                    onUpdateCycle={handleUpdateCycle}
-                    onDeleteCycle={handleDeleteCycle}
-                    onSelectDate={d => {
-                      handleSelectDate(d);
-                      setActiveTab('battlefield');
-                    }}
-                    onOpenAutopsy={log => setAutopsyTargetLog(log)}
-                    onCreateNewCycle={handleCreateNewCycle}
-                  />
+                  <Suspense fallback={<ViewLoadingSkeleton title="در حال فراخوانی تاریخچه و بایگانی چرخه‌ها..." />}>
+                    <ArchivesView
+                      cycles={systemState.cycles}
+                      currentCycle={currentCycle}
+                      logs={systemState.logs}
+                      metrics={cycleMetrics}
+                      onSelectCycle={c => setActiveCycleId(c.id)}
+                      onUpdateCycle={handleUpdateCycle}
+                      onDeleteCycle={handleDeleteCycle}
+                      onSelectDate={d => {
+                        handleSelectDate(d);
+                        navigateTab('battlefield');
+                      }}
+                      onOpenAutopsy={log => setAutopsyTargetLog(log)}
+                      onCreateNewCycle={handleCreateNewCycle}
+                    />
+                  </Suspense>
                 </motion.div>
               )}
 
               {(activeTab === 'profile' || activeTab === 'settings') && (
                 <motion.div
                   key="profile"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
-                  className="flex-1 flex flex-col w-full min-h-full"
+                  {...pageMotion}
+                  className="w-full"
                 >
-                  <ProfileSettingsView
-                    userProfile={systemState.userProfile}
-                    settings={systemState.settings}
-                    onUpdateUserProfile={handleUpdateUserProfile}
-                    onUpdateSettings={handleUpdateSettings}
-                    onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
-                    onOpenAuthModal={() => setIsAuthModalOpen(true)}
-                    onQuickLogin={handleQuickLogin}
-                    onLogout={handleLogout}
-                    onResetData={handleResetData}
-                    onImportData={handleImportData}
-                    onExportData={handleExportData}
-                    onNavigateToAdmin={() => setActiveTab('admin')}
-                  />
+                  <Suspense fallback={<ViewLoadingSkeleton title="در حال بارگذاری تنظیمات سامانه و نمایه کاربری..." />}>
+                    <ProfileSettingsView
+                      userProfile={systemState.userProfile}
+                      settings={systemState.settings}
+                      onUpdateUserProfile={handleUpdateUserProfile}
+                      onUpdateSettings={handleUpdateSettings}
+                      onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
+                      onOpenAuthModal={() => setIsAuthModalOpen(true)}
+                      onQuickLogin={handleQuickLogin}
+                      onLogout={handleLogout}
+                      onResetData={handleResetData}
+                      onExportData={handleExportData}
+                      onNavigateToAdmin={() => navigateTab('admin')}
+                      onReplayTour={handleReplayTour}
+                    />
+                  </Suspense>
                 </motion.div>
               )}
 
               {activeTab === 'admin' && (
                 <motion.div
                   key="admin"
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                  {...pageMotion}
+                  className="w-full"
                 >
-                  <AdminView
-                    currentUser={systemState.userProfile}
-                    authToken={authToken}
-                    onBack={() => setActiveTab('profile')}
-                    onImpersonateUser={handleImpersonateUser}
-                    onRefreshUserProfile={() => {
-                      if (authToken) {
-                        fetch('/api/auth/me', {
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${authToken}`
-                          }
-                        })
-                          .then(r => r.json())
-                          .then(data => {
-                            if (data?.user) {
-                              setSystemState(prev => ({
-                                ...prev,
-                                userProfile: {
-                                  ...prev.userProfile,
-                                  ...data.user,
-                                  isVip: !!data.user.isVip,
-                                  isAdmin: !!data.user.isAdmin
-                                }
-                              }));
+                  <Suspense fallback={<ViewLoadingSkeleton title="در حال ورود به پنل مدیریت ارشد سامانه..." />}>
+                    <AdminView
+                      currentUser={systemState.userProfile}
+                      authToken={authToken}
+                      onBack={() => navigateTab('profile')}
+                      onImpersonateUser={handleImpersonateUser}
+                      onRefreshUserProfile={() => {
+                        if (authToken) {
+                          fetch('/api/auth/me', {
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${authToken}`
                             }
                           })
-                          .catch(console.error);
-                      }
-                    }}
-                  />
+                            .then(r => r.json())
+                            .then(data => {
+                              if (data?.user) {
+                                setSystemState(prev => ({
+                                  ...prev,
+                                  userProfile: {
+                                    ...prev.userProfile,
+                                    ...data.user,
+                                    isVip: !!data.user.isVip,
+                                    isAdmin: !!data.user.isAdmin
+                                  }
+                                }));
+                              }
+                            })
+                            .catch(console.error);
+                        }
+                      }}
+                    />
+                  </Suspense>
                 </motion.div>
               )}
             </AnimatePresence>
-          </Suspense>
         </main>
 
+        {/* Modals Layer */}
         {/* Autopsy Drawer/Modal */}
         {autopsyTargetLog && (
           <AutopsyModal
             log={autopsyTargetLog}
             cycleTheme={currentCycle?.targetTheme ?? 'amber'}
-            allUnresolvedLogs={systemState.logs.filter(l => {
-              if (l.date >= logicalToday) return false;
-              const habitKeys = ['wakeUp', 'workout', 'study', 'journal', 'hardTask'] as const;
-              const isStd = habitKeys.every(k => l[k]);
-              const isFrozen = l.failureReason === 'دلایل شخصی';
-              const isResolved = !!(l.failureReason && (isFrozen || l.failureTime));
-              return !isStd && !isResolved;
-            })}
+            allUnresolvedLogs={unresolvedDebtLogs}
             onSelectLog={nextLog => setAutopsyTargetLog(nextLog)}
             onSave={handleUpdateLog}
             onClose={() => setAutopsyTargetLog(null)}
@@ -918,75 +1957,72 @@ export default function App() {
         )}
 
         {/* Mock Payment / Subscription Modal */}
-        <PaymentModal
-          userProfile={systemState.userProfile}
-          isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          onUpgradeSuccess={handleUpdateUserProfile}
-        />
+        {isPaymentModalOpen && (
+          <PaymentModal
+            userProfile={systemState.userProfile}
+            isOpen={isPaymentModalOpen}
+            onClose={() => setIsPaymentModalOpen(false)}
+            onUpgradeSuccess={handleUpdateUserProfile}
+          />
+        )}
 
         {/* User Auth Modal */}
-        <AuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          currentUser={systemState.userProfile?.id ? systemState.userProfile : null}
-          onAuthSuccess={handleAuthSuccess}
-          onLogout={handleLogout}
-        />
-
-        {/* Global Micro-Toast Notification Layer */}
-        <Toast toasts={toasts} onDismiss={dismissToast} />
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={() => setIsAuthModalOpen(false)}
+            currentUser={systemState.userProfile?.id ? systemState.userProfile : null}
+            onAuthSuccess={handleAuthSuccess}
+            onLogout={handleLogout}
+          />
+        )}
 
         {/* Create Cycle Modal */}
-        <CreateCycleModal
-          isOpen={isCreateCycleModalOpen}
-          existingCycles={systemState.cycles}
-          onClose={() => setIsCreateCycleModalOpen(false)}
-          onCreateCycle={handleCreateNewCycle}
-        />
+        {isCreateCycleModalOpen && (
+          <CreateCycleModal
+            isOpen={isCreateCycleModalOpen}
+            existingCycles={systemState.cycles}
+            onClose={() => setIsCreateCycleModalOpen(false)}
+            onCreateCycle={handleCreateNewCycle}
+            onOpenDisciplineRules={() => setIsDisciplineRulesOpen(true)}
+          />
+        )}
+
+        {/* Discipline Rules Modal */}
+        {isDisciplineRulesOpen && (
+          <DisciplineRulesModal
+            isOpen={isDisciplineRulesOpen}
+            onClose={() => setIsDisciplineRulesOpen(false)}
+          />
+        )}
 
         {/* Reset Confirmation Modal */}
-        {isResetConfirmOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-start sm:items-center justify-start sm:justify-center p-3 sm:p-4 pt-[max(1.25rem,calc(env(safe-area-inset-top,0px)+0.75rem))] pb-[max(1.25rem,calc(env(safe-area-inset-bottom,0px)+0.75rem))] overscroll-contain overflow-y-auto max-h-[100dvh]">
-            <div className="bg-[#121215] border border-red-500/40 rounded-2xl sm:rounded-3xl w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
-                  <RotateCcw className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-base text-zinc-100">
-                    بازنشانی داده‌های سامانه
-                  </h3>
-                  <p className="text-xs text-red-400 mt-0.5">
-                    بازگشت به مقادیر اولیه سیستم بوشیدو
-                  </p>
-                </div>
-              </div>
+        <ResetConfirmationModal
+          isOpen={isResetConfirmOpen}
+          onClose={() => setIsResetConfirmOpen(false)}
+          onConfirm={handleConfirmReset}
+        />
 
-              <p className="text-xs text-zinc-300 leading-relaxed bg-[#09090b]/80 border border-zinc-800 rounded-2xl p-4">
-                آیا از بازنشانی کلیه داده‌ها، لاگ‌ها و چرخه‌ها به اطلاعات نمونه اولیه سیستم بوشیدو اطمینان دارید؟ تمام تغییرات ثبت‌شده محلی پاک خواهند شد.
-              </p>
+        {/* First Run Coach Marks Tour: Overlays real battlefield, never blocks ticking habits */}
+        <FirstRunTour
+          isOpen={isTourOpen && activeTab === 'battlefield' && !isAnyModalOpen && systemState.cycles.length > 0}
+          onComplete={handleTourComplete}
+          onSkip={handleTourSkip}
+        />
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsResetConfirmOpen(false)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  انصراف
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmReset}
-                  className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/30 transition cursor-pointer"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                  <span>بله، بازنشانی داده‌ها</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Phase 3A: PWA Add-to-Home-Screen Mild Banner (beforeinstallprompt only) */}
+        <PwaInstallBanner
+          ownerId={currentOwnerId}
+          hasSessionFirstValue={hasSessionFirstValue}
+          isTourOpen={isTourOpen && activeTab === 'battlefield' && !isAnyModalOpen && systemState.cycles.length > 0}
+        />
+
+        {/* Phase 3B: Honest iOS Add-to-Home-Screen Tip */}
+        <IosInstallTip
+          ownerId={currentOwnerId}
+          hasSessionFirstValue={hasSessionFirstValue}
+          isTourOpen={isTourOpen && activeTab === 'battlefield' && !isAnyModalOpen && systemState.cycles.length > 0}
+        />
       </div>
     </ErrorBoundary>
   );

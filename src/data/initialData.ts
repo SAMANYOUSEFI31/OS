@@ -1,5 +1,5 @@
 import { Cycle, DailyLog, SystemSettings, UserProfile } from '../types';
-import { addDaysToDate, formatDateISO, getLogicalTodayDate } from '../utils/dateUtils';
+import { addDaysToDate, formatDateISO, getLogicalTodayDate } from '../shared/utils/dateUtils';
 
 export const GUEST_USER_PROFILE: UserProfile = {
   id: '',
@@ -26,7 +26,7 @@ export const DEFAULT_ADMIN_USER_PROFILE: UserProfile = {
   activeCycleLimit: 99
 };
 
-export function createInitialSystemState(): {
+export function createInitialSystemState(customProfile?: UserProfile): {
   cycles: Cycle[];
   logs: DailyLog[];
   settings: SystemSettings;
@@ -40,7 +40,7 @@ export function createInitialSystemState(): {
 
   const cycle1: Cycle = {
     id: 'cycle-1',
-    title: 'چرخه ۱ — فونداسیون اراده و دیسیپلین آهنین',
+    title: 'چرخه ۱ (نمونه) — فونداسیون اراده و دیسیپلین آهنین',
     startDate: cycle1StartDate,
     endDate: cycle1EndDate,
     targetTheme: 'تسلط بر سحرخیزی، ۱۰۰ ساعت کار عمیق و ثبات در ورزش روزانه',
@@ -52,7 +52,8 @@ export function createInitialSystemState(): {
       'کالبدشکافی بدون تعارف در صورت هرگونه افت'
     ],
     isArchived: false,
-    reportRead: false
+    reportRead: false,
+    revision: 1
   };
 
   // Generate logs for past 24 days + today
@@ -69,6 +70,7 @@ export function createInitialSystemState(): {
         cycleId: cycle1.id,
         date: dayDate,
         createdAt: new Date().toISOString(),
+        revision: 1,
         wakeUp: true,
         workout: true,
         study: true,
@@ -84,6 +86,7 @@ export function createInitialSystemState(): {
         cycleId: cycle1.id,
         date: dayDate,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
+        revision: 1,
         wakeUp: true,
         workout: false,
         study: false,
@@ -102,6 +105,7 @@ export function createInitialSystemState(): {
         cycleId: cycle1.id,
         date: dayDate,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
+        revision: 1,
         wakeUp: false,
         workout: true,
         study: true,
@@ -121,6 +125,7 @@ export function createInitialSystemState(): {
         cycleId: cycle1.id,
         date: dayDate,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
+        revision: 1,
         wakeUp: true,
         workout: false,
         study: true,
@@ -139,6 +144,7 @@ export function createInitialSystemState(): {
         cycleId: cycle1.id,
         date: dayDate,
         createdAt: new Date(Date.now() - (24 - i) * 86400000).toISOString(),
+        revision: 1,
         wakeUp: true,
         workout: true,
         study: true,
@@ -160,7 +166,7 @@ export function createInitialSystemState(): {
     nightOwlCutoffHour: 4
   };
 
-  const userProfile: UserProfile = {
+  const userProfile: UserProfile = customProfile || {
     id: 'admin-master-001',
     name: 'فرمانده ارشد سامورایی (مدیر)',
     email: 'admin@bushido.app',
@@ -181,3 +187,28 @@ export function createInitialSystemState(): {
     userProfile
   };
 }
+
+export function createEmptySystemState(userProfile?: UserProfile): {
+  cycles: Cycle[];
+  logs: DailyLog[];
+  settings: SystemSettings;
+  userProfile: UserProfile;
+} {
+  const settings: SystemSettings = {
+    id: 'system-main',
+    platformName: 'Bushido Discipline OS',
+    centralEngineName: 'موتور مرکزی بوشیدو',
+    allTimeMaxStreak: 0,
+    allTimeMaxScore: 0,
+    allTimeMaxStandardDays: 0,
+    nightOwlCutoffHour: 4
+  };
+
+  return {
+    cycles: [],
+    logs: [],
+    settings,
+    userProfile: userProfile || GUEST_USER_PROFILE
+  };
+}
+

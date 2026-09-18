@@ -1,3 +1,15 @@
+/**
+ * ARCHITECTURAL NOTICE - SPRINT 3B.1 CONTRACT:
+ * 
+ * BushidoContext is currently an INACTIVE, UNMOUNTED alternative provider.
+ * The authoritative, active production runtime is src/App.tsx.
+ * 
+ * - App.tsx directly manages production state, online listeners, and queue replay.
+ * - BushidoProvider is NOT mounted in src/main.tsx or anywhere in the production tree.
+ * - This file is preserved for reference and potential future consolidation (Phase 3B.3).
+ * - All offline queue operations MUST route through src/utils/offlineQueueUtils.ts.
+ */
+
 import React, { 
   createContext, 
   useContext, 
@@ -21,53 +33,53 @@ import {
 } from '../types';
 import { createInitialSystemState, GUEST_USER_PROFILE } from '../data/initialData';
 import { computeCycleMetrics } from '../engine/bushidoCalculations';
-import { getLogicalTodayDate, addDaysToDate } from '../utils/dateUtils';
-import { applyAccentTheme } from '../utils/themeUtils';
-import { toPersianDigits } from '../utils/numberUtils';
+import { getLogicalTodayDate, addDaysToDate } from '../shared/utils/dateUtils';
+import { applyAccentTheme } from '../shared/utils/themeUtils';
+import { toPersianDigits } from '../shared/utils/numberUtils';
 import { 
   loadStoredSystemState, 
   saveSystemStateDebounced, 
   flushPendingStorageSave, 
-  STORAGE_KEY, 
-  TOKEN_KEY 
-} from '../utils/storageUtils';
-
-const OFFLINE_QUEUE_KEY = 'bushido_offline_queue';
-
-interface OfflineQueueItem {
-  id: string;
-  type: 'UPDATE_LOG' | 'UPDATE_CYCLE' | 'CREATE_CYCLE';
-  payload: any;
-  timestamp: number;
-}
-
-const getOfflineQueue = (): OfflineQueueItem[] => {
-  try {
-    const raw = localStorage.getItem(OFFLINE_QUEUE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveOfflineQueue = (queue: OfflineQueueItem[]) => {
-  try {
-    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
-  } catch (err) {
-    console.warn('Failed to persist offline queue:', err);
-  }
-};
-
-const addToOfflineQueue = (item: Omit<OfflineQueueItem, 'id' | 'timestamp'>) => {
-  const queue = getOfflineQueue();
-  const newItem: OfflineQueueItem = {
-    ...item,
-    id: `queue_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-    timestamp: Date.now()
-  };
-  queue.push(newItem);
-  saveOfflineQueue(queue);
-};
+  cancelPendingStorageSave,
+  TOKEN_KEY,
+  getScopedStorageKey,
+  getScopedDemoConsumedKey,
+  getActiveAccountId,
+  setActiveAccountId,
+  normalizeUserId,
+  transitionAccountState,
+  resetAccountState,
+  buildExportPayload,
+  safeGetLocalStorage,
+  safeSetLocalStorage,
+  safeRemoveLocalStorage,
+  safeGetSessionStorage,
+  safeSetSessionStorage,
+  safeRemoveSessionStorage,
+  resolveBackendSyncDecision,
+  shouldQueueOfflineMutation
+} from '../sync/storageUtils';
+import {
+  IMPERSONATOR_TOKEN_KEY,
+  IMPERSONATING_USER_KEY,
+  validateAdminTokenForExit,
+  processExitImpersonationOutcome,
+  buildExitImpersonationSuccessState,
+  buildExitImpersonationRevokedState,
+  executeLogoutDuringImpersonation
+} from '../sync/impersonationUtils';
+import {
+  enqueueOfflineMutation,
+  getOfflineQueue,
+  saveOfflineQueue,
+  clearOfflineQueue,
+  replayAccountOfflineQueue,
+  migrateLegacyGlobalQueue,
+  normalizeQueueOwner,
+  isGuestQueueOwner,
+  parseSafeConflictDetails,
+  recordClientConflict
+} from '../sync/offlineQueueUtils';
 
 const parseApiError = async (res: Response): Promise<string> => {
   try {
@@ -123,7 +135,6 @@ export interface BushidoContextType {
   syncOfflineDataToServer: () => Promise<void>;
   exportData: () => void;
   confirmResetData: () => void;
-  importData: (jsonStr: string) => void;
 
   // Direct Helper Shortcuts
   toggleHabit: (date: string, habitKey: HabitKey) => Promise<void>;
@@ -168,18 +179,31 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   });
 
-  const [impersonatingUser, setImpersonatingUser] = useState<AdminUserItem | null>(null);
-  const [impersonatorAdminToken, setImpersonatorAdminToken] = useState<string | null>(null);
+  const [impersonatingUser, setImpersonatingUser] = useState<AdminUserItem | null>(() => {
+    try {
+      const stored = safeGetSessionStorage('bushido_impersonating_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [impersonatorAdminToken, setImpersonatorAdminToken] = useState<string | null>(() => {
+    return safeGetSessionStorage('bushido_impersonator_token');
+  });
 
   const [systemState, setSystemState] = useState<{
     cycles: Cycle[];
     logs: DailyLog[];
     settings: SystemSettings;
     userProfile: UserProfile;
-  }>(() => loadStoredSystemState());
+  }>(() => {
+    const token = safeGetLocalStorage(TOKEN_KEY);
+    const activeAcc = getActiveAccountId();
+    return loadStoredSystemState(token ? activeAcc : null);
+  });
 
   const [activeCycleId, setActiveCycleId] = useState<string>(() => {
-    return systemState.cycles[0]?.id || 'cycle-1';
+    return systemState.cycles[0]?.id || '';
   });
 
   const [selectedDate, setSelectedDate] = useState<string>(() => getLogicalTodayDate());
@@ -190,6 +214,16 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [appToastMessage, setAppToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
+  const activeAccountRef = useRef<string | null>(systemState.userProfile?.id || null);
+
+  useEffect(() => {
+    activeAccountRef.current = systemState.userProfile?.id || null;
+  }, [systemState.userProfile?.id]);
+
+  useEffect(() => {
+    // Phase 3B: Safely migrate legacy global queue on startup
+    migrateLegacyGlobalQueue();
+  }, []);
 
   const showAppToast = useCallback((msg: string) => {
     if (toastTimeoutRef.current) {
@@ -234,40 +268,49 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [systemState.cycles, activeCycleId]);
 
   useEffect(() => {
-    saveSystemStateDebounced(systemState, 350);
+    saveSystemStateDebounced(systemState, systemState.userProfile?.id, 350);
     const theme = systemState.userProfile?.accentTheme || systemState.settings?.accentTheme || 'amber';
     applyAccentTheme(theme);
   }, [systemState]);
 
   useEffect(() => {
     const initDefaultAdminIfNeeded = async () => {
-      const currentToken = localStorage.getItem(TOKEN_KEY);
+      const currentToken = safeGetLocalStorage(TOKEN_KEY);
       const isExplicitLogout = sessionStorage.getItem('bushido_explicit_logout') === 'true';
       if (!currentToken && !isExplicitLogout) {
         try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
           const res = await fetch('/api/auth/quick-login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role: 'admin' })
+            body: JSON.stringify({ role: 'admin' }),
+            signal: controller.signal
           });
+          clearTimeout(timeoutId);
           if (res.ok) {
             const data = await res.json();
             if (data.token && data.user) {
-              localStorage.setItem(TOKEN_KEY, data.token);
+              safeSetLocalStorage(TOKEN_KEY, data.token);
+              setActiveAccountId(data.user.id);
               setAuthToken(data.token);
-              setSystemState(prev => ({
-                ...prev,
+              const userLocalState = loadStoredSystemState(data.user.id);
+              setSystemState({
+                ...userLocalState,
                 userProfile: {
-                  ...prev.userProfile,
+                  ...userLocalState.userProfile,
                   ...data.user,
                   isVip: Boolean(data.user.isVip),
                   isAdmin: Boolean(data.user.isAdmin)
                 }
-              }));
+              });
+              if (userLocalState.cycles.length > 0) {
+                setActiveCycleId(userLocalState.cycles[0].id);
+              }
             }
           }
         } catch (err) {
-          console.warn('Auto admin login fallback:', err);
+          // In production or when test shortcuts are disabled, quick-login will fail gracefully without spinning
         }
       }
     };
@@ -304,6 +347,8 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [authToken]);
 
   useEffect(() => {
+    let isCancelled = false;
+
     const fetchBackendData = async () => {
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -311,48 +356,84 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
           headers['Authorization'] = `Bearer ${authToken}`;
         }
 
+        let fetchedUserProfile: Partial<UserProfile> | null = null;
         if (authToken) {
-          const userRes = await fetch('/api/auth/me', { headers });
-          if (userRes.ok) {
-            const userData = await userRes.json();
-            if (userData.user) {
-              setSystemState(prev => ({
-                ...prev,
-                userProfile: {
-                  ...prev.userProfile,
+          const userRes = await fetch('/api/auth/me', { headers }).catch(() => null);
+          if (userRes) {
+            if (userRes.ok) {
+              const userData = await userRes.json();
+              if (userData?.user) {
+                setActiveAccountId(userData.user.id);
+                fetchedUserProfile = {
                   ...userData.user,
-                  isVip: !!userData.user.isVip,
-                  isAdmin: !!userData.user.isAdmin
-                }
-              }));
+                  isVip: Boolean(userData.user.isVip),
+                  isAdmin: Boolean(userData.user.isAdmin)
+                };
+              }
+            } else if (userRes.status === 401) {
+              safeRemoveLocalStorage(TOKEN_KEY);
+              setActiveAccountId(null);
+              setAuthToken(null);
             }
-          } else {
-            localStorage.removeItem(TOKEN_KEY);
-            setAuthToken(null);
           }
         }
 
-        const cyclesRes = await fetch('/api/cycles', { headers });
-        if (cyclesRes.ok) {
+        if (isCancelled) return;
+
+        let apiCycles: Cycle[] | null = null;
+        const cyclesRes = await fetch('/api/cycles', { headers }).catch(() => null);
+        if (cyclesRes && cyclesRes.ok) {
           const cyclesData = await cyclesRes.json();
           const cyclesList = Array.isArray(cyclesData) ? cyclesData : (cyclesData?.cycles || []);
-          if (Array.isArray(cyclesList) && cyclesList.length > 0) {
-            setSystemState(prev => ({
-              ...prev,
-              cycles: cyclesList
-            }));
+          if (Array.isArray(cyclesList)) {
+            apiCycles = cyclesList;
           }
         }
 
-        const logsRes = await fetch('/api/logs', { headers });
-        if (logsRes.ok) {
+        if (isCancelled) return;
+
+        let apiLogs: DailyLog[] | null = null;
+        const logsRes = await fetch('/api/logs', { headers }).catch(() => null);
+        if (logsRes && logsRes.ok) {
           const logsData = await logsRes.json();
           const logsList = Array.isArray(logsData) ? logsData : (logsData?.logs || []);
-          if (Array.isArray(logsList) && logsList.length > 0) {
-            setSystemState(prev => ({
-              ...prev,
-              logs: logsList
-            }));
+          if (Array.isArray(logsList)) {
+            apiLogs = logsList;
+          }
+        }
+
+        if (isCancelled) return;
+
+        const activeUserId = fetchedUserProfile?.id || (authToken ? getActiveAccountId() : null);
+        const scopedDemoKey = getScopedDemoConsumedKey(activeUserId);
+        const isDemoConsumed = safeGetLocalStorage(scopedDemoKey) === 'true';
+        const syncDecision = resolveBackendSyncDecision({
+          apiCycles,
+          apiLogs,
+          isDemoConsumed
+        });
+
+        if (syncDecision.shouldMarkDemoConsumed) {
+          safeSetLocalStorage(scopedDemoKey, 'true');
+        }
+
+        const { nextCycles, nextLogs, nextActiveCycleId } = syncDecision;
+
+        if (fetchedUserProfile || nextCycles !== null || nextLogs !== null) {
+          setSystemState(prev => ({
+            ...prev,
+            userProfile: fetchedUserProfile ? { ...prev.userProfile, ...fetchedUserProfile } : prev.userProfile,
+            cycles: nextCycles !== null ? nextCycles : prev.cycles,
+            logs: nextLogs !== null ? nextLogs : prev.logs
+          }));
+
+          if (nextActiveCycleId) {
+            setActiveCycleId(prev => {
+              if (!prev || (nextCycles && !nextCycles.some(c => c.id === prev))) {
+                return nextActiveCycleId!;
+              }
+              return prev;
+            });
           }
         }
       } catch (err) {
@@ -361,6 +442,9 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     };
 
     fetchBackendData();
+    return () => {
+      isCancelled = true;
+    };
   }, [authToken]);
 
   const currentCycle = useMemo(() => {
@@ -390,7 +474,15 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     return unresolvedAutopsyLog !== null;
   }, [unresolvedAutopsyLog]);
 
+  /**
+   * Authoritative Mutation Handlers:
+   * Both App.tsx and BushidoContext.tsx share identical ownership and auth guards (shouldQueueOfflineMutation).
+   * - Guests / tokenless sessions are strictly local and never queued for server replay.
+   * - Authenticated offline sessions enqueue mutations into the owner's partition.
+   * - Authenticated online sessions attempt direct API call with automatic queue fallback on network/server error.
+   */
   const updateLog = useCallback(async (updatedLog: DailyLog) => {
+    const ownerId = systemState.userProfile?.id;
     const optimisticLog: DailyLog = { ...updatedLog, isSynced: false };
     setSystemState(prev => {
       const existingIdx = prev.logs.findIndex(l => l.date === updatedLog.date);
@@ -407,84 +499,131 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       };
     });
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      addToOfflineQueue({ type: 'UPDATE_LOG', payload: updatedLog });
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
+    }
+
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_LOG', payload: updatedLog, expectedRevision: updatedLog.revision });
       return;
     }
 
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
       const res = await fetch('/api/logs', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify({
           ...updatedLog,
-          cycleId: updatedLog.cycleId || activeCycleId
+          cycleId: updatedLog.cycleId || activeCycleId,
+          ...(updatedLog.revision ? { expectedRevision: updatedLog.revision } : {})
         })
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        const serverLog = data?.log;
         setSystemState(prev => ({
           ...prev,
-          logs: prev.logs.map(l => l.date === updatedLog.date ? { ...l, isSynced: true } : l)
+          logs: prev.logs.map(l => l.date === updatedLog.date ? { ...(serverLog || l), isSynced: true } : l)
         }));
+      } else if (res.status === 409 || res.status === 428) {
+        const conflictJson = await res.json().catch(() => null);
+        const parsedConflict = parseSafeConflictDetails(res.status, conflictJson, 'DAILY_LOG', updatedLog.date);
+        recordClientConflict(ownerId, {
+          mutationType: 'UPDATE_LOG',
+          entityType: parsedConflict.entityType,
+          entityId: parsedConflict.entityId,
+          conflictType: parsedConflict.conflictType,
+          statusCode: parsedConflict.statusCode,
+          expectedRevision: parsedConflict.expectedRevision ?? updatedLog.revision,
+          currentRevision: parsedConflict.currentRevision,
+          messageFa: parsedConflict.messageFa,
+          clientPayload: updatedLog
+        });
       } else {
         const errorMsg = await parseApiError(res);
         console.warn('API Error updating log:', errorMsg);
-        addToOfflineQueue({ type: 'UPDATE_LOG', payload: updatedLog });
+        enqueueOfflineMutation(ownerId, { type: 'UPDATE_LOG', payload: updatedLog, expectedRevision: updatedLog.revision });
       }
     } catch (e) {
       console.warn('Failed to sync log to server backend, added to offline queue:', e);
-      addToOfflineQueue({ type: 'UPDATE_LOG', payload: updatedLog });
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_LOG', payload: updatedLog, expectedRevision: updatedLog.revision });
     }
-  }, [authToken, activeCycleId]);
+  }, [authToken, activeCycleId, systemState.userProfile?.id]);
 
   const updateCycle = useCallback(async (updatedCycle: Cycle) => {
+    const ownerId = systemState.userProfile?.id;
     const optimisticCycle: Cycle = { ...updatedCycle, isSynced: false };
     setSystemState(prev => ({
       ...prev,
       cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? optimisticCycle : c))
     }));
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      addToOfflineQueue({ type: 'UPDATE_CYCLE', payload: updatedCycle });
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
+    }
+
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_CYCLE', payload: updatedCycle, expectedRevision: updatedCycle.revision });
       return;
     }
 
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
       const res = await fetch(`/api/cycles/${updatedCycle.id}`, {
         method: 'PUT',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(updatedCycle)
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        const serverCycle = data?.cycle;
         setSystemState(prev => ({
           ...prev,
-          cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? { ...c, isSynced: true } : c))
+          cycles: prev.cycles.map(c => (c.id === updatedCycle.id ? { ...(serverCycle || c), isSynced: true } : c))
         }));
+      } else if (res.status === 409 || res.status === 428) {
+        const conflictJson = await res.json().catch(() => null);
+        const parsedConflict = parseSafeConflictDetails(res.status, conflictJson, 'CYCLE', updatedCycle.id);
+        recordClientConflict(ownerId, {
+          mutationType: 'UPDATE_CYCLE',
+          entityType: parsedConflict.entityType,
+          entityId: parsedConflict.entityId,
+          conflictType: parsedConflict.conflictType,
+          statusCode: parsedConflict.statusCode,
+          expectedRevision: parsedConflict.expectedRevision ?? updatedCycle.revision,
+          currentRevision: parsedConflict.currentRevision,
+          messageFa: parsedConflict.messageFa,
+          clientPayload: updatedCycle
+        });
       } else {
         const errorMsg = await parseApiError(res);
         console.warn('API Error updating cycle:', errorMsg);
-        addToOfflineQueue({ type: 'UPDATE_CYCLE', payload: updatedCycle });
+        enqueueOfflineMutation(ownerId, { type: 'UPDATE_CYCLE', payload: updatedCycle, expectedRevision: updatedCycle.revision });
       }
     } catch (e) {
       console.warn('Failed to sync cycle update to server, added to offline queue:', e);
-      addToOfflineQueue({ type: 'UPDATE_CYCLE', payload: updatedCycle });
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_CYCLE', payload: updatedCycle, expectedRevision: updatedCycle.revision });
     }
-  }, [authToken]);
+  }, [authToken, systemState.userProfile?.id]);
 
   const deleteCycle = useCallback(async (cycleId: string) => {
+    const ownerId = systemState.userProfile?.id;
+    const scopedDemoKey = getScopedDemoConsumedKey(ownerId);
+    safeSetLocalStorage(scopedDemoKey, 'true');
+    const targetCycle = systemState.cycles.find(c => c.id === cycleId);
+    const expectedRevision = targetCycle?.revision;
+    const targetLogs = systemState.logs.filter(l => l.cycleId === cycleId);
     const remainingCycles = systemState.cycles.filter(c => c.id !== cycleId);
+    const previousActiveCycleId = activeCycleId;
 
     setSystemState(prev => ({
       ...prev,
@@ -497,21 +636,69 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSelectedDate(remainingCycles[0].startDate);
     }
 
-    try {
-      const headers: Record<string, string> = {};
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-      await fetch(`/api/cycles/${cycleId}`, {
-        method: 'DELETE',
-        headers
-      });
-    } catch (e) {
-      console.warn('Failed to sync cycle deletion to server:', e);
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
     }
-  }, [authToken, activeCycleId, systemState.cycles]);
+
+    const deletePayload = { id: cycleId, revision: expectedRevision };
+
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'DELETE_CYCLE', payload: deletePayload, expectedRevision });
+      return;
+    }
+
+    try {
+      const url = `/api/cycles/${cycleId}${expectedRevision ? `?expectedRevision=${expectedRevision}` : ''}`;
+      const res = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+      if (res.ok || res.status === 404) {
+        // Success
+      } else if (res.status === 409 || res.status === 428) {
+        const conflictJson = await res.json().catch(() => null);
+        const parsedConflict = parseSafeConflictDetails(res.status, conflictJson, 'CYCLE', cycleId);
+        recordClientConflict(ownerId, {
+          mutationType: 'DELETE_CYCLE',
+          entityType: parsedConflict.entityType,
+          entityId: parsedConflict.entityId,
+          conflictType: parsedConflict.conflictType,
+          statusCode: parsedConflict.statusCode,
+          expectedRevision: parsedConflict.expectedRevision ?? expectedRevision,
+          currentRevision: parsedConflict.currentRevision,
+          messageFa: parsedConflict.messageFa,
+          clientPayload: deletePayload
+        });
+
+        // Rollback optimistic delete
+        setSystemState(prev => {
+          const hasCycle = prev.cycles.some(c => c.id === cycleId);
+          if (hasCycle || !targetCycle) return prev;
+          return {
+            ...prev,
+            cycles: [...prev.cycles, targetCycle],
+            logs: [...prev.logs, ...targetLogs.filter(tl => !prev.logs.some(pl => pl.date === tl.date))]
+          };
+        });
+        if (previousActiveCycleId === cycleId) {
+          setActiveCycleId(cycleId);
+        }
+      } else {
+        enqueueOfflineMutation(ownerId, { type: 'DELETE_CYCLE', payload: deletePayload, expectedRevision });
+      }
+    } catch (e) {
+      console.warn('Failed to sync cycle deletion to server, added to offline queue:', e);
+      enqueueOfflineMutation(ownerId, { type: 'DELETE_CYCLE', payload: deletePayload, expectedRevision });
+    }
+  }, [authToken, activeCycleId, systemState.cycles, systemState.logs, systemState.userProfile?.id]);
 
   const createNewCycle = useCallback(async (title: string, startDate: string, targetTheme: string) => {
+    const ownerId = systemState.userProfile?.id;
+    const scopedDemoKey = getScopedDemoConsumedKey(ownerId);
+    safeSetLocalStorage(scopedDemoKey, 'true');
     const newCycle: Cycle = {
       id: `cycle-${Date.now()}`,
       title,
@@ -532,20 +719,23 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSelectedDate(startDate);
     setActiveTab('battlefield');
 
-    if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      addToOfflineQueue({ type: 'CREATE_CYCLE', payload: newCycle });
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
+    }
+
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'CREATE_CYCLE', payload: newCycle });
       return;
     }
 
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
-
       const res = await fetch('/api/cycles', {
         method: 'POST',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(newCycle)
       });
 
@@ -557,105 +747,59 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       } else {
         const errorMsg = await parseApiError(res);
         console.warn('API Error creating cycle:', errorMsg);
-        addToOfflineQueue({ type: 'CREATE_CYCLE', payload: newCycle });
+        enqueueOfflineMutation(ownerId, { type: 'CREATE_CYCLE', payload: newCycle });
       }
     } catch (e) {
       console.warn('Failed to save cycle to server, added to offline queue:', e);
-      addToOfflineQueue({ type: 'CREATE_CYCLE', payload: newCycle });
+      enqueueOfflineMutation(ownerId, { type: 'CREATE_CYCLE', payload: newCycle });
     }
-  }, [authToken, cycleMetrics?.pureStreak]);
+  }, [authToken, cycleMetrics?.pureStreak, systemState.userProfile?.id]);
 
-  const syncOfflineDataToServer = useCallback(async () => {
+  const syncOfflineDataToServer = useCallback(async (targetOwnerId?: string | null, targetToken?: string | null) => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return;
     }
 
-    const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (currentToken) {
-      headers['Authorization'] = `Bearer ${currentToken}`;
+    const ownerId = targetOwnerId !== undefined ? targetOwnerId : systemState.userProfile?.id;
+    const currentToken = targetToken !== undefined ? targetToken : (authToken || safeGetLocalStorage(TOKEN_KEY));
+
+    // Strengthen replay identity binding:
+    // Replay strictly allowed for authenticated accounts with non-empty tokens
+    if (!ownerId || !currentToken || isGuestQueueOwner(ownerId)) {
+      return;
     }
 
-    let syncedItemsCount = 0;
-
-    const queue = getOfflineQueue();
-    if (queue.length > 0) {
-      const remainingQueue: OfflineQueueItem[] = [];
-      for (const item of queue) {
-        try {
+    try {
+      const result = await replayAccountOfflineQueue({
+        activeAccountId: ownerId,
+        authToken: currentToken,
+        getCurrentActiveAccountId: () => activeAccountRef.current,
+        onItemSuccess: (item) => {
           if (item.type === 'UPDATE_LOG') {
-            const res = await fetch('/api/logs', {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(item.payload)
-            });
-            if (res.ok) {
-              syncedItemsCount++;
-              setSystemState(prev => ({
-                ...prev,
-                logs: prev.logs.map(l => l.date === item.payload.date ? { ...l, isSynced: true } : l)
-              }));
-            } else {
-              remainingQueue.push(item);
-            }
-          } else if (item.type === 'UPDATE_CYCLE' || item.type === 'CREATE_CYCLE') {
-            const endpoint = item.type === 'CREATE_CYCLE' ? '/api/cycles' : `/api/cycles/${item.payload.id}`;
-            const method = item.type === 'CREATE_CYCLE' ? 'POST' : 'PUT';
-            const res = await fetch(endpoint, {
-              method,
-              headers,
-              body: JSON.stringify(item.payload)
-            });
-            if (res.ok) {
-              syncedItemsCount++;
-              setSystemState(prev => ({
-                ...prev,
-                cycles: prev.cycles.map(c => c.id === item.payload.id ? { ...c, isSynced: true } : c)
-              }));
-            } else {
-              remainingQueue.push(item);
-            }
-          }
-        } catch (err) {
-          remainingQueue.push(item);
-        }
-      }
-      saveOfflineQueue(remainingQueue);
-    }
-
-    const unsyncedLogs = systemState.logs.filter(l => l.isSynced === false);
-    if (unsyncedLogs.length > 0) {
-      for (const log of unsyncedLogs) {
-        try {
-          const res = await fetch('/api/logs', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
-              ...log,
-              cycleId: log.cycleId || activeCycleId
-            })
-          });
-          if (res.ok) {
-            syncedItemsCount++;
             setSystemState(prev => ({
               ...prev,
-              logs: prev.logs.map(l => l.date === log.date ? { ...l, isSynced: true } : l)
+              logs: prev.logs.map(l => l.date === item.payload.date ? { ...l, isSynced: true } : l)
+            }));
+          } else if (item.type === 'UPDATE_CYCLE' || item.type === 'CREATE_CYCLE') {
+            setSystemState(prev => ({
+              ...prev,
+              cycles: prev.cycles.map(c => c.id === item.payload.id ? { ...c, isSynced: true } : c)
             }));
           }
-        } catch (err) {
-          console.warn('[Sync Queue] Failed to push offline log:', log.date, err);
         }
-      }
-    }
+      });
 
-    if (syncedItemsCount > 0) {
-      showAppToast(`همگام‌سازی ابری با موفقیت انجام شد (${toPersianDigits(syncedItemsCount)} تغییر ذخیره شد).`);
+      if (result.syncedCount > 0) {
+        showAppToast(`همگام‌سازی ابری با موفقیت انجام شد (${toPersianDigits(result.syncedCount)} تغییر ذخیره شد).`);
+      }
+    } catch (err) {
+      console.warn('Sync offline data error:', err);
+      showAppToast('همگام‌سازی با سرور به دلیل اختلال ارتباط انجام نشد؛ داده‌ها در حافظه دستگاه محفوظ است.');
     }
-  }, [authToken, activeCycleId, systemState.logs, showAppToast]);
+  }, [authToken, systemState.userProfile?.id, showAppToast]);
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log('[Bushido Sync] Device is back online. Syncing pending offline queues...');
       syncOfflineDataToServer();
     };
 
@@ -666,28 +810,47 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [syncOfflineDataToServer]);
 
   const updateUserProfile = useCallback(async (updatedProfile: UserProfile) => {
+    const ownerId = systemState.userProfile?.id;
     setSystemState(prev => ({
       ...prev,
       userProfile: updatedProfile
     }));
 
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
-      }
+    const guard = shouldQueueOfflineMutation({ ownerId, authToken });
+    if (!guard.canSendToServer && !guard.shouldQueue) {
+      return;
+    }
 
-      await fetch('/api/user/profile', {
+    if (guard.shouldQueue) {
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/user/profile', {
         method: 'PUT',
-        headers,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
         body: JSON.stringify(updatedProfile)
       });
+      if (!res.ok) {
+        enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+        showAppToast('تغییرات نمایه در صف آفلاین ذخیره شد و پس از اتصال به سرور همگام می‌شود.');
+      }
     } catch (e) {
       console.warn('Failed to sync user profile:', e);
+      enqueueOfflineMutation(ownerId, { type: 'UPDATE_PROFILE', payload: updatedProfile });
+      showAppToast('تغییرات نمایه در دستگاه ذخیره شد و با برقراری مجدد اینترنت به سرور ارسال خواهد شد.');
     }
-  }, [authToken]);
+  }, [authToken, systemState.userProfile?.id]);
 
   const updateSettings = useCallback(async (updatedSettings: SystemSettings) => {
+    // Architecture Decision (Requirement 3):
+    // SystemSettings (such as all-time records, central engine name) are declared local-only client state.
+    // User profile settings (nightOwlCutoffHour, accentTheme) are synced via UPDATE_PROFILE.
+    // We intentionally DO NOT enqueue UPDATE_SETTINGS into the offline queue to avoid unnecessary / failing sync calls.
     setSystemState(prev => ({
       ...prev,
       settings: updatedSettings
@@ -776,13 +939,7 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [systemState.logs, activeCycleId, updateLog, showAppToast]);
 
   const exportData = useCallback(() => {
-    const data = {
-      cycles: systemState.cycles,
-      logs: systemState.logs,
-      settings: systemState.settings,
-      userProfile: systemState.userProfile,
-      exportedAt: new Date().toISOString()
-    };
+    const data = buildExportPayload(systemState);
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -793,92 +950,86 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, [systemState, logicalToday]);
 
   const confirmResetData = useCallback(() => {
-    flushPendingStorageSave();
-    const fresh = createInitialSystemState();
-    setSystemState(fresh);
-    setActiveCycleId(fresh.cycles[0].id);
+    const { freshState, activeCycleId } = resetAccountState(systemState.userProfile);
+    setSystemState(freshState);
+    setActiveCycleId(activeCycleId);
     setSelectedDate(getLogicalTodayDate());
     setIsResetConfirmOpen(false);
     showAppToast('داده‌های سامانه با موفقیت به مقادیر اولیه بوشیدو بازنشانی شد.');
-  }, [showAppToast]);
-
-  const importData = useCallback((dataStr: string) => {
-    try {
-      const parsed = JSON.parse(dataStr);
-      if (
-        parsed &&
-        typeof parsed === 'object' &&
-        Array.isArray(parsed.cycles) &&
-        Array.isArray(parsed.logs) &&
-        parsed.settings &&
-        typeof parsed.settings === 'object'
-      ) {
-        if (!parsed.userProfile || typeof parsed.userProfile !== 'object') {
-          parsed.userProfile = createInitialSystemState().userProfile;
-        }
-
-        parsed.cycles = parsed.cycles.filter((c: any) => c && typeof c === 'object' && typeof c.id === 'string' && typeof c.startDate === 'string');
-        parsed.logs = parsed.logs.filter((l: any) => l && typeof l === 'object' && typeof l.date === 'string');
-
-        if (parsed.cycles.length === 0) {
-          showAppToast('فایل پشتیبان باید حداقل دارای یک چرخه معتبر باشد.');
-          return;
-        }
-
-        flushPendingStorageSave();
-        setSystemState(parsed);
-        setActiveCycleId(parsed.cycles[0].id);
-        showAppToast('اطلاعات پشتیبان با موفقیت بازیابی شد.');
-      } else {
-        showAppToast('فرمت ساختار فایل پشتیبان نامعتبر است.');
-      }
-    } catch {
-      showAppToast('خطا در تجزیه فایل JSON.');
-    }
-  }, [showAppToast]);
+  }, [showAppToast, systemState.userProfile]);
 
   const handleAuthSuccess = useCallback((token: string, user: UserProfile) => {
-    sessionStorage.removeItem('bushido_explicit_logout');
-    localStorage.setItem(TOKEN_KEY, token);
+    safeRemoveSessionStorage('bushido_explicit_logout');
+    safeSetLocalStorage(TOKEN_KEY, token);
     setAuthToken(token);
-    setSystemState(prev => ({
-      ...prev,
-      userProfile: user
-    }));
+
+    const transition = transitionAccountState({
+      currentSystemState: systemState,
+      targetUserId: user.id,
+      targetUserProfile: user
+    });
+    setSystemState(transition.nextState);
+    if (transition.nextState.cycles.length > 0) {
+      setActiveCycleId(transition.nextActiveCycleId);
+    }
     showAppToast(`با موفقیت وارد حساب «${user.name || 'کاربر'}» شدید.`);
-  }, [showAppToast]);
+    // Explicit binding: Replay verified target user queue with target token
+    syncOfflineDataToServer(user.id, token);
+  }, [systemState, showAppToast, syncOfflineDataToServer]);
 
   const handleQuickLogin = useCallback(async (role: 'admin' | 'test_user') => {
     try {
-      sessionStorage.removeItem('bushido_explicit_logout');
+      safeRemoveSessionStorage('bushido_explicit_logout');
       let data: any = null;
+      let isExplicitlyRejected = false;
+
       try {
         const res = await fetch('/api/auth/quick-login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ role })
         });
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          data = await res.json();
+        if (res.ok) {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            data = await res.json();
+          }
+        } else {
+          isExplicitlyRejected = true;
+          const errText = await parseApiError(res);
+          showAppToast(errText || 'ورود سریع در محیط عملیاتی غیرفعال است.');
+          return;
         }
       } catch (err) {
         console.warn('Backend quick-login fetch warning:', err);
       }
 
+      if (isExplicitlyRejected) return;
+
       if (data && data.token && data.user) {
-        localStorage.setItem(TOKEN_KEY, data.token);
+        safeSetLocalStorage(TOKEN_KEY, data.token);
         setAuthToken(data.token);
-        setSystemState(prev => ({
-          ...prev,
-          userProfile: {
-            ...prev.userProfile,
+        const transition = transitionAccountState({
+          currentSystemState: systemState,
+          targetUserId: data.user.id,
+          targetUserProfile: {
             ...data.user,
             isVip: Boolean(data.user.isVip),
             isAdmin: Boolean(data.user.isAdmin)
           }
-        }));
+        });
+        setSystemState(transition.nextState);
+        if (transition.nextState.cycles.length > 0) {
+          setActiveCycleId(transition.nextActiveCycleId);
+        }
         showAppToast(role === 'admin' ? 'به عنوان مدیر ارشد سیستم وارد شدید.' : 'به عنوان کاربر تستی وارد شدید.');
+        // Explicit binding: Replay verified target user queue with target token
+        syncOfflineDataToServer(data.user.id, data.token);
+        return;
+      }
+
+      if (!import.meta.env.DEV) {
+        showAppToast('امکان ورود سریع در این محیط وجود ندارد.');
         return;
       }
 
@@ -909,22 +1060,28 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         activeCycleLimit: 1
       };
 
-      localStorage.setItem(TOKEN_KEY, fallbackToken);
+      safeSetLocalStorage(TOKEN_KEY, fallbackToken);
       setAuthToken(fallbackToken);
-      setSystemState(prev => ({
-        ...prev,
-        userProfile: fallbackUser
-      }));
+      const transition = transitionAccountState({
+        currentSystemState: systemState,
+        targetUserId: fallbackUser.id,
+        targetUserProfile: fallbackUser
+      });
+      setSystemState(transition.nextState);
+      if (transition.nextState.cycles.length > 0) {
+        setActiveCycleId(transition.nextActiveCycleId);
+      }
       showAppToast(role === 'admin' ? 'به عنوان مدیر ارشد سیستم وارد شدید.' : 'به عنوان کاربر تستی وارد شدید.');
+      syncOfflineDataToServer(fallbackUser.id, fallbackToken);
     } catch (e) {
       console.error('Quick login error:', e);
       showAppToast('ورود با تنظیمات پیش‌فرض انجام شد.');
     }
-  }, [showAppToast]);
+  }, [systemState, showAppToast, syncOfflineDataToServer]);
 
   const handleImpersonateUser = useCallback(async (targetUser: AdminUserItem) => {
     try {
-      const currentToken = authToken || localStorage.getItem(TOKEN_KEY);
+      const currentToken = authToken || safeGetLocalStorage(TOKEN_KEY);
       if (!currentToken) return;
 
       const res = await fetch('/api/admin/impersonate', {
@@ -941,21 +1098,29 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
         if (data.token && data.user) {
           setImpersonatorAdminToken(currentToken);
           setImpersonatingUser(targetUser);
-          localStorage.setItem(TOKEN_KEY, data.token);
+          safeSetSessionStorage('bushido_impersonator_token', currentToken);
+          safeSetSessionStorage('bushido_impersonating_user', JSON.stringify(targetUser));
+          safeSetLocalStorage(TOKEN_KEY, data.token);
           setAuthToken(data.token);
-          setSystemState(prev => ({
-            ...prev,
-            userProfile: {
-              ...prev.userProfile,
+          const transition = transitionAccountState({
+            currentSystemState: systemState,
+            targetUserId: data.user.id,
+            targetUserProfile: {
               ...data.user,
               isVip: Boolean(data.user.isVip),
               isAdmin: Boolean(data.user.isAdmin)
             }
-          }));
+          });
+          setSystemState(transition.nextState);
+          if (transition.nextState.cycles.length > 0) {
+            setActiveCycleId(transition.nextActiveCycleId);
+          }
           setActiveTab('battlefield');
           showAppToast(`در حال شبیه‌سازی و مشاهده سامانه از دید: «${data.user.name}»`);
+          // Explicit binding: Replay impersonated user queue with impersonated token
+          syncOfflineDataToServer(data.user.id, data.token);
         } else {
-          showAppToast('خطا در دریافت اطلاعات شبیه‌سازی کاربر');
+          showAppToast('امکان دریافت اطلاعات شبیه‌سازی کاربر میسر نشد؛ لطفاً اتصال اینترنت را بررسی کنید.');
         }
       } else {
         const errorMsg = await parseApiError(res);
@@ -963,57 +1128,95 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
       }
     } catch (e) {
       console.error('Impersonate user error:', e);
-      showAppToast('خطا در برقراری ارتباط با سرور');
+      showAppToast('ارتباط با سرور برقرار نشد؛ لطفاً اتصال اینترنت خود را بررسی کرده و مجدداً تلاش نمایید.');
     }
-  }, [authToken, showAppToast]);
+  }, [authToken, systemState, showAppToast, syncOfflineDataToServer]);
 
   const handleExitImpersonation = useCallback(async () => {
-    if (!impersonatorAdminToken) return;
-    try {
-      localStorage.setItem(TOKEN_KEY, impersonatorAdminToken);
-      setAuthToken(impersonatorAdminToken);
+    const adminToken = impersonatorAdminToken || safeGetSessionStorage(IMPERSONATOR_TOKEN_KEY);
+    if (!adminToken) return;
+
+    // 1. Read saved Admin token & validate through /api/auth/me BEFORE modifying local state
+    const outcome = await validateAdminTokenForExit(adminToken);
+    const result = processExitImpersonationOutcome(outcome, systemState);
+
+    if (result.action === 'SUCCESS_TRANSITION') {
+      // 2. Validation succeeds:
+      // - Transition back to verified Admin account
+      // - Replace active token
+      // - Clear impersonation metadata
+      // - Replay only Admin queue
+      // - Display success
+      setAuthToken(result.newAuthToken!);
       setImpersonatingUser(null);
-      const res = await fetch('/api/auth/me', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${impersonatorAdminToken}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setSystemState(prev => ({
-            ...prev,
-            userProfile: {
-              ...prev.userProfile,
-              ...data.user,
-              isVip: Boolean(data.user.isVip),
-              isAdmin: Boolean(data.user.isAdmin)
-            }
-          }));
-        }
-      }
       setImpersonatorAdminToken(null);
+      if (result.nextSystemState) {
+        setSystemState(result.nextSystemState);
+      }
+      if (result.nextActiveCycleId) {
+        setActiveCycleId(result.nextActiveCycleId);
+      }
+
+      if (outcome.status === 'SUCCESS') {
+        // Replay only the Admin's own queue
+        syncOfflineDataToServer(outcome.adminUser.id, outcome.adminToken);
+
+        // Notify server of exit for audit trail (non-authoritative metadata)
+        fetch('/api/admin/impersonate/exit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${outcome.adminToken}`
+          },
+          body: JSON.stringify({ targetUserId: impersonatingUser?.id || null })
+        }).catch(() => {});
+      }
+
       setActiveTab('admin');
-      showAppToast('به حساب مدیریت بازگشتید.');
-    } catch (e) {
-      console.error('Exit impersonation error:', e);
+      showAppToast(result.messageFa);
+      return;
     }
-  }, [impersonatorAdminToken, showAppToast]);
+
+    if (result.action === 'REVOKED_SIGN_OUT') {
+      // Validation fails due to confirmed auth rejection or invalid Admin identity:
+      // - Do NOT display a success message
+      // - Clear unsafe authentication and impersonation state
+      // - Return to a signed-out state
+      // - Require authentication again
+      setAuthToken(null);
+      setImpersonatingUser(null);
+      setImpersonatorAdminToken(null);
+      if (result.nextSystemState) {
+        setSystemState(result.nextSystemState);
+      }
+      if (result.nextActiveCycleId) {
+        setActiveCycleId(result.nextActiveCycleId);
+      }
+
+      setIsAuthModalOpen(true);
+      showAppToast(result.messageFa);
+      return;
+    }
+
+    // For PRESERVE_RETRYABLE (TEMPORARY_SERVER_ERROR and NETWORK_ERROR) or NO_OP:
+    // - Do NOT destroy the only recoverable Admin token prematurely
+    // - Do NOT clear impersonation metadata
+    // - Do NOT change active account
+    // - Do NOT claim that exit succeeded
+    // - Show a retryable Persian error message
+    showAppToast(result.messageFa);
+  }, [impersonatorAdminToken, impersonatingUser, systemState, showAppToast, syncOfflineDataToServer]);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    sessionStorage.setItem('bushido_explicit_logout', 'true');
+    const transition = executeLogoutDuringImpersonation(systemState);
     setAuthToken(null);
     setImpersonatingUser(null);
     setImpersonatorAdminToken(null);
-    setSystemState(prev => ({
-      ...prev,
-      userProfile: GUEST_USER_PROFILE
-    }));
+    setSystemState(transition.nextState);
+    setActiveCycleId(transition.nextActiveCycleId);
     setIsAuthModalOpen(false);
     showAppToast('با موفقیت از حساب کاربری خارج شدید.');
-  }, [showAppToast]);
+  }, [systemState, showAppToast]);
 
   const openAutopsy = useCallback((log: DailyLog) => setAutopsyTargetLog(log), []);
   const closeAutopsy = useCallback(() => setAutopsyTargetLog(null), []);
@@ -1057,7 +1260,6 @@ export const BushidoProvider: React.FC<{ children: ReactNode }> = ({ children })
     syncOfflineDataToServer,
     exportData,
     confirmResetData,
-    importData,
 
     toggleHabit,
     submitAutopsy,

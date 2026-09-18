@@ -36,19 +36,21 @@ export type CycleStatusType =
   | 'overlap_error';    // ⚠️ تداخل تقویمی
 
 export type DisciplineLevel = 
-  | '🛡️ انضباط آهنین'
-  | '⚔️ انضباط پایدار'
-  | '👺 انضباط ناپایدار'
-  | '👹 بحران تعهد'
-  | '⏳ آینده'
-  | '⚠️ خطای ساختار';
+  | 'انضباط آهنین'
+  | 'انضباط پایدار'
+  | 'انضباط ناپایدار'
+  | 'بحران تعهد'
+  | 'آینده'
+  | 'خطای ساختار';
 
 export interface DailyLog {
   id: string;
   cycleId: string;
   date: string; // YYYY-MM-DD
-  createdAt: string;
+  createdAt?: string;
   isSynced?: boolean; // نشانگر همگام‌سازی ابری آفلاین به آنلاین
+  revision?: number;
+  isVirtual?: boolean; // نشانگر موقت برای روزهای مفقود بدهی در رابط کاربری
   
   // Foundation 5 Core Habits
   wakeUp: boolean;     // سحرخیزی
@@ -93,6 +95,7 @@ export interface Cycle {
   reportRead?: boolean;   // چک‌پوینت تأیید گزارش
   verdict?: CycleVerdict;
   isSynced?: boolean;     // نشانگر همگام‌سازی ابری آفلاین به آنلاین
+  revision?: number;
 }
 
 export interface SystemSettings {
@@ -180,6 +183,7 @@ export interface UserProfile {
   tier: UserSubscriptionTier;
   isVip: boolean;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   vipSince?: string;
   vipExpiresAt?: string;
   paymentRefId?: string;
@@ -194,6 +198,8 @@ export interface AuthState {
   user: UserProfile | null;
 }
 
+export type AdminSubTab = 'analytics' | 'users' | 'subscriptions';
+
 export interface AdminUserItem {
   id: string;
   name: string;
@@ -202,6 +208,7 @@ export interface AdminUserItem {
   tier: string;
   isVip: boolean;
   isAdmin?: boolean;
+  isSuperAdmin?: boolean;
   vipSince?: string | null;
   vipExpiresAt?: string | null;
   paymentRefId?: string | null;
@@ -211,6 +218,8 @@ export interface AdminUserItem {
   createdAt: string;
 }
 
+export type SubscriptionStatus = 'PENDING' | 'SUCCESS' | 'FAILED';
+
 export interface AdminSubscriptionItem {
   id: string;
   userId: string;
@@ -219,7 +228,7 @@ export interface AdminSubscriptionItem {
   authority: string;
   refId?: string | null;
   cardPan?: string | null;
-  status: string;
+  status: SubscriptionStatus;
   description?: string | null;
   expiresAt?: string | null;
   createdAt: string;
@@ -243,9 +252,11 @@ export interface SubscriptionPlan {
   priceToman: number;
   formattedPrice: string;
   durationMonths: number;
+  durationDays?: number;
   badgeFa: string;
   features: string[];
   isPopular?: boolean;
+  tier?: UserSubscriptionTier;
 }
 
 export interface PaymentRequestResponse {
@@ -270,5 +281,86 @@ export interface PaymentVerifyResponse {
   cardPan?: string;
   message: string;
   tier: UserSubscriptionTier;
+}
+
+export type OfflineMutationType = 
+  | 'UPDATE_LOG' 
+  | 'UPDATE_CYCLE' 
+  | 'CREATE_CYCLE' 
+  | 'DELETE_CYCLE'
+  | 'UPDATE_PROFILE'
+  | 'UPDATE_SETTINGS';
+
+export type ReplayFailureClassification =
+  | 'SUCCESS'
+  | 'AUTH_REQUIRED'
+  | 'FORBIDDEN'
+  | 'VALIDATION_ERROR'
+  | 'CONFLICT_DEFERRED'
+  | 'PRECONDITION_REQUIRED'
+  | 'RATE_LIMITED'
+  | 'SERVER_RETRYABLE'
+  | 'NETWORK_ERROR'
+  | 'ENTITY_MISSING'
+  | 'UNKNOWN_MUTATION'
+  | 'INVALID_SUCCESS_RESPONSE';
+
+export interface OfflineQueueItem {
+  id: string;
+  ownerId: string; // Canonical user ID (e.g. 'admin-master-001', 'user-123') or 'guest'
+  type: OfflineMutationType;
+  payload: any;
+  timestamp: number;
+  expectedRevision?: number;
+  retryCount?: number;
+  nextRetryAt?: number;
+  lastError?: string;
+  classification?: ReplayFailureClassification;
+  dedupKey?: string;
+  inFlight?: boolean;
+  persisted?: boolean;
+  parentOperationId?: string;
+}
+
+export type ConflictType = 'CONCURRENCY_CONFLICT' | 'PRECONDITION_REQUIRED';
+
+export interface ClientConflictMetadata {
+  id: string;
+  recordKind?: 'CLIENT_CONFLICT_RECORD';
+  ownerId: string;
+  entityType: 'CYCLE' | 'DAILY_LOG' | 'USER_PROFILE' | 'SYSTEM_SETTINGS' | string;
+  entityId: string;
+  mutationType: OfflineMutationType;
+  conflictType: ConflictType;
+  statusCode: 409 | 428;
+  timestamp: number;
+  detectedTimestamp?: number;
+  operationId?: string;
+  expectedRevision?: number;
+  currentRevision?: number;
+  messageFa?: string;
+  dedupKey?: string;
+  sanitizedMutationIntent?: any;
+  clientPayload?: any;
+  isLegacyInferred?: boolean;
+  status?: 'RECORDED' | 'ALREADY_RECORDED';
+}
+
+export interface RecordConflictInput {
+  id?: string;
+  operationId?: string;
+  mutationType: OfflineMutationType;
+  entityType: 'CYCLE' | 'DAILY_LOG' | string;
+  entityId: string;
+  conflictType: ConflictType;
+  statusCode: 409 | 428;
+  expectedRevision?: number;
+  currentRevision?: number;
+  messageFa?: string;
+  clientPayload?: any;
+  sanitizedMutationIntent?: any;
+  dedupKey?: string;
+  timestamp?: number;
+  detectedTimestamp?: number;
 }
 

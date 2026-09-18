@@ -1,37 +1,58 @@
 import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
+import crypto from 'crypto';
 import {
   initializeDatabase,
   closeDatabase,
   findUserById,
   findUserByIdentifier,
+  findUserByPhoneNumber,
   createUser,
   updateUser,
+  deleteUser,
   getUserCycles,
+  getCycleById,
   createCycle,
   updateCycle,
+  archiveCycle,
+  restoreCycle,
   deleteCycle,
   getUserDailyLogs,
+  getDailyLogById,
   upsertDailyLog,
-  saveOtpCode,
-  verifyOtpCode,
+  updateDailyLog,
+  deleteDailyLog,
+  ConcurrencyConflictError,
+  PreconditionRequiredError,
   createSubscriptionRecord,
   completeSubscription,
+  markSubscriptionFailed,
+  findSubscriptionByAuthority,
+  getUserSubscriptions,
   adminGetAllUsers,
   adminUpdateUser,
   adminCreateTestUser,
   adminGetAllSubscriptions,
   adminGetOverviewStats,
-  ensureDefaultAdminAndUsers
+  ensureDefaultAdminAndUsers,
+  isPrismaAvailable,
+  isDatabaseReady,
+  getPlanById,
+  isValidPlanId,
+  getAllPlans
 } from './server/db/index.js';
+import { getPaymentAdapter } from './server/payment/index.js';
 import {
   generateToken,
+  verifyToken,
   authMiddleware,
   adminMiddleware,
+  superAdminMiddleware,
   optionalAuthMiddleware,
   AuthenticatedRequest
 } from './server/auth.js';
+import { logImpersonationAudit } from './server/audit.js';
 import {
   SUPER_ADMIN_PHONE,
   SUPER_ADMIN_EMAIL,
@@ -40,7 +61,13 @@ import {
   isSuperAdminIdentifier,
   hashPassword,
   verifyPassword,
-  allowTestShortcuts
+  allowTestShortcuts,
+  isProduction,
+  isQuickLoginEnabled,
+  isOtpDebugEnabled,
+  isMockOtpEnabled,
+  isMockPaymentEnabled,
+  getSecurityCapabilities
 } from './server/security.js';
 import {
   apiRateLimiter,
@@ -51,26 +78,54 @@ import {
 import {
   validateBody,
   registerSchema,
+  registerRequestOtpSchema,
+  registerVerifyOtpSchema,
+  forgotPasswordRequestOtpSchema,
+  resetPasswordWithOtpSchema,
   loginSchema,
   otpRequestSchema,
   resetPasswordSchema,
   createCycleSchema,
   updateCycleSchema,
   upsertDailyLogSchema,
+  updateDailyLogSchema,
   autopsySchema,
+  updateProfileSchema,
   paymentRequestSchema,
   paymentVerifySchema
 } from './server/utils/validation.js';
+import { normalizePhoneNumber, isValidIranianMobile } from './server/utils/phone.js';
+import { createOtpChallenge, verifyOtpChallenge, consumeOtpChallenge } from './server/otp/index.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
-const isProd = process.env.NODE_ENV === 'production';
-const testMode = allowTestShortcuts(); // روی Vercel با ALLOW_TEST_SHORTCUTS=true باز می‌ماند
 
 // Trust proxy required for Cloud Run / reverse proxies and IP-based rate limiting
 app.set('trust proxy', 1);
+
+// Vercel Serverless Gateway & Route Path Normalization
+// Preserves full /api/... path structure if serverless gateway passes forwarded URI
+app.use((req, res, next) => {
+  try {
+    const forwardedUri = (req.headers['x-forwarded-uri'] as string) || (req.headers['x-matched-path'] as string);
+    if (forwardedUri && forwardedUri.startsWith('/api')) {
+      req.url = forwardedUri;
+    } else if (req.query && (req.query.path || req.query['path[]'])) {
+      const rawPath = req.query.path || req.query['path[]'];
+      const pathSegments = Array.isArray(rawPath) ? rawPath.join('/') : String(rawPath);
+      if (pathSegments && !req.url.startsWith(`/api/${pathSegments}`)) {
+        const queryIndex = req.url.indexOf('?');
+        const search = queryIndex >= 0 ? req.url.slice(queryIndex) : '';
+        req.url = `/api/${pathSegments}${search}`;
+      }
+    }
+  } catch (e) {
+    // Fail-safe pass-through
+  }
+  next();
+});
 
 // Apply Security Headers (CSP, HSTS, No-Sniff, etc.)
 app.use(setSecurityHeaders);
@@ -78,22 +133,42 @@ app.use(setSecurityHeaders);
 // JSON Body Parser
 app.use(express.json());
 
-// Lazy Database Initialization for Vercel Serverless (جلوگیری از کرش ۵۰۰ در Cold Start)
+// Lazy Database Initialization
 let isDbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
+let lastDbInitAttempt = 0;
+const DB_INIT_RETRY_COOLDOWN_MS = 5000;
+
 app.use(async (req, res, next) => {
+  // Static assets and front-end bundles do not block on DB connectivity
+  if (!req.path.startsWith('/api')) {
+    return next();
+  }
+
   if (!isDbInitialized) {
-    if (!dbInitPromise) {
+    const now = Date.now();
+    if (!dbInitPromise && now - lastDbInitAttempt >= DB_INIT_RETRY_COOLDOWN_MS) {
+      lastDbInitAttempt = now;
       dbInitPromise = initializeDatabase()
         .then(() => {
           isDbInitialized = true;
         })
         .catch((err) => {
-          console.error('[Database Init Error]:', err);
-          isDbInitialized = true; // Prevent unhandled rejection loop
+          console.error('[Database Init Error]:', err?.message || err);
+          if (isProduction()) {
+            isDbInitialized = false;
+            // Cooldown before allowing next re-init attempt to prevent request-flood thread starvation
+            setTimeout(() => {
+              dbInitPromise = null;
+            }, DB_INIT_RETRY_COOLDOWN_MS);
+          } else {
+            isDbInitialized = true; // Non-production environments allow fallback
+          }
         });
     }
-    await dbInitPromise;
+    if (dbInitPromise) {
+      await dbInitPromise;
+    }
   }
   next();
 });
@@ -108,53 +183,219 @@ app.use('/api', apiRateLimiter);
 // Strict Authentication Limiter applied to auth routes
 app.use('/api/auth', authRateLimiter);
 
-// Health check endpoint (Container & PaaS Liveness/Readiness Probe)
+// Root API endpoint (prevents "Cannot GET /api" when root /api is requested)
+app.get(['/api', '/api/'], (req, res) => {
+  const ready = isDatabaseReady();
+  res.status(200).json({
+    status: 'ok',
+    service: 'Bushido Discipline OS API',
+    ready,
+    health: '/api/health',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Minimal public health check endpoint (Container & PaaS Liveness/Health Probe - never exposes sensitive diagnostics)
 app.get('/api/health', (req, res) => {
+  const ready = isDatabaseReady();
+  const isProd = isProduction();
+  const statusCode = ready ? 200 : (isProd ? 503 : 200);
+
+  res.status(statusCode).json({
+    status: ready ? 'ok' : 'degraded',
+    ready,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Public readiness probe - truthfully reports database persistence availability without diagnostic leakage
+const handleReadiness = (req: express.Request, res: express.Response) => {
+  const ready = isDatabaseReady();
+  if (ready) {
+    return res.status(200).json({
+      status: 'ready',
+      ready: true,
+      timestamp: new Date().toISOString()
+    });
+  }
+  return res.status(503).json({
+    status: 'unavailable',
+    ready: false,
+    code: 'SERVICE_UNAVAILABLE',
+    messageFa: 'سرویس پایگاه داده در دسترس نیست.',
+    timestamp: new Date().toISOString()
+  });
+};
+
+app.get('/api/ready', handleReadiness);
+app.get('/api/readiness', handleReadiness);
+app.get('/api/health/ready', handleReadiness);
+
+// Detailed system diagnostics for administrators (Strictly protected by adminMiddleware)
+app.get('/api/admin/diagnostics', adminMiddleware, (req: AuthenticatedRequest, res) => {
   const memory = process.memoryUsage();
   res.json({
     status: 'ok',
-    engine: 'Bushido Discipline OS (Production Grade)',
-    mode: isProd ? 'production' : 'development',
-    version: '3.0.0',
+    engine: 'Bushido Discipline OS',
+    capabilities: getSecurityCapabilities(),
+    nodeVersion: process.version,
     uptimeSeconds: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    nodeVersion: process.version,
     memoryRssMb: Math.round(memory.rss / 1024 / 1024),
+    database: {
+      driver: isPrismaAvailable ? 'postgresql_prisma' : 'local_file_fallback',
+      isPrismaAvailable: Boolean(isPrismaAvailable),
+      isReady: isDatabaseReady(),
+      isServerlessVercel: Boolean(process.env.VERCEL)
+    }
   });
 });
 
 /* =========================================================================
- * AUTHENTICATION ENDPOINTS
+ * AUTHENTICATION ENDPOINTS (Phone-First Architecture)
  * ========================================================================= */
 
-// 1. Direct Registration (Mobile/Email + Password)
-app.post('/api/auth/register', validateBody(registerSchema), async (req, res, next) => {
+// 1. Phone-First Registration: Step 1 - Request OTP
+const handleRegisterRequestOtp = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { identifier, password, name, email, phoneNumber } = req.body;
-    const rawId = identifier || email || phoneNumber;
-    const cleanId = rawId.trim().toLowerCase();
+    const rawPhone = req.body.phoneNumber || req.body.identifier;
+    const canonicalPhone = normalizePhoneNumber(rawPhone);
 
-    const existing = await findUserByIdentifier(cleanId);
-    if (existing) {
+    if (!canonicalPhone) {
       return res.status(400).json({
-        code: 'USER_EXISTS',
-        messageFa: 'کاربری با این مشخصات قبلاً ثبت‌نام کرده است. لطفاً وارد شوید.'
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹'
       });
     }
 
-    const isEmailInput = cleanId.includes('@');
-    const isMaster = isSuperAdminIdentifier(cleanId);
+    const existing = await findUserByPhoneNumber(canonicalPhone);
+    if (existing) {
+      return res.status(400).json({
+        code: 'USER_EXISTS',
+        messageFa: 'کاربری با این شماره موبایل قبلاً ثبت‌نام نموده است. لطفاً وارد شوید.'
+      });
+    }
+
+    const challengeRes = await createOtpChallenge({
+      phoneNumber: canonicalPhone,
+      purpose: 'PHONE_REGISTRATION'
+    });
+
+    if (!challengeRes.success) {
+      if (challengeRes.code === 'COOLDOWN_ACTIVE') {
+        return res.status(429).json({
+          code: challengeRes.code,
+          messageFa: challengeRes.messageFa,
+          retryAfterSeconds: challengeRes.retryAfterSeconds
+        });
+      }
+      return res.status(400).json({
+        code: challengeRes.code,
+        messageFa: challengeRes.messageFa
+      });
+    }
+
+    const payload: Record<string, any> = {
+      success: true,
+      phoneNumber: canonicalPhone,
+      messageFa: `کد تایید ۵ رقمی برای شماره ${canonicalPhone} ارسال شد.`,
+      expiresInSeconds: challengeRes.expiresInSeconds,
+      cooldownSeconds: challengeRes.cooldownSeconds
+    };
+
+    if (challengeRes.debugCode) {
+      payload.debugCode = challengeRes.debugCode;
+    }
+
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+};
+
+app.post('/api/auth/register/request-otp', validateBody(registerRequestOtpSchema), handleRegisterRequestOtp);
+app.post('/api/auth/register/send-otp', validateBody(registerRequestOtpSchema), handleRegisterRequestOtp);
+
+// 2. Phone-First Registration: Step 2 - Verify OTP & Set Password
+const handleRegisterVerifyOtp = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    const rawPhone = req.body.phoneNumber || req.body.identifier;
+    const { code, password, name } = req.body;
+
+    const canonicalPhone = normalizePhoneNumber(rawPhone);
+    if (!canonicalPhone) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹'
+      });
+    }
+
+    // Duplicate check before consuming challenge
+    const existing = await findUserByPhoneNumber(canonicalPhone);
+    if (existing) {
+      return res.status(400).json({
+        code: 'USER_EXISTS',
+        messageFa: 'کاربری با این شماره موبایل قبلاً ثبت‌نام نموده است.'
+      });
+    }
+
+    // GAP 4: Verify purpose-bound OTP without consuming yet (atomic account creation)
+    const verifyRes = await verifyOtpChallenge({
+      phoneNumber: canonicalPhone,
+      code: String(code),
+      purpose: 'PHONE_REGISTRATION',
+      consume: false
+    });
+
+    if (!verifyRes.success) {
+      return res.status(400).json({
+        code: verifyRes.code,
+        messageFa: verifyRes.messageFa,
+        remainingAttempts: verifyRes.remainingAttempts
+      });
+    }
+
     const hashedPassword = await hashPassword(password);
 
-    const user = await createUser({
-      email: isEmailInput ? cleanId : undefined,
-      phoneNumber: !isEmailInput ? cleanId : undefined,
-      name: name?.trim() || (isEmailInput ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
-      passwordHash: hashedPassword,
-      tier: isMaster ? 'vip_samurai' : 'free',
-      isVip: isMaster,
-      isAdmin: isMaster
-    });
+    // GAP 4: Public registration ALWAYS creates free unprivileged user:
+    // isAdmin = false, isVip = false, tier = 'free'
+    // Super Admin must never be created through ordinary public registration privilege logic.
+    let user;
+    try {
+      user = await createUser({
+        phoneNumber: canonicalPhone,
+        email: undefined, // Public email registration is not supported
+        name: name?.trim() || `کاربر ${canonicalPhone.slice(-4)}`,
+        passwordHash: hashedPassword,
+        tier: 'free',
+        isVip: false,
+        isAdmin: false
+      });
+    } catch (createErr: any) {
+      if (createErr.message?.includes('already exists') || createErr.code === 'P2002') {
+        return res.status(400).json({
+          code: 'USER_EXISTS',
+          messageFa: 'کاربری با این شماره موبایل قبلاً ثبت‌نام نموده است.'
+        });
+      }
+      throw createErr;
+    }
+
+    // Account creation succeeded: NOW consume the OTP challenge
+    let challengeConsumed = false;
+    if (verifyRes.challengeId) {
+      challengeConsumed = await consumeOtpChallenge(verifyRes.challengeId);
+    }
+
+    // Registration Completion Consistency Invariant:
+    // If post-account OTP finalization fails, safely compensate by removing the unfinalized user.
+    if (!challengeConsumed && verifyRes.challengeId) {
+      await deleteUser(user.id);
+      return res.status(500).json({
+        code: 'OTP_FINALIZATION_FAILED',
+        messageFa: 'خطا در نهایی‌سازی تایید شماره. لطفاً مجدداً درخواست کد فرمایید.'
+      });
+    }
 
     const token = generateToken({
       userId: user.id,
@@ -162,11 +403,12 @@ app.post('/api/auth/register', validateBody(registerSchema), async (req, res, ne
       phoneNumber: user.phoneNumber,
       isVip: user.isVip,
       tier: user.tier,
-      isAdmin: Boolean(user.isAdmin)
+      isAdmin: Boolean(user.isAdmin),
+      tokenVersion: user.tokenVersion ?? 0
     });
 
-    if (!isProd) {
-      console.log(`[Bushido Auth] User registered successfully: ${user.id}`);
+    if (!isProduction()) {
+      console.log(`[Bushido Auth] User registered successfully with phone: ${canonicalPhone}`);
     }
 
     res.json({
@@ -178,20 +420,33 @@ app.post('/api/auth/register', validateBody(registerSchema), async (req, res, ne
   } catch (error) {
     next(error);
   }
-});
+};
 
-// 2. Direct Login (Mobile/Email + Password)
+app.post('/api/auth/register/verify-otp', validateBody(registerVerifyOtpSchema), handleRegisterVerifyOtp);
+app.post('/api/auth/register', validateBody(registerVerifyOtpSchema), handleRegisterVerifyOtp);
+
+// 3. Login (Phone + Password for normal users, Super Admin bypass preserved)
 app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) => {
   try {
-    const { identifier, password } = req.body;
-    const cleanId = identifier.trim().toLowerCase();
+    const rawId = req.body.phoneNumber || req.body.identifier || '';
+    const password = req.body.password;
+    const cleanId = String(rawId).trim();
 
     // Development/Fallback Ensure
-    if (testMode) ensureDefaultAdminAndUsers();
+    if (allowTestShortcuts()) ensureDefaultAdminAndUsers();
 
     // Check Super Admin Hardened Shortcut
     const isMaster = isSuperAdminIdentifier(cleanId);
-    if (isMaster && SUPER_ADMIN_PASS && password === SUPER_ADMIN_PASS) {
+    let isValidMasterPass = false;
+    if (SUPER_ADMIN_PASS && SUPER_ADMIN_PASS.length >= 8 && typeof password === 'string') {
+      const passBuf = Buffer.from(password, 'utf8');
+      const masterBuf = Buffer.from(SUPER_ADMIN_PASS, 'utf8');
+      if (passBuf.length === masterBuf.length) {
+        isValidMasterPass = crypto.timingSafeEqual(passBuf, masterBuf);
+      }
+    }
+
+    if (isMaster && isValidMasterPass) {
       let masterAdmin = (await findUserById('admin-master-001')) || (await findUserByIdentifier(SUPER_ADMIN_PHONE)) || (await findUserByIdentifier(SUPER_ADMIN_EMAIL));
       if (!masterAdmin) {
         const hashedPassword = await hashPassword(SUPER_ADMIN_PASS);
@@ -215,7 +470,8 @@ app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) =>
         phoneNumber: masterAdmin.phoneNumber,
         isVip: true,
         tier: 'vip_samurai',
-        isAdmin: true
+        isAdmin: true,
+        tokenVersion: masterAdmin.tokenVersion ?? 0
       });
 
       return res.json({
@@ -226,7 +482,23 @@ app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) =>
       });
     }
 
-    let user = await findUserByIdentifier(cleanId);
+    // Public authentication MUST use phone number - reject email login
+    if (cleanId.includes('@')) {
+      return res.status(400).json({
+        code: 'EMAIL_LOGIN_NOT_SUPPORTED',
+        messageFa: 'ورود فقط با شماره موبایل امکان‌پذیر است. لطفاً شماره موبایل خود را وارد نمایید.'
+      });
+    }
+
+    const canonicalPhone = normalizePhoneNumber(cleanId);
+    if (!canonicalPhone) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹'
+      });
+    }
+
+    const user = await findUserByPhoneNumber(canonicalPhone);
     if (!user) {
       return res.status(401).json({
         code: 'USER_NOT_FOUND',
@@ -248,7 +520,8 @@ app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) =>
       phoneNumber: user.phoneNumber,
       isVip: user.isVip,
       tier: user.tier,
-      isAdmin: Boolean(user.isAdmin)
+      isAdmin: Boolean(user.isAdmin),
+      tokenVersion: user.tokenVersion ?? 0
     });
 
     res.json({ success: true, token, user });
@@ -257,70 +530,126 @@ app.post('/api/auth/login', validateBody(loginSchema), async (req, res, next) =>
   }
 });
 
-// 3. Forgot Password - Request OTP
-app.post('/api/auth/forgot-password', validateBody(otpRequestSchema), async (req, res, next) => {
+// 4. Password Recovery: Step 1 - Request OTP
+app.post('/api/auth/forgot-password', validateBody(forgotPasswordRequestOtpSchema), async (req, res, next) => {
   try {
-    const { identifier } = req.body;
-    const cleanId = identifier.trim().toLowerCase();
-    const user = await findUserByIdentifier(cleanId);
+    const rawId = req.body.phoneNumber || req.body.identifier || '';
+    const cleanId = String(rawId).trim();
 
+    const canonicalPhone = normalizePhoneNumber(cleanId);
+    if (!canonicalPhone) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹'
+      });
+    }
+
+    const user = await findUserByPhoneNumber(canonicalPhone);
     if (!user) {
-      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'حساب کاربری با این مشخصات یافت نشد.' });
+      return res.status(404).json({
+        code: 'USER_NOT_FOUND',
+        messageFa: 'حساب کاربری با این شماره موبایل یافت نشد.'
+      });
     }
 
-    const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
-    await saveOtpCode(cleanId, generatedCode);
+    const challengeRes = await createOtpChallenge({
+      phoneNumber: canonicalPhone,
+      purpose: 'PASSWORD_RESET',
+      userId: user.id
+    });
 
-    if (!isProd) {
-      console.log(`[Bushido Auth] Password Recovery OTP for ${cleanId}: [ ${generatedCode} ]`);
+    if (!challengeRes.success) {
+      if (challengeRes.code === 'COOLDOWN_ACTIVE') {
+        return res.status(429).json({
+          code: challengeRes.code,
+          messageFa: challengeRes.messageFa,
+          retryAfterSeconds: challengeRes.retryAfterSeconds
+        });
+      }
+      return res.status(400).json({
+        code: challengeRes.code,
+        messageFa: challengeRes.messageFa
+      });
     }
 
-    const responsePayload: Record<string, any> = {
+    const payload: Record<string, any> = {
       success: true,
-      messageFa: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${cleanId} ارسال شد.`
+      phoneNumber: canonicalPhone,
+      messageFa: `کد تایید ۵ رقمی بازیابی رمز عبور برای ${canonicalPhone} ارسال شد.`,
+      expiresInSeconds: challengeRes.expiresInSeconds,
+      cooldownSeconds: challengeRes.cooldownSeconds
     };
 
-    if (!isProd && process.env.ENABLE_OTP_DEBUG === 'true') {
-      responsePayload.debugCode = generatedCode;
+    if (challengeRes.debugCode) {
+      payload.debugCode = challengeRes.debugCode;
     }
 
-    res.json(responsePayload);
+    res.json(payload);
   } catch (error) {
     next(error);
   }
 });
 
-// 4. Reset Password with OTP Code
-app.post('/api/auth/reset-password', validateBody(resetPasswordSchema), async (req, res, next) => {
+// 5. Password Recovery: Step 2 - Reset Password with OTP Code
+app.post('/api/auth/reset-password', validateBody(resetPasswordWithOtpSchema), async (req, res, next) => {
   try {
-    const { identifier, code, newPassword } = req.body;
-    const cleanId = identifier.trim().toLowerCase();
-    
-    const isValid = await verifyOtpCode(cleanId, String(code));
-    if (!isValid) {
-      return res.status(400).json({ code: 'INVALID_OTP', messageFa: 'کد تایید نامعتبر یا منقضی شده است.' });
+    const rawId = req.body.phoneNumber || req.body.identifier || '';
+    const { code, newPassword } = req.body;
+    const cleanId = String(rawId).trim();
+
+    const canonicalPhone = normalizePhoneNumber(cleanId);
+    if (!canonicalPhone) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است.'
+      });
     }
 
-    const user = await findUserByIdentifier(cleanId);
+    const verifyRes = await verifyOtpChallenge({
+      phoneNumber: canonicalPhone,
+      code: String(code || ''),
+      purpose: 'PASSWORD_RESET'
+    });
+
+    if (!verifyRes.success) {
+      return res.status(400).json({
+        code: verifyRes.code,
+        messageFa: verifyRes.messageFa,
+        remainingAttempts: verifyRes.remainingAttempts
+      });
+    }
+
+    const user = await findUserByPhoneNumber(canonicalPhone);
     if (!user) {
-      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
+      return res.status(404).json({
+        code: 'USER_NOT_FOUND',
+        messageFa: 'کاربر مورد نظر یافت نشد.'
+      });
     }
 
     const hashed = await hashPassword(newPassword);
-    const updated = await updateUser(user.id, { passwordHash: hashed });
 
+    // GAP 6: Invalidate all existing sessions by incrementing tokenVersion
+    const nextTokenVersion = (user.tokenVersion ?? 0) + 1;
+    const updated = await updateUser(user.id, {
+      passwordHash: hashed,
+      tokenVersion: nextTokenVersion
+    });
+
+    // Issue new session token bearing the incremented tokenVersion
     const token = generateToken({
       userId: user.id,
       email: user.email,
       phoneNumber: user.phoneNumber,
       isVip: user.isVip,
       tier: user.tier,
-      isAdmin: Boolean(user.isAdmin)
+      isAdmin: Boolean(user.isAdmin),
+      tokenVersion: nextTokenVersion
     });
 
     res.json({
       success: true,
-      messageFa: 'رمز عبور با موفقیت به‌روزرسانی شد.',
+      messageFa: 'رمز عبور با موفقیت به‌روزرسانی شد و تمام نشست‌های قبلی باطل گردیدند.',
       token,
       user: updated || user
     });
@@ -329,26 +658,72 @@ app.post('/api/auth/reset-password', validateBody(resetPasswordSchema), async (r
   }
 });
 
-// 5. Send OTP (General Auth)
-app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, next) => {
+// 6. Send OTP (Restricted Purpose-Specific Adapter - No generic auto-auth)
+app.post('/api/auth/send-otp', async (req, res, next) => {
   try {
-    const { identifier } = req.body;
-    const cleanId = identifier.trim().toLowerCase();
-    const generatedCode = Math.floor(10000 + Math.random() * 90000).toString();
+    const rawId = req.body.phoneNumber || req.body.identifier || '';
+    const purpose = req.body.purpose;
 
-    await saveOtpCode(cleanId, generatedCode);
+    if (purpose !== 'PHONE_REGISTRATION' && purpose !== 'PASSWORD_RESET') {
+      return res.status(400).json({
+        code: 'INVALID_PURPOSE',
+        messageFa: 'ارسال کد تایید فقط برای مقاصد PHONE_REGISTRATION یا PASSWORD_RESET مجاز است.'
+      });
+    }
 
-    if (testMode) {
-      console.log(`[Bushido Auth] OTP for ${cleanId}: [ ${generatedCode} ]`);
+    const canonicalPhone = normalizePhoneNumber(rawId);
+    if (!canonicalPhone) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        messageFa: 'شماره موبایل وارد شده نامعتبر است. فرمت صحیح: ۰۹۱۲۳۴۵۶۷۸۹'
+      });
+    }
+
+    const existing = await findUserByPhoneNumber(canonicalPhone);
+    if (purpose === 'PHONE_REGISTRATION' && existing) {
+      return res.status(400).json({
+        code: 'USER_EXISTS',
+        messageFa: 'حساب کاربری با این شماره موبایل قبلاً ثبت شده است. لطفاً وارد شوید.'
+      });
+    }
+    if (purpose === 'PASSWORD_RESET' && !existing) {
+      return res.status(404).json({
+        code: 'USER_NOT_FOUND',
+        messageFa: 'حساب کاربری با این شماره موبایل یافت نشد.'
+      });
+    }
+
+    const challengeRes = await createOtpChallenge({
+      phoneNumber: canonicalPhone,
+      purpose,
+      userId: existing?.id
+    });
+
+    if (!challengeRes.success) {
+      if (challengeRes.code === 'COOLDOWN_ACTIVE') {
+        return res.status(429).json({
+          code: challengeRes.code,
+          messageFa: challengeRes.messageFa,
+          retryAfterSeconds: challengeRes.retryAfterSeconds
+        });
+      }
+      return res.status(400).json({
+        code: challengeRes.code,
+        messageFa: challengeRes.messageFa
+      });
     }
 
     const responsePayload: Record<string, any> = {
       success: true,
-      messageFa: `کد تایید ۵ رقمی برای ${cleanId} ارسال شد.`
+      phoneNumber: canonicalPhone,
+      purpose,
+      messageFa: `کد تایید ۵ رقمی برای شماره ${canonicalPhone} ارسال شد.`,
+      expiresInSeconds: challengeRes.expiresInSeconds,
+      cooldownSeconds: challengeRes.cooldownSeconds
     };
 
-    if (testMode && process.env.ENABLE_OTP_DEBUG === 'true') {
-      responsePayload.debugCode = generatedCode;
+    if (challengeRes.debugCode) {
+      responsePayload.debugCode = challengeRes.debugCode;
     }
 
     res.json(responsePayload);
@@ -357,65 +732,21 @@ app.post('/api/auth/send-otp', validateBody(otpRequestSchema), async (req, res, 
   }
 });
 
-// 6. Verify OTP & Auto Login/Register
-app.post('/api/auth/verify-otp', async (req, res, next) => {
-  try {
-    const { identifier, code, name } = req.body;
-    if (!identifier || !code) {
-      return res.status(400).json({ code: 'BAD_REQUEST', messageFa: 'شناسه کاربری و کد تایید الزامی است.' });
-    }
-
-    const cleanId = identifier.trim().toLowerCase();
-    const isValid = await verifyOtpCode(cleanId, String(code));
-
-    if (!isValid) {
-      return res.status(400).json({ code: 'INVALID_OTP', messageFa: 'کد تایید نامعتبر یا منقضی شده است.' });
-    }
-
-    let user = await findUserByIdentifier(cleanId);
-    const isMasterAdmin = isSuperAdminIdentifier(cleanId);
-
-    if (!user) {
-      const isEmail = cleanId.includes('@');
-      user = await createUser({
-        email: isEmail ? cleanId : undefined,
-        phoneNumber: !isEmail ? cleanId : undefined,
-        name: name?.trim() || (isEmail ? cleanId.split('@')[0] : `کاربر ${cleanId.slice(-4)}`),
-        tier: isMasterAdmin ? 'vip_samurai' : 'free',
-        isVip: isMasterAdmin,
-        isAdmin: isMasterAdmin
-      });
-    } else if (isMasterAdmin && (!user.isAdmin || !user.isVip)) {
-      const updatedMaster = await updateUser(user.id, {
-        isAdmin: true,
-        isVip: true,
-        tier: 'vip_samurai'
-      });
-      if (updatedMaster) user = updatedMaster;
-    }
-
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      phoneNumber: user.phoneNumber,
-      isVip: user.isVip,
-      tier: user.tier,
-      isAdmin: Boolean(user.isAdmin)
-    });
-
-    res.json({ success: true, token, user });
-  } catch (error) {
-    next(error);
-  }
+// 7. Verify OTP (Deprecated Generic Route - Rejected to prevent invalid challenge consumption)
+app.post('/api/auth/verify-otp', (req, res) => {
+  return res.status(400).json({
+    code: 'DEPRECATED_ROUTE',
+    messageFa: 'این مسیر اعتبارسنجی عمومی منسوخ شده است. لطفاً از مسیر اختصاصی ثبت‌نام (/api/auth/register/verify-otp) یا بازیابی رمز عبور (/api/auth/reset-password) استفاده فرمایید.'
+  });
 });
 
 // 7. Quick Direct Login (Locked in Production)
 app.post('/api/auth/quick-login', async (req, res, next) => {
   try {
-    if (!testMode) {
+    if (!isQuickLoginEnabled()) {
       return res.status(403).json({
         code: 'FORBIDDEN',
-        messageFa: 'ورود سریع فقط در حالت تست فعال است.'
+        messageFa: 'ورود سریع در این محیط غیرفعال است.'
       });
     }
 
@@ -457,13 +788,18 @@ app.get('/api/auth/me', authMiddleware, async (req: AuthenticatedRequest, res, n
     if (!user) {
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر یافت نشد.' });
     }
-    res.json({ user });
+    const isMaster = isSuperAdminIdentifier(user.phoneNumber) || isSuperAdminIdentifier(user.email);
+    const sanitizedUser = {
+      ...user,
+      isAdmin: Boolean(user.isAdmin) || isMaster
+    };
+    res.json({ user: sanitizedUser });
   } catch (error) {
     next(error);
   }
 });
 
-// Update profile
+// Update profile (Phase 3A.3 Profile Allow-List & Privilege Boundary Integrity)
 const handleProfileUpdate = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   try {
     const userId = req.user!.userId;
@@ -473,7 +809,7 @@ const handleProfileUpdate = async (req: AuthenticatedRequest, res: express.Respo
     if (typeof name === 'string' && name.trim()) {
       updatePayload.name = name.trim().slice(0, 80);
     }
-    if (typeof nightOwlCutoffHour === 'number' && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
+    if (typeof nightOwlCutoffHour === 'number' && Number.isInteger(nightOwlCutoffHour) && nightOwlCutoffHour >= 0 && nightOwlCutoffHour <= 23) {
       updatePayload.nightOwlCutoffHour = nightOwlCutoffHour;
     }
     if (typeof accentTheme === 'string' && ['amber', 'emerald', 'crimson', 'cyan'].includes(accentTheme)) {
@@ -487,8 +823,8 @@ const handleProfileUpdate = async (req: AuthenticatedRequest, res: express.Respo
   }
 };
 
-app.put('/api/auth/profile', authMiddleware, handleProfileUpdate);
-app.put('/api/user/profile', authMiddleware, handleProfileUpdate);
+app.put('/api/auth/profile', authMiddleware, validateBody(updateProfileSchema), handleProfileUpdate);
+app.put('/api/user/profile', authMiddleware, validateBody(updateProfileSchema), handleProfileUpdate);
 
 /* =========================================================================
  * CYCLES ENDPOINTS
@@ -504,27 +840,167 @@ app.get('/api/cycles', authMiddleware, async (req: AuthenticatedRequest, res, ne
   }
 });
 
-app.post('/api/cycles', authMiddleware, validateBody(createCycleSchema), async (req: AuthenticatedRequest, res, next) => {
+app.get('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = req.user!.userId;
-    const newCycle = await createCycle(userId, req.body);
-    res.json({ cycle: newCycle });
+    const cycleId = req.params.id;
+    const cycle = await getCycleById(userId, cycleId);
+    if (!cycle) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر یافت نشد.' });
+    }
+    res.json({ cycle });
   } catch (error) {
     next(error);
   }
 });
 
+app.post('/api/cycles', authMiddleware, validateBody(createCycleSchema), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    const targetId = req.body.id || (req.body.clientOperationId ? `cyc_${userId}_${req.body.clientOperationId}` : undefined);
+    if (targetId) {
+      const existing = await getCycleById(userId, targetId);
+      if (existing) {
+        return res.status(200).json({ cycle: existing, deduplicated: true });
+      }
+    }
+    const newCycle = await createCycle(userId, req.body);
+    res.json({ cycle: newCycle });
+  } catch (error: any) {
+    if (error?.code === 'CYCLE_ID_COLLISION') {
+      return res.status(409).json({
+        code: 'CYCLE_ID_COLLISION',
+        messageFa: 'شناسه چرخه قبلاً توسط کاربر دیگری ثبت شده است.'
+      });
+    }
+    next(error);
+  }
+});
+
+function parseExpectedRevision(req: express.Request): number | undefined {
+  if (typeof req.body?.expectedRevision === 'number' && Number.isInteger(req.body.expectedRevision) && req.body.expectedRevision > 0) {
+    return req.body.expectedRevision;
+  }
+  if (typeof req.body?.revision === 'number' && Number.isInteger(req.body.revision) && req.body.revision > 0) {
+    return req.body.revision;
+  }
+  const queryRev = req.query.expectedRevision ?? req.query.revision;
+  if (typeof queryRev === 'string' && /^\d+$/.test(queryRev)) {
+    const num = parseInt(queryRev, 10);
+    if (num > 0) return num;
+  }
+  const ifMatch = req.headers['if-match'];
+  if (typeof ifMatch === 'string') {
+    const cleanMatch = ifMatch.replace(/^"|"$/g, '').trim();
+    if (/^\d+$/.test(cleanMatch)) {
+      const num = parseInt(cleanMatch, 10);
+      if (num > 0) return num;
+    }
+  }
+  const xExpectedRevision = req.headers['x-expected-revision'];
+  if (typeof xExpectedRevision === 'string' && /^\d+$/.test(xExpectedRevision)) {
+    const num = parseInt(xExpectedRevision, 10);
+    if (num > 0) return num;
+  }
+  return undefined;
+}
+
 app.put('/api/cycles/:id', authMiddleware, validateBody(updateCycleSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const userId = req.user!.userId;
     const cycleId = req.params.id;
-    const updated = await updateCycle(userId, cycleId, req.body);
+    const expectedRevision = parseExpectedRevision(req);
+    const updated = await updateCycle(userId, cycleId, req.body, expectedRevision);
 
     if (!updated) {
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر یافت نشد.' });
     }
     res.json({ cycle: updated });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این چرخه در دستگاه دیگری به‌روزرسانی شده است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
+    next(error);
+  }
+});
+
+app.put('/api/cycles/:id/archive', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    const cycleId = req.params.id;
+    const expectedRevision = parseExpectedRevision(req);
+    const updated = await archiveCycle(userId, cycleId, expectedRevision);
+    if (!updated) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر یافت نشد.' });
+    }
+    res.json({ cycle: updated, success: true });
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این چرخه در دستگاه دیگری به‌روزرسانی شده است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
+    next(error);
+  }
+});
+
+app.put('/api/cycles/:id/restore', authMiddleware, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const userId = req.user!.userId;
+    const cycleId = req.params.id;
+    const expectedRevision = parseExpectedRevision(req);
+    const updated = await restoreCycle(userId, cycleId, expectedRevision);
+    if (!updated) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر یافت نشد.' });
+    }
+    res.json({ cycle: updated, success: true });
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این چرخه در دستگاه دیگری به‌روزرسانی شده است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
     next(error);
   }
 });
@@ -533,13 +1009,32 @@ app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, 
   try {
     const userId = req.user!.userId;
     const cycleId = req.params.id;
-    const success = await deleteCycle(userId, cycleId);
+    const expectedRevision = parseExpectedRevision(req);
+    const success = await deleteCycle(userId, cycleId, expectedRevision);
 
     if (!success) {
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'چرخه مورد نظر برای حذف یافت نشد.' });
     }
     res.json({ success: true, messageFa: 'چرخه و گزارش‌های مرتبط حذف شدند.' });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این چرخه در دستگاه دیگری تغییر یافته است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
     next(error);
   }
 });
@@ -551,9 +1046,34 @@ app.delete('/api/cycles/:id', authMiddleware, async (req: AuthenticatedRequest, 
 const handleUpsertDailyLog = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
   try {
     const userId = req.user!.userId;
-    const log = await upsertDailyLog(userId, req.body);
+    const expectedRevision = parseExpectedRevision(req);
+    const log = await upsertDailyLog(userId, req.body, expectedRevision);
     res.json({ log, success: true });
-  } catch (error) {
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: error.messageFa || error.message || 'این گزارش روزانه در دستگاه دیگری به‌روزرسانی شده است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
+    if (error?.code === 'CYCLE_NOT_FOUND' || error?.message?.includes('Cycle not found')) {
+      return res.status(404).json({
+        code: 'CYCLE_NOT_FOUND',
+        messageFa: 'چرخه مشخص شده یافت نشد یا متعلق به کاربر دیگری است.'
+      });
+    }
     next(error);
   }
 };
@@ -569,11 +1089,104 @@ const handleGetDailyLogs = async (req: AuthenticatedRequest, res: express.Respon
   }
 };
 
+const handleGetSingleDailyLog = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const logId = req.params.id;
+    const log = await getDailyLogById(userId, logId);
+    if (!log) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'گزارش روزانه یافت نشد.' });
+    }
+    res.json({ log, success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const handleUpdateDailyLog = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const logId = req.params.id;
+    const expectedRevision = parseExpectedRevision(req);
+    const updated = await updateDailyLog(userId, logId, req.body, expectedRevision);
+    if (!updated) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'گزارش روزانه مورد نظر یافت نشد.' });
+    }
+    res.json({ log: updated, success: true });
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این گزارش روزانه در دستگاه دیگری به‌روزرسانی شده است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
+    if (error?.code === 'CYCLE_NOT_FOUND' || error?.message?.includes('Cycle not found')) {
+      return res.status(404).json({
+        code: 'CYCLE_NOT_FOUND',
+        messageFa: 'چرخه مشخص شده یافت نشد یا متعلق به کاربر دیگری است.'
+      });
+    }
+    next(error);
+  }
+};
+
+const handleDeleteDailyLog = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const logId = req.params.id;
+    const expectedRevision = parseExpectedRevision(req);
+    const success = await deleteDailyLog(userId, logId, expectedRevision);
+    if (!success) {
+      return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'گزارش روزانه برای حذف یافت نشد.' });
+    }
+    res.json({ success: true, messageFa: 'گزارش روزانه با موفقیت حذف شد.' });
+  } catch (error: any) {
+    if (error instanceof PreconditionRequiredError || error?.code === 'PRECONDITION_REQUIRED') {
+      return res.status(428).json({
+        code: 'PRECONDITION_REQUIRED',
+        messageFa: error.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+        entityType: error.entityType,
+        entityId: error.entityId
+      });
+    }
+    if (error instanceof ConcurrencyConflictError || error?.code === 'CONFLICT') {
+      return res.status(409).json({
+        code: 'CONFLICT',
+        messageFa: 'این گزارش روزانه در دستگاه دیگری تغییر یافته است.',
+        entityType: error.entityType,
+        entityId: error.entityId,
+        currentRevision: error.currentRevision,
+        expectedRevision: error.expectedRevision
+      });
+    }
+    next(error);
+  }
+};
+
 app.get('/api/logs', authMiddleware, handleGetDailyLogs);
+app.get('/api/logs/:id', authMiddleware, handleGetSingleDailyLog);
 app.post('/api/logs', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
 app.post('/api/logs/upsert', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
+app.put('/api/logs/:id', authMiddleware, validateBody(updateDailyLogSchema), handleUpdateDailyLog);
+app.delete('/api/logs/:id', authMiddleware, handleDeleteDailyLog);
+
 app.get('/api/daily-logs', authMiddleware, handleGetDailyLogs);
+app.get('/api/daily-logs/:id', authMiddleware, handleGetSingleDailyLog);
 app.post('/api/daily-logs', authMiddleware, validateBody(upsertDailyLogSchema), handleUpsertDailyLog);
+app.put('/api/daily-logs/:id', authMiddleware, validateBody(updateDailyLogSchema), handleUpdateDailyLog);
+app.delete('/api/daily-logs/:id', authMiddleware, handleDeleteDailyLog);
 
 /* =========================================================================
  * DETERMINISTIC REASONING ENGINE
@@ -674,110 +1287,271 @@ app.post('/api/ai/verdict', authMiddleware, (req, res, next) => {
 });
 
 /* =========================================================================
- * PAYMENT & SUBSCRIPTION GATEWAY
+ * PAYMENT & SUBSCRIPTION GATEWAY (Phase 2C Authoritative Plan Trust Boundary)
  * ========================================================================= */
 
-app.post('/api/payment/request', optionalAuthMiddleware, validateBody(paymentRequestSchema), async (req: AuthenticatedRequest, res, next) => {
+// Authoritative Plans Catalog Endpoint
+app.get(['/api/plans', '/api/payment/plans'], (req, res) => {
+  res.json({
+    success: true,
+    plans: getAllPlans()
+  });
+});
+
+app.post('/api/payment/request', authMiddleware, validateBody(paymentRequestSchema), async (req: AuthenticatedRequest, res, next) => {
   try {
     const { planId, amount, description } = req.body;
-    const userId = req.user?.userId || 'guest-warrior-1';
-    
-    const merchantId = process.env.ZARINPAL_MERCHANT_ID?.trim();
-    const isLiveZarinpal = merchantId && merchantId.length >= 30;
+    const userId = req.user!.userId;
 
-    const authority = 'A' + Date.now().toString() + Math.floor(Math.random() * 1000).toString().padStart(4, '0');
+    // 1. Authoritative Plan Validation: Server is the sole authority for plan details and pricing
+    const plan = getPlanById(planId);
+    if (!plan) {
+      return res.status(400).json({
+        code: 'INVALID_PLAN',
+        messageFa: 'طرح اشتراک انتخاب شده نامعتبر است. لطفاً یکی از طرح‌های معتبر دیوان را انتخاب نمایید.'
+      });
+    }
+
+    // 2. Amount Integrity: Reject any client attempts to define or manipulate the plan amount
+    if (typeof amount === 'number' && amount !== plan.priceToman) {
+      return res.status(400).json({
+        code: 'AMOUNT_MISMATCH',
+        messageFa: 'مبلغ ارسالی با قیمت مصوب طرح مطابقت ندارد.'
+      });
+    }
+
+    const trustedAmount = plan.priceToman;
+    const trustedDescription = description || `ارتقا به ${plan.title}`;
+    
+    // 3. Provider-Neutral Gateway Resolution (Phase 5A Core)
+    const adapter = getPaymentAdapter();
+    if (!adapter) {
+      return res.status(503).json({
+        code: 'PAYMENT_UNAVAILABLE',
+        messageFa: 'درگاه پرداخت در حال حاضر در دسترس نیست.'
+      });
+    }
+
+    let requestResult;
+    try {
+      requestResult = await adapter.requestPayment({
+        userId,
+        planId: plan.id,
+        amount: trustedAmount,
+        description: trustedDescription
+      });
+    } catch (error) {
+      const normalized = adapter.normalizeProviderError(error);
+      return res.status(normalized.retryable ? 503 : 400).json({
+        code: normalized.code,
+        messageFa: normalized.messageFa,
+        retryable: normalized.retryable
+      });
+    }
 
     await createSubscriptionRecord({
       userId,
-      planId,
-      amount,
-      authority,
-      description: description || 'ارتقا به حساب سامورایی ویژه'
+      planId: plan.id,
+      amount: trustedAmount,
+      authority: requestResult.authority,
+      description: trustedDescription
     });
 
     res.json({
       status: 100,
-      authority,
-      paymentUrl: `/mock-gateway?authority=${authority}&amount=${amount}`,
-      amount,
-      mode: isLiveZarinpal ? 'zarinpal-live' : 'zarinpal-mock-simulator',
+      authority: requestResult.authority,
+      paymentUrl: requestResult.paymentUrl,
+      amount: trustedAmount,
+      planId: plan.id,
+      mode: requestResult.mode,
     });
   } catch (error) {
     next(error);
   }
 });
 
-app.post('/api/payment/verify', validateBody(paymentVerifySchema), async (req, res, next) => {
+app.post('/api/payment/verify', authMiddleware, validateBody(paymentVerifySchema), async (req: AuthenticatedRequest, res, next) => {
   try {
-    const { authority, amount } = req.body;
+    const { authority } = req.body;
+    const userId = req.user!.userId;
 
-    const allSubs = await adminGetAllSubscriptions();
-    const existingSub = allSubs.find(s => s.authority === authority);
+    const existingSub = await findSubscriptionByAuthority(authority);
+
+    if (!existingSub) {
+      return res.status(404).json({
+        code: 'NOT_FOUND',
+        messageFa: 'رکورد تراکنش یافت نشد.'
+      });
+    }
+
+    // Ownership boundary enforcement: User can only verify their own subscription
+    if (existingSub.userId !== userId) {
+      return res.status(403).json({
+        code: 'FORBIDDEN',
+        messageFa: 'شما دسترسی به تایید یا مشاهده تراکنش کاربر دیگری را ندارید.'
+      });
+    }
     
-    // Idempotency check: Don't process twice
-    if (existingSub && existingSub.status === 'COMPLETED') {
+    // Idempotency check: SUCCESS is terminal; return confirmed result without re-processing
+    if (existingSub.status === 'SUCCESS') {
+      const user = await findUserById(userId);
       return res.json({
         status: 101,
         refId: existingSub.refId,
         cardPan: existingSub.cardPan,
+        authority: existingSub.authority,
+        amount: existingSub.amount,
         messageFa: 'این تراکنش قبلاً با موفقیت ثبت و تایید شده است.',
-        tier: 'vip_samurai',
+        tier: user?.tier || 'vip_samurai',
+        subscription: existingSub,
+        user: user || undefined
+      });
+    }
+
+    // Terminal status check: FAILED transactions cannot be re-verified
+    if (existingSub.status === 'FAILED') {
+      return res.status(400).json({
+        code: 'TRANSACTION_ALREADY_FAILED',
+        messageFa: 'این تراکنش قبلاً با وضعیت ناموفق ثبت شده است و امکان تایید مجدد ندارد.',
         subscription: existingSub
       });
     }
 
-    let refId = 'REF-' + Math.floor(10000000 + Math.random() * 90000000);
-    let cardPan = '6037-99**-****-' + Math.floor(1000 + Math.random() * 9000);
-
-    const merchantId = process.env.ZARINPAL_MERCHANT_ID?.trim();
-    if (merchantId && merchantId.length >= 30) {
-      const zRes = await fetch('https://api.zarinpal.com/pg/v4/payment/verify.json', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ merchant_id: merchantId, authority, amount })
+    // 4. Provider-Neutral Gateway Resolution (Phase 5A Core)
+    const adapter = getPaymentAdapter();
+    if (!adapter) {
+      return res.status(503).json({
+        code: 'PAYMENT_UNAVAILABLE',
+        messageFa: 'امکان تایید تراکنش در این محیط وجود ندارد.'
       });
-      const zData = await zRes.json();
+    }
 
-      if (zData.data && (zData.data.code === 100 || zData.data.code === 101)) {
-        refId = zData.data.ref_id.toString();
-        cardPan = zData.data.card_pan || cardPan;
-      } else {
+    let verifyResult;
+    try {
+      verifyResult = await adapter.verifyPayment({
+        authority,
+        expectedAmount: existingSub.amount
+      });
+    } catch (error) {
+      const normalized = adapter.normalizeProviderError(error);
+      // Thrown exception (timeout, transport drop, generic error) during verify:
+      // Subscription MUST REMAIN PENDING! Do NOT mark failed. Do NOT activate VIP.
+      const statusCode = normalized.retryable ? 503 : 400;
+      return res.status(statusCode).json({
+        code: normalized.code,
+        messageFa: normalized.messageFa,
+        retryable: normalized.retryable
+      });
+    }
+
+    if (!verifyResult || !verifyResult.success || verifyResult.status === 'FAILED') {
+      const isRetryable = Boolean(
+        verifyResult?.retryable ||
+        verifyResult?.failureClassification === 'RETRYABLE_ERROR' ||
+        verifyResult?.failureClassification === 'AMBIGUOUS_RESULT'
+      );
+      const isDefinitive = !isRetryable && (
+        verifyResult?.failureClassification === 'DEFINITIVE_REJECTION' ||
+        verifyResult?.retryable === false
+      );
+
+      if (isDefinitive) {
+        // Only a definitive normalized non-retryable rejection may call markSubscriptionFailed
+        await markSubscriptionFailed(authority, verifyResult?.errorMessageFa || 'تراکنش توسط درگاه تایید نشد.');
         return res.status(400).json({
-          code: 'PAYMENT_FAILED',
-          messageFa: 'تراکنش توسط درگاه زرین‌پال تایید نشد.',
-          details: zData.errors
+          code: verifyResult?.errorCode || 'PAYMENT_FAILED',
+          messageFa: verifyResult?.errorMessageFa || 'تراکنش توسط درگاه تایید نشد.',
+          retryable: false
+        });
+      } else {
+        // Retryable timeout, transport failure, temporary unavailability, or ambiguous result:
+        // Subscription MUST REMAIN PENDING! Do NOT mark failed. Do NOT activate VIP.
+        return res.status(503).json({
+          code: verifyResult?.errorCode || 'PAYMENT_TEMPORARY_ERROR',
+          messageFa: verifyResult?.errorMessageFa || 'پاسخ قطعی از درگاه دریافت نشد. وضعیت تراکنش در انتظار تایید باقی ماند.',
+          retryable: true
         });
       }
     }
 
-    const sub = await completeSubscription(authority, refId, cardPan);
-    if (!sub) {
+    // Provider claimed success (verifyResult.success === true && verifyResult.status === 'SUCCESS')
+    // Validate Provider-confirmed refId evidence (Task 1)
+    const confirmedRefId = typeof verifyResult.refId === 'string' ? verifyResult.refId.trim() : '';
+    if (!confirmedRefId) {
+      return res.status(503).json({
+        code: 'INVALID_PROVIDER_SUCCESS_RESPONSE',
+        messageFa: 'پاسخ تایید درگاه فاقد شناسه پیگیری معتبر است. وضعیت تراکنش در انتظار بررسی باقی ماند.',
+        retryable: true,
+        failureClassification: 'AMBIGUOUS_RESULT'
+      });
+    }
+
+    // cardPan may be absent if provider does not supply it; do not invent fake cardPan
+    const confirmedCardPan = typeof verifyResult.cardPan === 'string' && verifyResult.cardPan.trim()
+      ? verifyResult.cardPan.trim()
+      : null;
+
+    // 5. Atomic Completion & Entitlement Activation
+    const completed = await completeSubscription(
+      authority,
+      confirmedRefId,
+      confirmedCardPan,
+      { expectedUserId: userId }
+    );
+
+    if (!completed) {
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'رکورد تراکنش یافت نشد.' });
     }
 
     res.json({
       status: 100,
-      refId,
-      cardPan,
-      authority,
-      amount,
+      refId: completed.refId,
+      cardPan: completed.cardPan,
+      authority: completed.authority,
+      amount: completed.amount,
       messageFa: 'تراکنش با موفقیت تایید شد و حساب شما ارتقا یافت.',
-      tier: 'vip_samurai',
-      subscription: sub
+      tier: completed.user?.tier || 'vip_samurai',
+      subscription: completed,
+      user: completed.user
     });
   } catch (error) {
     next(error);
   }
 });
 
+const handleGetUserSubscriptions = async (req: AuthenticatedRequest, res: express.Response, next: express.NextFunction) => {
+  try {
+    const userId = req.user!.userId;
+    const subscriptions = await getUserSubscriptions(userId);
+    res.json({ subscriptions, success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+app.get('/api/user/subscriptions', authMiddleware, handleGetUserSubscriptions);
+app.get('/api/subscriptions/my', authMiddleware, handleGetUserSubscriptions);
+
 /* =========================================================================
- * ADMIN PANEL ENDPOINTS
+ * ADMIN PANEL ENDPOINTS & STRICT RBAC CONTROLS (Phase 3)
  * ========================================================================= */
+
+function checkIsSuperAdminUser(user?: { email?: string | null; phoneNumber?: string | null } | null): boolean {
+  if (!user) return false;
+  if (user.phoneNumber && (isSuperAdminIdentifier(user.phoneNumber) || (SUPER_ADMIN_PHONE && user.phoneNumber === SUPER_ADMIN_PHONE))) return true;
+  if (user.email && (isSuperAdminIdentifier(user.email) || (SUPER_ADMIN_EMAIL && user.email === SUPER_ADMIN_EMAIL))) return true;
+  return false;
+}
 
 app.get('/api/admin/stats', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
+    const callerUser = await findUserById(req.user!.userId);
+    const isCallerSuperAdmin = checkIsSuperAdminUser(callerUser);
     const stats = await adminGetOverviewStats();
-    res.json({ stats });
+    res.json({ 
+      stats,
+      isCallerSuperAdmin
+    });
   } catch (error) {
     next(error);
   }
@@ -785,8 +1559,34 @@ app.get('/api/admin/stats', adminMiddleware, async (req: AuthenticatedRequest, r
 
 app.get('/api/admin/users', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const users = await adminGetAllUsers();
-    res.json({ users });
+    const callerUser = await findUserById(req.user!.userId);
+    const isCallerSuperAdmin = checkIsSuperAdminUser(callerUser);
+    const rawUsers = await adminGetAllUsers();
+
+    const users = rawUsers.map(u => ({
+      ...u,
+      isSuperAdmin: checkIsSuperAdminUser(u)
+    }));
+
+    res.json({ 
+      users,
+      isCallerSuperAdmin
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/admin/role', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const callerUser = await findUserById(req.user!.userId);
+    const isCallerSuperAdmin = checkIsSuperAdminUser(callerUser);
+    res.json({
+      role: isCallerSuperAdmin ? 'super_admin' : 'admin',
+      isSuperAdmin: isCallerSuperAdmin,
+      isAdmin: true,
+      userId: req.user!.userId
+    });
   } catch (error) {
     next(error);
   }
@@ -797,14 +1597,50 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
     const userId = req.params.id;
     const { tier, isVip, isAdmin, name, daysExtension } = req.body;
 
+    const callerUser = await findUserById(req.user!.userId);
+    const isCallerSuperAdmin = checkIsSuperAdminUser(callerUser);
+
     const targetUser = await findUserById(userId);
     if (!targetUser) {
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
     }
 
-    const isTargetRootAdmin = targetUser.email === SUPER_ADMIN_EMAIL || targetUser.phoneNumber === SUPER_ADMIN_PHONE;
-    if (isTargetRootAdmin && (isAdmin === false || isVip === false)) {
-      return res.status(403).json({ code: 'FORBIDDEN', messageFa: 'حساب مالک ارشد سیستم غیرقابل تنزل می‌باشد.' });
+    const isTargetSuperAdmin = checkIsSuperAdminUser(targetUser);
+
+    // Rule 1: Super Admin Immutability Shield
+    if (isTargetSuperAdmin) {
+      if (isAdmin === false || isVip === false || tier === 'free') {
+        return res.status(403).json({ 
+          code: 'FORBIDDEN_SUPER_ADMIN_IMMUTABLE', 
+          messageFa: 'حساب مالک و فرمانده کل سامانه (Super Admin) دارای مصونیت کامل بوده و غیرقابل تنزل یا لغو دسترسی است.' 
+        });
+      }
+      if (!isCallerSuperAdmin) {
+        return res.status(403).json({
+          code: 'FORBIDDEN',
+          messageFa: 'ویرایش اطلاعات حساب سوپر ادمین برای سایر مدیران اکیداً ممنوع است.'
+        });
+      }
+    }
+
+    // Rule 2: Admin Protection Shield (Non-Super Admins CANNOT modify other Admins)
+    if (Boolean(targetUser.isAdmin) && !isTargetSuperAdmin) {
+      if (!isCallerSuperAdmin) {
+        return res.status(403).json({
+          code: 'FORBIDDEN_ADMIN_MUTATION',
+          messageFa: 'مدیران عادی مجاز به ویرایش، تنزل، تمدید یا عزل سایر مدیران سامانه نیستند. این اختیارات منحصراً در صلاحیت سوپر ادمین است.'
+        });
+      }
+    }
+
+    // Rule 3: Strict RBAC for Admin Role Changes (Only Super Admin can grant/revoke admin rights)
+    if (typeof isAdmin === 'boolean' && isAdmin !== Boolean(targetUser.isAdmin)) {
+      if (!isCallerSuperAdmin) {
+        return res.status(403).json({
+          code: 'SUPER_ADMIN_REQUIRED',
+          messageFa: 'تغییر سطح دسترسی مدیران و ارتقا یا تنزل نقش ادمین منحصراً در صلاحیت سوپر ادمین (فرمانده کل سامانه) می‌باشد.'
+        });
+      }
     }
 
     const updated = await adminUpdateUser(userId, {
@@ -815,7 +1651,13 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
       daysExtension: Number(daysExtension) || undefined
     });
 
-    res.json({ user: updated, messageFa: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' });
+    res.json({ 
+      user: {
+        ...updated,
+        isSuperAdmin: checkIsSuperAdminUser(updated)
+      }, 
+      messageFa: 'اطلاعات کاربر با موفقیت به‌روزرسانی شد.' 
+    });
   } catch (error) {
     next(error);
   }
@@ -824,13 +1666,25 @@ app.put('/api/admin/users/:id', adminMiddleware, async (req: AuthenticatedReques
 app.post('/api/admin/users/create-test', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { name, email, phoneNumber, tier, isVip, isAdmin } = req.body;
+
+    const callerUser = await findUserById(req.user!.userId);
+    const isCallerSuperAdmin = checkIsSuperAdminUser(callerUser);
+
+    // Rule 3: Only Super Admin can create admin test accounts
+    if (isAdmin && !isCallerSuperAdmin) {
+      return res.status(403).json({
+        code: 'SUPER_ADMIN_REQUIRED',
+        messageFa: 'تعیین نقش مدیر برای کاربران جدید فقط در صلاحیت سوپر ادمین می‌باشد.'
+      });
+    }
+
     const user = await adminCreateTestUser({
       name: name?.trim() || 'کاربر آزمایشی بوشیدو',
       email: email?.trim() || undefined,
       phoneNumber: phoneNumber?.trim() || undefined,
       tier: tier || (isVip ? 'vip_samurai' : 'free'),
       isVip: Boolean(isVip || tier === 'vip_samurai'),
-      isAdmin: Boolean(isAdmin)
+      isAdmin: Boolean(isAdmin && isCallerSuperAdmin)
     });
 
     const token = generateToken({
@@ -842,7 +1696,15 @@ app.post('/api/admin/users/create-test', adminMiddleware, async (req: Authentica
       isAdmin: Boolean(user.isAdmin)
     });
 
-    res.json({ success: true, user, token, messageFa: `حساب جدید «${user.name}» ایجاد گردید.` });
+    res.json({ 
+      success: true, 
+      user: {
+        ...user,
+        isSuperAdmin: checkIsSuperAdminUser(user)
+      }, 
+      token, 
+      messageFa: `حساب جدید «${user.name}» ایجاد گردید.` 
+    });
   } catch (error) {
     next(error);
   }
@@ -851,24 +1713,190 @@ app.post('/api/admin/users/create-test', adminMiddleware, async (req: Authentica
 app.post('/api/admin/impersonate', adminMiddleware, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { targetUserId } = req.body;
-    const targetUser = await findUserById(targetUserId);
-    
+    if (!targetUserId || typeof targetUserId !== 'string' || !targetUserId.trim()) {
+      return res.status(400).json({ code: 'INVALID_REQUEST', messageFa: 'شناسه کاربر هدف الزامی است.' });
+    }
+
+    const cleanTargetId = targetUserId.trim();
+    if (cleanTargetId === req.user!.userId) {
+      logImpersonationAudit({
+        eventType: 'impersonation_denied',
+        impersonatorAdminId: req.user!.userId,
+        targetUserId: cleanTargetId,
+        result: 'failure',
+        errorCode: 'SELF_IMPERSONATION_FORBIDDEN'
+      });
+      return res.status(400).json({ code: 'SELF_IMPERSONATION_FORBIDDEN', messageFa: 'شبیه‌سازی حساب خود مجاز نمی‌باشد.' });
+    }
+
+    const targetUser = await findUserById(cleanTargetId);
     if (!targetUser) {
+      logImpersonationAudit({
+        eventType: 'impersonation_target_not_found',
+        impersonatorAdminId: req.user!.userId,
+        targetUserId: cleanTargetId,
+        result: 'failure',
+        errorCode: 'NOT_FOUND'
+      });
       return res.status(404).json({ code: 'NOT_FOUND', messageFa: 'کاربر مورد نظر یافت نشد.' });
     }
 
+    const isTargetMaster = isSuperAdminIdentifier(targetUser.phoneNumber) || isSuperAdminIdentifier(targetUser.email);
+    if (Boolean(targetUser.isAdmin) || isTargetMaster) {
+      logImpersonationAudit({
+        eventType: 'impersonation_denied',
+        impersonatorAdminId: req.user!.userId,
+        targetUserId: targetUser.id,
+        result: 'failure',
+        errorCode: 'ADMIN_TARGET_IMPERSONATION_FORBIDDEN'
+      });
+      return res.status(403).json({
+        code: 'ADMIN_TARGET_IMPERSONATION_FORBIDDEN',
+        messageFa: 'شبیه‌سازی حساب مدیر دیگر مجاز نمی‌باشد.'
+      });
+    }
+
+    // Scoped impersonation token: isAdmin is ALWAYS false for impersonated sessions
     const token = generateToken({
       userId: targetUser.id,
       email: targetUser.email,
       phoneNumber: targetUser.phoneNumber,
-      isVip: targetUser.isVip,
+      isVip: Boolean(targetUser.isVip),
       tier: targetUser.tier,
-      isAdmin: Boolean(targetUser.isAdmin)
+      isAdmin: false,
+      tokenVersion: targetUser.tokenVersion ?? 0,
+      isImpersonated: true,
+      impersonatedBy: req.user!.userId
     });
 
-    res.json({ success: true, token, user: targetUser, messageFa: `شبیه‌سازی کاربر فعال شد.` });
+    logImpersonationAudit({
+      eventType: 'impersonation_started',
+      impersonatorAdminId: req.user!.userId,
+      targetUserId: targetUser.id,
+      result: 'success'
+    });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: targetUser.id,
+        name: targetUser.name,
+        email: targetUser.email,
+        phoneNumber: targetUser.phoneNumber,
+        tier: targetUser.tier,
+        isVip: Boolean(targetUser.isVip),
+        isAdmin: false,
+        vipExpiresAt: targetUser.vipExpiresAt
+      },
+      messageFa: `شبیه‌سازی کاربر فعال شد.`
+    });
   } catch (error) {
     next(error);
+  }
+});
+
+app.post(['/api/admin/impersonate/exit', '/api/admin/exit-impersonation'], async (req: AuthenticatedRequest, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      logImpersonationAudit({
+        eventType: 'impersonation_exit_failed',
+        impersonatorAdminId: null,
+        targetUserId: null,
+        result: 'failure',
+        errorCode: 'UNAUTHORIZED'
+      });
+      return res.status(401).json({ code: 'UNAUTHORIZED', messageFa: 'توکن مدیر جهت خروج ارائه نشده است.' });
+    }
+
+    const token = authHeader.split(' ')[1];
+    const decoded = verifyToken<any>(token);
+    if (!decoded || !decoded.userId || decoded.isImpersonated) {
+      logImpersonationAudit({
+        eventType: 'impersonation_exit_failed',
+        impersonatorAdminId: decoded?.userId || null,
+        targetUserId: null,
+        result: 'failure',
+        errorCode: 'INVALID_ADMIN_TOKEN'
+      });
+      return res.status(401).json({ code: 'INVALID_ADMIN_TOKEN', messageFa: 'توکن مدیر نامعتبر است.' });
+    }
+
+    const adminUser = await findUserById(decoded.userId);
+    if (!adminUser) {
+      logImpersonationAudit({
+        eventType: 'impersonation_exit_failed',
+        impersonatorAdminId: decoded.userId,
+        targetUserId: null,
+        result: 'failure',
+        errorCode: 'ADMIN_NOT_FOUND'
+      });
+      return res.status(401).json({ code: 'ADMIN_NOT_FOUND', messageFa: 'حساب مدیر یافت نشد.' });
+    }
+
+    const userVersion = adminUser.tokenVersion ?? 0;
+    const tokenVersion = decoded.tokenVersion ?? 0;
+    if (tokenVersion < userVersion) {
+      logImpersonationAudit({
+        eventType: 'impersonation_exit_failed',
+        impersonatorAdminId: adminUser.id,
+        targetUserId: null,
+        result: 'failure',
+        errorCode: 'SESSION_REVOKED'
+      });
+      return res.status(401).json({ code: 'SESSION_REVOKED', messageFa: 'نشست مدیر منقضی شده است.' });
+    }
+
+    const isMaster = isSuperAdminIdentifier(adminUser.phoneNumber) || isSuperAdminIdentifier(adminUser.email);
+    if (!adminUser.isAdmin && !isMaster) {
+      logImpersonationAudit({
+        eventType: 'impersonation_exit_failed',
+        impersonatorAdminId: adminUser.id,
+        targetUserId: null,
+        result: 'failure',
+        errorCode: 'NOT_AN_ADMIN'
+      });
+      return res.status(403).json({ code: 'NOT_AN_ADMIN', messageFa: 'حساب معتبر مدیریت نمی‌باشد.' });
+    }
+
+    // Note: targetUserId originates from request body and is client-reported metadata (non-authoritative).
+    // The server does not treat this as server-authoritative session state because impersonation context
+    // is held client-side during session simulation.
+    const rawTargetUserId = req.body?.targetUserId;
+    const clientReportedTargetUserId = typeof rawTargetUserId === 'string' && rawTargetUserId.trim()
+      ? rawTargetUserId.trim()
+      : null;
+
+    logImpersonationAudit({
+      eventType: 'impersonation_exited',
+      impersonatorAdminId: adminUser.id,
+      targetUserId: clientReportedTargetUserId,
+      result: 'success'
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: adminUser.id,
+        name: adminUser.name,
+        email: adminUser.email,
+        phoneNumber: adminUser.phoneNumber,
+        tier: adminUser.tier,
+        isVip: true,
+        isAdmin: true
+      },
+      messageFa: 'خروج از شبیه‌سازی با موفقیت انجام شد.'
+    });
+  } catch (error) {
+    logImpersonationAudit({
+      eventType: 'impersonation_exit_failed',
+      impersonatorAdminId: null,
+      targetUserId: null,
+      result: 'failure',
+      errorCode: 'INTERNAL_ERROR'
+    });
+    res.status(500).json({ code: 'INTERNAL_ERROR', messageFa: 'خطای سرور در خروج از شبیه‌سازی.' });
   }
 });
 
@@ -881,16 +1909,29 @@ app.get('/api/admin/subscriptions', adminMiddleware, async (req: AuthenticatedRe
   }
 });
 
+// Fallback JSON 404 handler for unmatched /api routes (guarantees structured JSON instead of HTML/text)
+app.all('/api/*', (req, res) => {
+  res.status(404).json({
+    error: 'NOT_FOUND',
+    messageFa: 'مسیر API مورد نظر یافت نشد.',
+    path: req.originalUrl || req.url,
+    timestamp: new Date().toISOString()
+  });
+});
+
 /* =========================================================================
  * SERVER BOOT & STATIC SERVING
  * ========================================================================= */
 
-const distPath = path.join(process.cwd(), 'dist');
+// حل مشکل پیدا نکردن index.html در محیط ورسل
+const distPath = process.env.VERCEL 
+  ? path.join(process.cwd()) // در ورسل محتوای پوشه dist در همان مسیر اصلی قرار می‌گیرد
+  : path.join(process.cwd(), 'dist'); // در سیستم شخصی و سایر محیط‌ها
 
 async function startServer() {
   await initializeDatabase();
 
-  if (!isProd && !process.env.VERCEL) {
+  if (!isProduction() && !process.env.VERCEL) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -898,11 +1939,24 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('sw.js') || filePath.endsWith('index.html')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        } else if (filePath.includes('/assets/')) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        }
+      }
+    }));
     app.get('*', (req, res, next) => {
       if (req.path.startsWith('/api')) {
         return next();
       }
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
       res.sendFile(path.join(distPath, 'index.html'), (err) => {
         if (err) {
           console.error('[Static] index.html missing or unreadable:', err.message);
@@ -936,16 +1990,30 @@ async function startServer() {
 
 if (process.env.VERCEL) {
   initializeDatabase().catch(console.error);
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('sw.js') || filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else if (filePath.includes('/assets/')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.sendFile(path.join(distPath, 'index.html'));
   });
   app.use(errorHandler);
-} else {
+} else if (process.env.NODE_ENV !== 'test' && !process.env.JEST_WORKER_ID && !process.env.NODE_TEST_CONTEXT && !process.execArgv.includes('--test') && !process.argv.includes('--test')) {
   startServer();
 }
 
+export { app };
 export default app;

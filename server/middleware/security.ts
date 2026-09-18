@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { isProduction, allowTestShortcuts } from '../security.js';
 
 interface RateLimitEntry {
   count: number;
@@ -9,7 +10,7 @@ interface RateLimitEntry {
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
 // Periodic cleanup of expired window entries to prevent memory leaks
-setInterval(() => {
+const rateLimitInterval = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitStore.entries()) {
     if (now > entry.resetTime) {
@@ -17,6 +18,9 @@ setInterval(() => {
     }
   }
 }, 60000);
+if (typeof rateLimitInterval === 'object' && rateLimitInterval && 'unref' in rateLimitInterval) {
+  rateLimitInterval.unref();
+}
 
 /**
  * Smart Rate Limiter Middleware
@@ -83,8 +87,8 @@ export const apiRateLimiter = createRateLimiter({
  * - Development / Test Shortcuts: Permissive embed headers for AI Studio live preview iframe
  */
 export function setSecurityHeaders(req: Request, res: Response, next: NextFunction): void {
-  const isProd = process.env.NODE_ENV === 'production';
-  const isDevOrTest = !isProd || process.env.ALLOW_TEST_SHORTCUTS === 'true';
+  const isProd = isProduction();
+  const isDevOrTest = allowTestShortcuts();
 
   // HTTP Strict Transport Security (HSTS)
   if (isProd) {
@@ -150,7 +154,38 @@ export class AppError extends Error {
  * Item B4 & A9: Standard error response format and Stack Trace censoring in Production
  */
 export function errorHandler(err: any, req: Request, res: Response, next: NextFunction): void {
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = isProduction();
+
+  if (err.name === 'PreconditionRequiredError' || err.code === 'PRECONDITION_REQUIRED') {
+    res.status(err.statusCode || 428).json({
+      code: 'PRECONDITION_REQUIRED',
+      messageFa: err.messageFa || 'ارسال expectedRevision برای این عملیات الزامی است.',
+      entityType: err.entityType,
+      entityId: err.entityId
+    });
+    return;
+  }
+
+  if (err.name === 'ConcurrencyConflictError' || err.code === 'CONFLICT') {
+    res.status(409).json({
+      code: 'CONFLICT',
+      messageFa: err.messageFa || 'این داده در دستگاه دیگری تغییر یافته است. برای حفظ یکپارچگی، عملیات متوقف شد.',
+      entityType: err.entityType,
+      entityId: err.entityId,
+      currentRevision: err.currentRevision,
+      expectedRevision: err.expectedRevision
+    });
+    return;
+  }
+
+  if (err.name === 'ServiceUnavailableError' || err.code === 'SERVICE_UNAVAILABLE' || err.statusCode === 503 || err.status === 503) {
+    res.status(503).json({
+      code: 'SERVICE_UNAVAILABLE',
+      messageFa: err.messageFa || 'سرویس پایگاه داده در دسترس نیست. لطفاً دقایقی دیگر مجدداً تلاش نمایید.',
+      message: isProd ? 'Database persistence service is currently unavailable.' : (err.message || 'Database persistence service is currently unavailable.')
+    });
+    return;
+  }
 
   const statusCode = err.statusCode || err.status || 500;
   const code = err.code || (statusCode === 500 ? 'INTERNAL_SERVER_ERROR' : 'API_ERROR');
