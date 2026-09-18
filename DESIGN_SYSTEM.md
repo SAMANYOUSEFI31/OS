@@ -87,8 +87,8 @@
 
 | توکن معنایی | کد هگز مرجع | کلاس معادل | نقش انحصاری در سیستم | رفتار در حالت تعامل / فعال |
 | :--- | :--- | :--- | :--- | :--- |
-| **Discipline Crimson**<br>(سرخ اصیل بوشیدو) | `#E11D48`<br>(`rgb: 225, 29, 72`) | `text-rose-500`<br>`bg-[#E11D48]` | **هسته هویت برند، تعهدات اصلی، تب فعال ناوبری، فوکوس سیستم** | `hover:bg-[#BE123C]`<br>`ring-rose-500/40` |
-| **Samurai Amber**<br>(طلای خرد سامورایی) | `#FBBF24`<br>(`rgb: 251, 191, 36`) | `text-amber-400`<br>`bg-amber-500/10` | **کمال تعهد (۱۰/۱۰)، قضاوت سنسی AI، امتیاز تجمعی کل، اشتراک VIP** *(هرگز برای موفقیت عادی روزانه به کار نمی‌رود)* | `border-amber-500/30`<br>`hover:bg-amber-500/20` |
+| **Discipline Crimson**<br>(سرخ اصیل بوشیدو) | `#E11D48`<br>(`rgb: 225, 29, 72`) | `text-rose-500`<br>`bg-[#E11D48]` | **هسته هویت برند، تعهدات اصلی، تب فعال ناوبری، تور آموزشی کاربر تازه وارد (FirstRunTour)** | `hover:bg-[#BE123C]`<br>`ring-rose-500/40` |
+| **Samurai Amber**<br>(طلای خرد سامورایی) | `#FBBF24`<br>(`rgb: 251, 191, 36`) | `text-amber-400`<br>`bg-amber-500/10` | **منحصراً و اکیداً محدود به ۴ قلمرو استادی بوشیدو:**<br>۱. کمال تعهد و استادی (۱۰ از ۱۰ و ماموریت شتاب‌دهنده ویژه)<br>۲. قضاوت و تحلیل سنسی هوش مصنوعی (AI Sensei Commentary)<br>۳. مجموع امتیاز تجمعی کل (Total Score / Award در سه‌گانه مقدس دیسیپلین)<br>۴. وضعیت، نشان و عملیات ارتقای اشتراک VIP<br>*(اکیداً برای موفقیت عادی روزانه ۵/۵ که زمردی است، تورهای آموزشی، یا فوکوس اینپوت‌ها به کار نمی‌رود)* | `border-amber-500/30`<br>`hover:bg-amber-500/20` |
 | **Vitality Emerald**<br>(سبز فتح و حیات) | `#34D399`<br>(`rgb: 52, 211, 153`) | `text-emerald`<br>`bg-emerald-subtle` | **تکمیل اجرای روز استاندارد (۵/۵ رکن، ۸/۱۰)، پایداری عادات، چک‌باکس‌های تایید شده** | `border-emerald-subtle`<br>`hover:bg-emerald-subtle/80` |
 | **Tactical Orange / Flame**<br>(آتش تاکتیکی زنجیره استمرار) | `#F97316` / `#FB923C`<br>(`rgb: 249, 115, 22`) | `text-orange`<br>`bg-orange-subtle` | **زنجیره متوالی فعال (Pure Streak)، شعله استمرار و رکورد زنجیره تاریخی** *(دارای پالت کامل ۱۰ پله‌ای ۵۰ تا ۹۵۰)* | `border-orange-subtle`<br>`text-orange` / `animate-flame-flicker` |
 | **Honor Crimson / Alert Red**<br>(سرخ بحران و بدهی) | `#F87171` / `#EF4444`<br>(`rgb: 248, 113, 113`) | `text-debt`<br>`bg-debt-subtle` | **بدهی‌های دیسیپلین، هشدارهای انضباطی، روزهای سوخته/شکست، قفل رفتار** | `border-debt-subtle`<br>`animate-pulse` |
@@ -136,8 +136,19 @@
 ### ب) مرزها و خطوط جداکننده (Borders & Dividers):
 - **کادر استاندارد:** `#27272A` (`border-zinc-800` / `--color-border-subtle` / `.border-standard`). تک‌پیکسلی، مات و ضد وایرفریمینگ.
 - **کادر هاور:** `#3F3F46` (`border-zinc-700` / `--color-border-hover` / `.border-hover`).
-- **کادر فوکوس / فعال:** `#52525B` (`border-zinc-600` / `--color-border-active` / `.border-active`) یا رینگ اختصاصی برند بوشیدو (`ring-2 ring-rose-500/40`).
+- **کادر فعال عمومی:** `#52525B` (`border-zinc-600` / `--color-border-active` / `.border-active`).
 - **تسطیح عمق با خطوط جداکننده (Flatten Depth Rule):** برای تفکیک بخش‌های داخل کارت، از خط جداکننده افقی (`border-t border-zinc-800`) به جای قرار دادن کارت در دل کارت دیگر استفاده می‌شود.
+
+### ج) پروتکل فوکوس فرم‌ها و رینگ خنثی (Form Focus Protocol & Neutral Focus Ring):
+برای جلوگیری از خطاهای شناختی و حفظ تمرکز کاربر در حین ثبت یادداشت‌ها و ورودی‌های فرم:
+- **توکن‌های رسمی فوکوس فرم:**
+  - `--color-focus-ring: #52525b` (Zinc 600 / APCA $L_c > 45$, WCAG $> 3:1$)
+  - `--color-input-border-focus: #a1a1aa` (Zinc 400 مات با روشنایی ملایم)
+  - `--color-input-ring-focus: rgba(244, 244, 245, 0.12)` (هاله ملایم نورانی خنثی)
+  - کلاس‌های سمانتیک: `.focus-ring-neutral` و `.entity-input-well:focus`
+- **علت ممنوعیت رنگ سرخ برند (`#E11D48`) در فوکوس فرم‌ها:** استفاده از رینگ یا حاشیه سرخ در هنگام تایپ، احساس خطای اعتبارسنجی فرم (Validation Error) یا بحران و بدهی قرمز را به کاربر القا می‌کند (False Error Halo) و آرامش ذهنی حین نوشتن را بر هم می‌زند.
+- **علت ممنوعیت رنگ کهربایی (`#FBBF24`) در فوکوس فرم‌ها:** کهربایی منحصراً برای ۴ قلمرو استادی (کمال ۱۰/۱۰، سنسی، امتیاز کل، VIP) قفل است و نباید برای تعاملات روتین فرمی مصرف شود.
+- **نتیجه ارگونومیک:** درخشندگی مات و باوقار زینک خنثی با کنتراست ادراکی استاندارد روی پس‌زمینه تیره بدون پرش و بدون استرس بصری.
 
 ---
 
@@ -160,13 +171,20 @@
 | **Body Secondary** | `12px` (`text-xs`) | `20px` (`leading-5`) | Regular (۴۰۰) | توضیحات فرعی، متن‌های قوانین و جزئیات |
 | **Action** | `13px` (`text-[13px]`) | `16px` (`leading-4`) | SemiBold (۶۰۰) | برچسب دکمه‌ها و کلیدهای عملیاتی |
 | **Metric Mono** | `16px` (`text-base font-mono`) | `20px` (`leading-5`) | Bold (۷۰۰) | امتیازها، درصدهای ماتریس، زمان کات‌آف |
-| **Micro Badge** | `11px` (`text-[11px]`) | `14px` (`leading-[14px]`) | SemiBold (۶۰۰) | بج‌های میکرو، تگ‌های اطلاعاتی وضعیت |
+| **Micro Responsive** | `12px` موبایل / `13px` دسکتاپ (`text-micro`) | `16px` / `18px` (`leading-[1.4]`) | Medium (۵۰۰) / SemiBold (۶۰۰) | متون ریز توضیحی، زیرنویس‌های ۵ رکن، بج‌های کمکی |
+| **Micro Badge** | `11px` (`text-[11px]`) | `14px` (`leading-[14px]`) | SemiBold (۶۰۰) | برچسب‌های مینیاتوری مونو و وضعیت‌های ساختاری |
+
+### پروتکل تایپوگرافی ریز واکنش‌گرا و حذف فونت‌های ثابت زیر ۱۲ پیکسل (Responsive Micro-Typography Protocol):
+- **کلاس‌های استاندارد `.text-micro` و `.text-caption`:**
+  - در نمای موبایل (`< 640px`): با اندازه **۱۲ پیکسل** (`12px` / `0.75rem`) رندر می‌شوند تا خوانایی روی صفحات کوچک موبایل حفظ شود.
+  - در نمای دسکتاپ (`sm:` / `≥ 640px`): به **۱۳ پیکسل** (`13px` / `0.8125rem`) ارتقا می‌یابند تا تعادل بصری در نمایشگرهای عریض برقرار باشد.
+- **خاتمه استفاده از فونت‌های ثابت ۹ تا ۱۱ پیکسل (Deprecation of Fixed Sub-12px Font Sizes):** کلیه اندازه‌های ثابت قدیمی (نظیر ۹، ۱۰ یا ۱۱ پیکسلی ثابت بدون مدیاکوئری) که در موبایل منجر به خستگی چشم یا عدم انطباق با بنچ‌مارک‌های خوانایی می‌شدند منسوخ شده و با کلاس واکنش‌گرای `.text-micro` جایگزین شده‌اند.
 
 ### کنتراست ادراکی متون بر اساس بنچ‌مارک W3C APCA:
 - **متن اصلی و ارقام ($L_c = 104$):** `#F4F4F5` (`text-zinc-100` روی سطوح $Z_0$ و $Z_1$).
 - **متن بدنه و توضیحات ($L_c = 78$):** `#A1A1AA` (`text-zinc-400` روی سطوح $Z_1$ و $Z_2$).
 - **کپشن‌های فرعی و ارقام مخرج ($L_c = 60$):** `#71717A` (`text-zinc-500`).
-- **راهنمای کنتراست زیرنویس‌ها و کپشن‌های بدنه (Caption & Subtitle Contrast Guidance):** در سطور تعاملی نظیر پایه‌های ۵‌گانه عادات و ماموریت ویژه در میدان نبرد، متن‌های توضیحی و زیرنویس‌های ریز شبه‌بدنه (نظیر متون ۱۱ پیکسلی `text-[11px]`) برای حفظ خوانایی روی سطوح تیره باید حتماً از توکن `text-role-secondary` (`#A1A1AA` با کنتراست ادراکی $L_c \ge 78$) یا قوی‌تر استفاده کنند. استفاده از کلاس‌های میوتد ضعیف‌تر (نظیر `text-role-muted` با $L_c \approx 60$) برای متون شبه‌بدنه ۱۱ پیکسلی ممنوع است و کلاس‌های میوتد صرفاً برای ارقام مخرج غیرفعال، برچسب‌های فانتوم و نشانگرهای ساختاری مجاز هستند.
+- **راهنمای کنتراست زیرنویس‌ها و کپشن‌های بدنه (Caption & Subtitle Contrast Guidance):** در سطور تعاملی نظیر پایه‌های ۵‌گانه عادات و ماموریت ویژه در میدان نبرد، متن‌های توضیحی و زیرنویس‌های ریز شبه‌بدنه برای حفظ خوانایی روی سطوح تیره باید حتماً از توکن `text-role-secondary` (`#A1A1AA` با کنتراست ادراکی $L_c \ge 78$) همراه با کلاس واکنش‌گرای `.text-micro` استفاده کنند. استفاده از کلاس‌های میوتد ضعیف‌تر برای متون شبه‌بدنه ممنوع است.
 
 ---
 
@@ -320,7 +338,10 @@ $$\text{Disabled} > \text{Loading} > \text{Active} > \text{Focus Visible} > \tex
      5. **ارگونومی و فیزیک لمسی:** هدف لمسی بالای ۴۴ پیکسل، عدم پرش ساختاری با بردر ۱ پیکسلی پایدار و پایداری در تپ‌های متوالی سریع (`latestActiveLogRef`).
 3. **فیلدهای ورودی و فرم‌ها (Inputs):**
    - پس‌زمینه: سطح $Z_2$ (`#18181B`) با بردر استاندارد `#27272A`.
-   - فوکوس: مرز فعال `#52525B` با رینگ برند؛ بدون گلوهای نئونی ضخیم.
+   - فوکوس خنثی تاکتیکی: کادر فعال `--color-input-border-focus` (`#A1A1AA` / Zinc 400) همراه با هاله خنثی `--color-input-ring-focus` (`rgba(244, 244, 245, 0.12)`) و رینگ فوکوس کیبورد `--color-focus-ring` (`#52525B` / `.focus-ring-neutral`). استفاده از رنگ سرخ برند (جلوگیری از False Error Halo) و کهربایی اکیداً ممنوع است.
+4. **راهنمای تور ورود کاربر تازه (FirstRunTour Contract):**
+   - رنگ‌آمیزی و هایلایت: منحصراً منطبق بر رنگ هویت اصلی برند (`--color-accent-primary` / Crimson `#E11D48`).
+   - حلقه اسپات‌لایت، نشانگر شماره گام، نقاط پیشرفت و دکمه پیشروی تور همگی با رنگ سرخ اصیل برند رندر می‌شوند (عدم استفاده از کهربایی).
 4. **بج‌ها و تگ‌های اطلاعاتی (Chips & Badges):**
    - انحنا: `6px` تا `8px`.
    - نشانگر: `cursor-default select-none pointer-events-none`.
@@ -466,8 +487,11 @@ $$\text{Disabled} > \text{Loading} > \text{Active} > \text{Focus Visible} > \tex
 | **کادر تک‌لایه** | `--color-border-subtle` | `#27272a` | `.border-standard` | `border-zinc-800` |
 | **کادر هاور** | `--color-border-hover` | `#3f3f46` | `.border-hover` | `border-zinc-700` |
 | **کادر فعال** | `--color-border-active` | `#52525b` | `.border-active` | `border-zinc-600` |
+| **رینگ فوکوس خنثی** | `--color-focus-ring` | `#52525b` | `.focus-ring-neutral` | `ring-zinc-600` |
+| **کادر فوکوس اینپوت** | `--color-input-border-focus` | `#a1a1aa` | `.focus:border-[#a1a1aa]` | `focus:border-zinc-400` |
+| **هاله فوکوس اینپوت** | `--color-input-ring-focus` | `rgba(244, 244, 245, 0.12)` | — | `focus:ring-white/10` |
 | **برند بوشیدو** | `--color-accent-primary` | `#E11D48` | `.text-crimson` / `.theme-bg` | `text-rose-500` / `bg-[#E11D48]` |
-| **طلای کهربایی** | `--color-accent-amber` | `#FBBF24` | `.text-amber` / `.bg-amber-subtle` | `text-amber-400` / `bg-amber-500/10` |
+| **طلای کهربایی (۴ گانه)** | `--color-accent-amber` | `#FBBF24` | `.text-amber` / `.bg-amber-subtle` | `text-amber-400` / `bg-amber-500/10` |
 | **سبز زمردین** | `--color-accent-emerald` | `#34D399` | `.text-emerald` / `.bg-emerald-subtle` | `text-emerald-400` / `bg-emerald-500/10` |
 | **سرخ آتشین** | `--color-accent-rose` | `#FB7185` | `.text-rose` / `.bg-rose-subtle` | `text-rose-400` / `bg-rose-500/10` |
 | **سرخ اخطار / بدهی** | `--color-accent-red` | `#F87171` | `.text-debt` / `.bg-debt-subtle` | `text-red-400` / `bg-red-950/30` |
@@ -477,6 +501,7 @@ $$\text{Disabled} > \text{Loading} > \text{Active} > \text{Focus Visible} > \tex
 | **متن اصلی** | `--color-text-primary` | `#F4F4F5` | `.text-role-primary` | `text-zinc-100` / `text-white` |
 | **متن ثانویه** | `--color-text-secondary` | `#A1A1AA` | `.text-role-secondary` | `text-zinc-400` |
 | **متن فرعی** | `--color-text-muted` | `#71717A` | `.text-role-muted` | `text-zinc-500` |
+| **تایپوگرافی ریز واکنش‌گرا** | — | `12px` موبایل / `13px` دسکتاپ | `.text-micro` / `.text-caption` | `text-xs sm:text-[13px]` |
 | **انحنای میکرو** | `--radius-micro` | `4px` | `.radius-micro` | `rounded` |
 | **انحنای بج** | `--radius-badge` | `6px` | `.radius-badge` | `rounded-md` |
 | **انحنای کنترل** | `--radius-control` | `8px` | `.radius-control` | `rounded-lg` |
